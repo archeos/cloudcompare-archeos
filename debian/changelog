@@ -1,6 +1,6 @@
-cloudcompare (2.4+git85774862592-0archeos1) UNRELEASED; urgency=low
+cloudcompare (2.4+git85774862592-0archeos1) theodoric; urgency=low
 
   * Initial release (Closes: #35 ArcheOS)
   * Now compile with gcc-4.7
 
- -- Romain Janvier <romain.janvier@hotmail.fr>  Sun, 13 Jan 2013 03:03:50 +0100
+ -- Romain Janvier <romain@Archeos>  Sun, 13 Jan 2013 06:22:02 +0100
