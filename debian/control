@@ -1,20 +1,20 @@
 Source: cloudcompare
-Section: unknown
+Section: graphics
 Priority: extra
 Maintainer: Romain Janvier <romain.janvier@hotmail.fr>
 Build-Depends: debhelper (>= 8.0.0), cmake
 Standards-Version: 3.9.3
-Homepage: <insert the upstream URL, if relevant>
+Homepage: http://www.danielgm.net/cc/
 #Vcs-Git: git://git.debian.org/collab-maint/cloudcompare.git
 #Vcs-Browser: http://git.debian.org/?p=collab-maint/cloudcompare.git;a=summary
 
 Package: cloudcompare
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
-
-Package: cloudcompare-doc
-Architecture: all
-Description: documentation for cloudcompare
- <insert long description, indented with spaces>
+Description: 3D point cloud and mesh processing software
+ CloudCompare is a 3D point cloud (and triangular mesh) processing software. 
+ It has been originally designed to perform comparison between two 3D points clouds 
+ (such as the ones obtained with a laser scanner) or between a point cloud and a triangular mesh. 
+ It relies on a specific octree structure that enables great performances in this particular function. 
+ It was also meant to deal with huge point clouds (typically more than 10 millions points, 
+ and up to 120 millions with 2 Gb of memory)
