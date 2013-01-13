@@ -1,0 +1,5 @@
+cloudcompare (2.4+git85774862592-1) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sun, 13 Jan 2013 03:03:50 +0100
