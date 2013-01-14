@@ -1,3 +1,10 @@
+cloudcompare (2.4+git85774862592-0archeos2) theodoric; urgency=low
+
+  * Fixed bad path for 'docs'
+  * Test package with pbuilder and update build-deps
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Mon, 14 Jan 2013 02:41:02 +0100
+
 cloudcompare (2.4+git85774862592-0archeos1) theodoric; urgency=low
 
   * Initial release (Closes: #35 ArcheOS)
