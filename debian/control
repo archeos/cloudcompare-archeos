@@ -5,8 +5,9 @@ Maintainer: Romain Janvier <romain.janvier@hotmail.fr>
 Build-Depends: debhelper (>= 8.0.0), cmake, libqt4-dev, libqt4-opengl-dev
 Standards-Version: 3.9.3
 Homepage: http://www.danielgm.net/cc/
-#Vcs-Git: git://git.debian.org/collab-maint/cloudcompare.git
-#Vcs-Browser: http://git.debian.org/?p=collab-maint/cloudcompare.git;a=summary
+Vcs-Git: git://github.com/archeos/cloudcompare-archeos.git
+Vcs-Browser: https://github.com/archeos/cloudcompare-archeos
+Homepage: https://www.archeos.eu
 
 Package: cloudcompare
 Architecture: any
