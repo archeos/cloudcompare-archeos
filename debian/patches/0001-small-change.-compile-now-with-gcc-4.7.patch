@@ -6,6 +6,8 @@ Subject: small change. compile now with gcc-4.7
  libs/qCC_db/ccChunkedArray.h |    2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
+diff --git a/libs/qCC_db/ccChunkedArray.h b/libs/qCC_db/ccChunkedArray.h
+index d9f3419..46f43ce 100644
 --- a/libs/qCC_db/ccChunkedArray.h
 +++ b/libs/qCC_db/ccChunkedArray.h
 @@ -48,7 +48,7 @@ public:

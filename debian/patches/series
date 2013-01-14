@@ -1,2 +1,3 @@
 0001-small-change.-compile-now-with-gcc-4.7.patch
 0002-doc-must-live-in-a-good-dir.patch
+0003-Dynamic-directory-for-shaders.patch

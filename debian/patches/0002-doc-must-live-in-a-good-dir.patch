@@ -1,6 +1,31 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Mon, 14 Jan 2013 20:50:53 +0100
+Subject: 0002-doc-must-live-in-a-good-dir
+
+---
+ ccViewer/CMakeLists.txt |    6 +++---
+ qCC/CMakeLists.txt      |    8 ++++----
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/ccViewer/CMakeLists.txt b/ccViewer/CMakeLists.txt
+index f933cd5..6c17e3f 100644
+--- a/ccViewer/CMakeLists.txt
++++ b/ccViewer/CMakeLists.txt
+@@ -102,6 +102,6 @@ if( WIN32 )
+ endif()
+ 
+ # Install auxiliary files
+-foreach( filename ${auxFiles} )
+-	install_ext( FILES ${filename} ${ccViewer_dest_release} ${ccViewer_dest_debug} )
+-endforeach()
++#foreach( filename ${auxFiles} )
++#	install_ext( FILES ${filename} ${ccViewer_dest_release} ${ccViewer_dest_debug} )
++#endforeach()
+diff --git a/qCC/CMakeLists.txt b/qCC/CMakeLists.txt
+index 04c24a2..a5bf6db 100644
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -122,7 +122,7 @@ install_ext( FILES ${CC_FBO_SOURCE_DIR}/
+@@ -122,7 +122,7 @@ install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${qCC_dest_rele
  install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${qCC_dest_release}/shaders ${qCC_dest_debug}/shaders )
  
  # Auxiliary files
@@ -19,15 +44,3 @@
 +# foreach( filename ${auxFiles} )
 +#	install_ext( FILES ${filename} ${qCC_dest_aux} ${qCC_dest_debug} )
 +# endforeach()
---- a/ccViewer/CMakeLists.txt
-+++ b/ccViewer/CMakeLists.txt
-@@ -102,6 +102,6 @@ if( WIN32 )
- endif()
- 
- # Install auxiliary files
--foreach( filename ${auxFiles} )
--	install_ext( FILES ${filename} ${ccViewer_dest_release} ${ccViewer_dest_debug} )
--endforeach()
-+#foreach( filename ${auxFiles} )
-+#	install_ext( FILES ${filename} ${ccViewer_dest_release} ${ccViewer_dest_debug} )
-+#endforeach()

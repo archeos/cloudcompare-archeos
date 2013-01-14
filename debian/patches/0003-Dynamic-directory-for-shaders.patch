@@ -1,0 +1,76 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Mon, 14 Jan 2013 21:15:12 +0100
+Subject: Dynamic directory for shaders
+
+---
+ qCC/CMakeLists.txt  |   11 +-
+ qCC/ccGLWindow.cpp  |    6 +-
+ qCC/config.h.in     |    1 +
+ 3 files changed, 15 insertions(+), 3 deletions(-)
+ create mode 100644 qCC/config.h.in
+
+--- a/qCC/CMakeLists.txt
++++ b/qCC/CMakeLists.txt
+@@ -3,11 +3,18 @@ cmake_minimum_required(VERSION 2.8)
+ if ( UNIX )
+ 	set( qCC_dest_release bin ) #default destination: /usr/bin
+ 	set( qCC_dest_debug bin/debug )
++	set( qCC_shaders_dest_release share/cloudcompare/shaders )
+ else()
+ 	set( qCC_dest_release qCC )
+ 	set( qCC_dest_debug qCC_debug )
++	set( qCC_shaders_dest_release qCC/shaders )
+ endif()
+ 
++# config / shader path
++configure_file (
++  "config.h.in"
++  "${CMAKE_CURRENT_SOURCE_DIR}/config.h"
++  )
+ # Load plugins
+ add_subdirectory( plugins )
+ 
+@@ -118,8 +125,8 @@ endif()
+ install_ext( TARGETS qCC ${qCC_dest_release} ${qCC_dest_debug} )
+ 
+ # Export 'bilateral' shader files to all install destinations
+-install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${qCC_dest_release}/shaders ${qCC_dest_debug}/shaders )
+-install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${qCC_dest_release}/shaders ${qCC_dest_debug}/shaders )
++install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${qCC_shaders_dest_release} ${qCC_dest_debug}/shaders )
++install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${qCC_shaders_dest_release} ${qCC_dest_debug}/shaders )
+ 
+ # Auxiliary files
+ # set( auxFiles bin_other/history.txt bin_other/license.txt )
+--- a/qCC/ccGLWindow.cpp
++++ b/qCC/ccGLWindow.cpp
+@@ -35,6 +35,9 @@
+ #include "db_tree/ccDBRoot.h"
+ #endif
+ 
++//config : handle dynamic directory creation
++#include "config.h"
++
+ //qCC_db
+ #include <ccHObject.h>
+ #include <ccBBox.h>
+@@ -58,6 +61,7 @@
+ #include <math.h>
+ #include <algorithm>
+ 
++
+ #define CC_GL_MAX_ZOOM_RATIO 1.0e6f
+ #define CC_GL_MIN_ZOOM_RATIO 1.0e-6f
+ 
+@@ -2478,7 +2482,7 @@ bool ccGLWindow::renderToFile(const char
+ 
+ 			if (m_activeGLFilter && !filter)
+ 			{
+-				QString shadersPath = QApplication::applicationDirPath() + QString("/shaders");
++				QString shadersPath = ShaderInstallDir + QString("/shaders");
+ 				if (!m_activeGLFilter->init(Wp,Hp,qPrintable(shadersPath)))
+ 				{
+ 					ccConsole::Error("[GL Filter] GL filter can't be used during rendering (not enough memory)!");
+--- /dev/null
++++ b/qCC/config.h.in
+@@ -0,0 +1 @@
++#define ShaderInstallDir "@qCC_shaders_dest_release@"
