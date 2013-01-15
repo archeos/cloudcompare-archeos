@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=2.4
+Type=Application
+Name=CloudCompare
+Comment=Meshing Utility
+TryExec=qCC
+Exec=qCC %F
+Icon=fooview
+MimeType=image/x-foo;

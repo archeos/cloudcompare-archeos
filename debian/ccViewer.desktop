@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=2.4
+Type=Application
+Name=CloudCompare Viewer
+Comment=A simple, fast and lightweight 3D Viewer
+TryExec=ccViewer
+Exec=ccViewer %F
+Icon=fooview
+MimeType=image/x-foo;
