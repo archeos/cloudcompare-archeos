@@ -29,8 +29,8 @@ Subject: Dynamic directory for shaders
 +  )
  # Load plugins
  add_subdirectory( plugins )
- 
-@@ -118,8 +125,8 @@ endif()
+
+@@ -118,8 +126,8 @@ end_if()
  install_ext( TARGETS qCC ${qCC_dest_release} ${qCC_dest_debug} )
  
  # Export 'bilateral' shader files to all install destinations
