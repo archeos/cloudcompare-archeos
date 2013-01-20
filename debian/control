@@ -2,8 +2,8 @@ Source: cloudcompare
 Section: graphics
 Priority: extra
 Maintainer: Romain Janvier <romain.janvier@hotmail.fr>
-Build-Depends: debhelper (>= 8.0.0), cmake, libqt4-dev, libqt4-opengl-dev, libglew-dev
-Standards-Version: 3.9.3
+Build-Depends: debhelper (>= 8.0.0), cmake, libqt4-dev (>= 4.7),  libqt4-opengl-dev (> 4.7), libglew-dev
+Standards-Version: 3.9.4
 Homepage: http://www.archeos.eu
 Vcs-Git: git://github.com/archeos/cloudcompare-archeos.git
 Vcs-Browser: https://github.com/archeos/cloudcompare-archeos
