@@ -5,5 +5,5 @@ Name=CloudCompare
 Comment=Meshing Utility
 TryExec=qCC
 Exec=qCC %F
-Icon=fooview
+Icon=cc_main
 MimeType=image/x-foo;

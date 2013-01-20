@@ -5,5 +5,5 @@ Name=CloudCompare Viewer
 Comment=A simple, fast and lightweight 3D Viewer
 TryExec=ccViewer
 Exec=ccViewer %F
-Icon=fooview
+Icon=cc
 MimeType=image/x-foo;
