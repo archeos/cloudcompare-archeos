@@ -1,0 +1,31 @@
+--- a/LiblasSupport.cmake
++++ b/LiblasSupport.cmake
+@@ -2,7 +2,7 @@
+ # Quick & dirty LibLAS+CMake support for CloudCompare
+ # ------------------------------------------------------------------------------
+ 
+-OPTION( OPTION_USE_LIBLAS "Build with liblas support" OFF )
++OPTION( OPTION_USE_LIBLAS "Build with liblas support" ON )
+ if( ${OPTION_USE_LIBLAS} )
+ 	# Boost
+ 	# Default to using static, multithreaded libraries for 
+@@ -16,7 +16,7 @@ if( ${OPTION_USE_LIBLAS} )
+ 	  endif() 
+ 	endif()
+ 
+-	find_package(Boost 1.38 COMPONENTS program_options thread REQUIRED)
++	find_package(Boost COMPONENTS program_options thread REQUIRED)
+ 
+ 	if(Boost_FOUND AND Boost_PROGRAM_OPTIONS_FOUND)
+ 		include_directories( ${Boost_INCLUDE_DIRS} )
+@@ -28,8 +28,8 @@ if( ${OPTION_USE_LIBLAS} )
+ 	mark_as_advanced(CLEAR Boost_LIBRARY_DIRS) 
+ 
+ 	# liblas
+-	set( LIBLAS_INCLUDE_DIR "" CACHE PATH "LibLAS include directory" )
+-	set( LIBLAS_RELEASE_LIBRARY_FILE "" CACHE FILE "LibLAS library file (release mode)" )
++	set( LIBLAS_INCLUDE_DIR "/usr/include/liblas" CACHE PATH "LibLAS include directory" )
++	set( LIBLAS_RELEASE_LIBRARY_FILE "/usr/lib/liblas.a" CACHE FILE "LibLAS library file (release mode)" )
+ 	if (WIN32)
+ 		set( LIBLAS_SHARED_LIBRARY_FILE "" CACHE FILE "LibLAS shared library file (dll)" )
+ 	endif()

@@ -2,3 +2,4 @@
 0002-doc-must-live-in-a-good-dir.patch
 0003-Dynamic-directory-for-shaders.patch
 0004-Use-Debian-libGLEW.patch
+0005-Enable-Libblas-support.patch
