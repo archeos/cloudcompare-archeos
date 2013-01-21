@@ -2,8 +2,8 @@
 Version=2.4
 Type=Application
 Name=CloudCompare
-Comment=Meshing Utility
+Comment=Meshing tool
 TryExec=qCC
 Exec=qCC %F
 Icon=cc_main
-MimeType=image/x-foo;
+MimeType=model/mesh;
