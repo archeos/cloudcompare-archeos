@@ -1,0 +1,13 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -6,8 +6,8 @@ project( CloudCompare )
+ set( CMAKE_DEBUG_POSTFIX d )
+ 
+ if( UNIX )
+-	list( APPEND CMAKE_CXX_FLAGS "-fPIC" )
+-	list( APPEND CMAKE_C_FLAGS "-fPIC" )
++	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
++	SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+ endif()
+ 
+ if( MSVC )

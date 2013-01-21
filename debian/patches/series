@@ -3,3 +3,4 @@
 0003-Dynamic-directory-for-shaders.patch
 0004-Use-Debian-libGLEW.patch
 0005-Enable-Libblas-support.patch
+0006-Change-CMakeLists-for-correct-hardening.patch
