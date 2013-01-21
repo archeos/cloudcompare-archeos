@@ -1,3 +1,15 @@
+cloudcompare (2.4+git85774862592-0archeos3) theodoric; urgency=low
+
+  * Dynamic directory for shaders
+  * Use LibGLEW from repos (closes #3)
+  * Added (dummy) desktop files and icons
+  * Added liblas support
+  * Update build dependencies
+  * Hardening
+  * Minor modifications to debian files
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Mon, 21 Jan 2013 17:56:07 +0100
+
 cloudcompare (2.4+git85774862592-0archeos2) theodoric; urgency=low
 
   * Fixed bad path for 'docs'
