@@ -4,3 +4,4 @@
 0004-Use-Debian-libGLEW.patch
 0005-Enable-Libblas-support.patch
 0006-Change-CMakeLists-for-correct-hardening.patch
+0006-Fix-local-decimal-separator.patch

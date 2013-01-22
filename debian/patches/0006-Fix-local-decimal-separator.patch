@@ -1,0 +1,25 @@
+Inspired by a patch from Teemu Ikonen <tpikonen@gmail.com>
+Debian maintener for Meshlab. The dot is now de default separator.
+It give consistency with Meshlab behavior.
+--- a/ccViewer/main.cpp
++++ b/ccViewer/main.cpp
+@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
+ 	//Global settings 'header'
+     QCoreApplication::setOrganizationName("CCCorp");
+     QCoreApplication::setApplicationName("CloudCompareViewer");
+-
++	std::setlocale(LC_NUMERIC, "C");
+     //common data initialization
+ 	ccObject::ResetUniqueIDCounter();
+     ccTimer::Init();
+--- a/qCC/main.cpp
++++ b/qCC/main.cpp
+@@ -52,7 +52,7 @@ int main(int argc, char **argv)
+ 	//Global settings 'header'
+     QCoreApplication::setOrganizationName("CCCorp");
+     QCoreApplication::setApplicationName("CloudCompare");
+-
++	std::setlocale(LC_NUMERIC, "C");
+     //Command line mode?
+     bool commandLine = (argc>1 && argv[1][0]=='-');
+ 
