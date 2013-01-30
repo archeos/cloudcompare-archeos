@@ -1,3 +1,10 @@
+cloudcompare (2.4+gitab9c37f-0archeos1) theodoric; urgency=low
+
+  * Imported Upstream version 2.4+gitab9c37f
+  * Decimal separator is now always a dot (fixes: #9)
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Wed, 30 Jan 2013 10:16:54 +0100
+
 cloudcompare (2.4+git85774862592-0archeos3) theodoric; urgency=low
 
   * Dynamic directory for shaders

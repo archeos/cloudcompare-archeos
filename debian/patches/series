@@ -1,7 +1,6 @@
-0001-small-change.-compile-now-with-gcc-4.7.patch
-0002-doc-must-live-in-a-good-dir.patch
-0003-Dynamic-directory-for-shaders.patch
-0004-Use-Debian-libGLEW.patch
-0005-Enable-Libblas-support.patch
-0006-Change-CMakeLists-for-correct-hardening.patch
-0006-Fix-local-decimal-separator.patch
+01-doc-must-live-in-a-good-dir.patch
+02-Dynamic-directory-for-shaders.patch
+03-Use-Debian-libGLEW.patch
+04-Enable-Libblas-support.patch
+05-Change-CMakeLists-for-correct-hardening.patch
+06-Fix-local-decimal-separator.patch
