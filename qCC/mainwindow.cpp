@@ -504,6 +504,7 @@ void MainWindow::connectActions()
 	connect(actionMeshBestFittingQuadric,		SIGNAL(triggered()),    this,       SLOT(doActionComputeQuadric3D()));
     connect(actionSamplePoints,                 SIGNAL(triggered()),    this,       SLOT(doActionSamplePoints()));
     connect(actionSmoothMesh_Laplacian,         SIGNAL(triggered()),    this,       SLOT(doActionSmoothMeshLaplacian()));
+	connect(actionSubdivideMesh,				SIGNAL(triggered()),    this,       SLOT(doActionSubdivideMesh()));
     connect(actionMeasureMeshSurface,           SIGNAL(triggered()),    this,       SLOT(doActionMeasureMeshSurface()));
     //"Edit > Mesh > Scalar Field" menu
     connect(actionSmoothMeshSF,                 SIGNAL(triggered()),    this,       SLOT(doActionSmoothMeshSF()));
@@ -643,30 +644,40 @@ void MainWindow::doActionSetColor(bool colorize)
     if (!newCol.isValid())
         return;
 
-    unsigned i,selNum = m_selectedEntities.size();
-    for (i=0;i<selNum;++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
-		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
-		if (lockedVertices && !ent->isA(CC_MESH_GROUP))
+	ccHObject::Container selectedEntities = m_selectedEntities;
+	while (!selectedEntities.empty())
+	{
+        ccHObject* ent = selectedEntities.back();
+		selectedEntities.pop_back();
+		if (ent->isA(CC_HIERARCHY_OBJECT))
 		{
-			DisplayLockedVerticesWarning();
-			continue;
+			//automatically parse a group's children set
+			for (unsigned i=0;i<ent->getChildrenNumber();++i)
+				selectedEntities.push_back(ent->getChild(i));
 		}
+		else
+		{
+			bool lockedVertices;
+			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+			if (lockedVertices && !ent->isA(CC_MESH_GROUP))
+			{
+				DisplayLockedVerticesWarning();
+				continue;
+			}
 
-        if (cloud && cloud->isA(CC_POINT_CLOUD)) // TODO
-        {
-            if (colorize)
-                static_cast<ccPointCloud*>(cloud)->colorize(newCol.redF(), newCol.greenF(), newCol.blueF());
-            else
-                static_cast<ccPointCloud*>(cloud)->setRGBColor(newCol.red(), newCol.green(), newCol.blue());
-            ent->showColors(true);
-            ent->prepareDisplayForRefresh();
+			if (cloud && cloud->isA(CC_POINT_CLOUD)) // TODO
+			{
+				if (colorize)
+					static_cast<ccPointCloud*>(cloud)->colorize(newCol.redF(), newCol.greenF(), newCol.blueF());
+				else
+					static_cast<ccPointCloud*>(cloud)->setRGBColor(newCol.red(), newCol.green(), newCol.blue());
+				ent->showColors(true);
+				ent->prepareDisplayForRefresh();
 
-            if (ent->getParent() && ent->getParent()->isKindOf(CC_MESH))
-                ent->getParent()->showColors(true);
-        }
+				if (ent->getParent() && ent->getParent()->isKindOf(CC_MESH))
+					ent->getParent()->showColors(true);
+			}
+		}
     }
 
     refreshAll();
@@ -1157,10 +1168,13 @@ void MainWindow::doActionMeasureMeshSurface()
         ccHObject* ent = m_selectedEntities[i];
         if (ent->isKindOf(CC_MESH))
         {
-            double S = CCLib::MeshSamplingTools::computeMeshArea(static_cast<ccGenericMesh*>(ent));
+			ccGenericMesh* mesh = static_cast<ccGenericMesh*>(ent);
+            double S = CCLib::MeshSamplingTools::computeMeshArea(mesh);
             //we force the console to display itself
             forceConsoleDisplay();
             ccConsole::Print(QString("[Mesh Surface Measurer] Mesh %1: S=%2 (square units)").arg(ent->getName()).arg(S));
+			if (mesh->size())
+				ccConsole::Print(QString("[Mesh Surface Measurer] Mean triangle surface: %1 (square units)").arg(S/double(mesh->size())));
         }
     }
 }
@@ -2248,6 +2262,60 @@ void MainWindow::doMeshSFAction(ccGenericMesh::MESH_SCALAR_FIELD_PROCESS process
     }
 
     refreshAll();
+}
+
+static float s_subdivideMaxArea = 1.0f;
+void MainWindow::doActionSubdivideMesh()
+{
+	bool ok;
+	s_subdivideMaxArea = QInputDialog::getDouble(this, "Subdivide mesh", "Max area per triangle:", s_subdivideMaxArea, 1e-6, 1e6, 6, &ok);
+	if (!ok)
+		return;
+
+	//ccProgressDialog pDlg(true,this);
+
+    unsigned i,selNum = m_selectedEntities.size();
+    for (i=0;i<selNum;++i)
+    {
+        ccHObject* ent = m_selectedEntities[i];
+        if (ent->isKindOf(CC_MESH))
+        {
+			//single mesh?
+			if (ent->isA(CC_MESH))
+			{
+				ccMesh* mesh = static_cast<ccMesh*>(ent);
+
+				ccMesh* subdividedMesh = 0;
+				try
+				{
+					subdividedMesh = mesh->subdivide(s_subdivideMaxArea);
+				}
+				catch(...)
+				{
+					ccLog::Error(QString("[Subdivide] An error occured while trying to subdivide mesh '%1' (not enough memory?)").arg(mesh->getName()));
+				}
+
+				if (subdividedMesh)
+				{
+					subdividedMesh->setName(QString("%1.subdivided(S<%2)").arg(mesh->getName()).arg(s_subdivideMaxArea));
+					mesh->setEnabled(false);
+					mesh->refreshDisplay_recursive();
+					addToDB(subdividedMesh, true, 0, true, false);
+				}
+				else
+				{
+					ccConsole::Warning(QString("[Subdivide] Failed to subdivide mesh '%1' (not enough memory?)").arg(mesh->getName()));
+				}
+			}
+			else
+			{
+				ccLog::Warning("[Subdivide] Works only on single meshes!");
+			}
+		}
+    }
+
+    refreshAll();
+	updateUI();
 }
 
 static unsigned s_laplacianSmooth_nbIter = 20;
@@ -5898,6 +5966,8 @@ void MainWindow::loadFile()
     filters.append("\n");
     filters.append(CC_FILE_TYPE_FILTERS[VTK]);
     filters.append("\n");
+    filters.append(CC_FILE_TYPE_FILTERS[STL]);
+    filters.append("\n");
 #ifdef CC_X3D_SUPPORT
     filters.append(CC_FILE_TYPE_FILTERS[X3D]);
     filters.append("\n");
@@ -6095,6 +6165,8 @@ void MainWindow::saveFile()
 				filters.append(CC_FILE_TYPE_FILTERS[PLY]);
 				filters.append("\n");
 				filters.append(CC_FILE_TYPE_FILTERS[VTK]);
+				filters.append("\n");
+				filters.append(CC_FILE_TYPE_FILTERS[STL]);
 				filters.append("\n");
 		#ifdef CC_X3D_SUPPORT
 				filters.append(CC_FILE_TYPE_FILTERS[X3D]);
@@ -6454,7 +6526,8 @@ void MainWindow::enableUIItems(dbTreeSelectionInfo& selInfo)
     actionComputeOctree->setEnabled(atLeastOneCloud);
     actionComputeNormals->setEnabled(atLeastOneCloud || atLeastOneMesh);
     actionSetColorGradient->setEnabled(atLeastOneCloud || atLeastOneMesh);
-    actionSetUniqueColor->setEnabled(atLeastOneCloud || atLeastOneMesh);
+    actionSetUniqueColor->setEnabled(atLeastOneEntity/*atLeastOneCloud || atLeastOneMesh*/); //DGM: we can set color to a group now!
+    actionColorize->setEnabled(atLeastOneEntity/*atLeastOneCloud || atLeastOneMesh*/); //DGM: we can set color to a group now!
     actionComputeMeshAA->setEnabled(atLeastOneCloud);
     actionComputeMeshLS->setEnabled(atLeastOneCloud);
     //actionComputeQuadric3D->setEnabled(atLeastOneCloud);
@@ -6488,7 +6561,6 @@ void MainWindow::enableUIItems(dbTreeSelectionInfo& selInfo)
     actionClearNormals->setEnabled(atLeastOneNormal);               //&& hasNormals
     actionInvertNormals->setEnabled(atLeastOneNormal);              //&& hasNormals
     actionConvertNormalToHSV->setEnabled(atLeastOneNormal);         //&& hasNormals
-    actionColorize->setEnabled(atLeastOneCloud || atLeastOneMesh);  //&& colored
     actionClearColor->setEnabled(atLeastOneColor);                  //&& colored
 
 
