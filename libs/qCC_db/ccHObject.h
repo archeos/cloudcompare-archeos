@@ -233,6 +233,21 @@ public:
 	**/
 	virtual bool isShareable() const { return false; }
 
+	//! Behavior when selected
+	enum SelectionBehavior { SELECTION_AA_BBOX,
+							 SELECTION_FIT_BBOX,
+							 SELECTION_IGNORED };
+
+	//! Sets selection behavior (when displayed)
+	/** WARNING: SELECTION_FIT_BBOX relies on the
+		'ccDrawableObject::getFitBB' method (which
+		is not supported by all entities).
+	**/
+	void setSelectionBehavior(SelectionBehavior mode) { m_selectionBehavior = mode; }
+
+	//! Returns selection behavior
+	SelectionBehavior getSelectionBehavior() const { return m_selectionBehavior; }
+
 protected:
 
     //! Sets parent object
@@ -267,6 +282,9 @@ protected:
 
     //! Last modification time (ms)
     int m_lastModificationTime_ms;
+
+	//! Selection behavior
+	SelectionBehavior m_selectionBehavior;
 };
 
 /*** Helpers ***/

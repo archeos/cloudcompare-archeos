@@ -83,6 +83,7 @@ struct glDrawContext
 	float defaultMeshBackDiff[4];
 	unsigned char pointsDefaultCol[3];
 	unsigned char textDefaultCol[3];
+	unsigned char labelDefaultCol[3];
 	unsigned char bbDefaultCol[3];
 
 	//decimation options
@@ -95,8 +96,7 @@ struct glDrawContext
     char colorRampTitle[256];
 
 	//picked points
-	unsigned pickedPointsSize;
-	unsigned pickedPointsStartIndex;
+	float pickedPointsRadius;
 	float pickedPointsTextShift;
 
 	//for displaying text
@@ -122,8 +122,7 @@ struct glDrawContext
     , decimateMeshOnMove(true)
     , sfColorScaleToDisplay(0)
     , greyForNanScalarValues(true)
-	, pickedPointsSize(4)
-	, pickedPointsStartIndex(0)
+	, pickedPointsRadius(4)
 	, pickedPointsTextShift(0.0)
 	, dispNumberPrecision(6)
 	, labelsTransparency(100)
@@ -208,11 +207,20 @@ public:
         \param relative specifies whether bbox is relative or not
         \param withGLfeatures include GL features (example: octree grid display) inside BB or not
         \param window display to compute bbox only with entities displayed in a given GL window
-        \return bounding box
+        \return bounding-box
     **/
     virtual ccBBox getBB(bool relative=true, bool withGLfeatures=false, const ccGenericGLDisplay* window=0) = 0;
 
-    //! Draws absolute bounding-box
+	//! Returns best-fit bounding-box (if available)
+	/** WARNING: This method is not supported by all entities!
+		Should be re-implemented whenever possible
+		(returns the axis-aligned bounding-box by default).
+		\param[out] trans associated transformation (so that the bounding-box can be displayed in the right position!)
+		\return fit bounding-box
+	**/
+	virtual ccBBox getFitBB(ccGLMatrix& trans);
+
+    //! Draws absolute (axis aligned) bounding-box
     virtual void drawBB(const colorType col[]);
 
     //! Returns main OpenGL paramters for this entity

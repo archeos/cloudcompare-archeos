@@ -28,6 +28,10 @@
 #include "cc2DLabel.h"
 #include "ccBasicTypes.h"
 #include "ccGenericPointCloud.h"
+#include "ccSphere.h"
+
+//Qt
+#include <QSharedPointer>
 
 //System
 #include <assert.h>
@@ -221,6 +225,20 @@ bool cc2DLabel::fromFile_MeOnly(QFile& in, short dataVersion)
 	return true;
 }
 
+//return angle between two vectors (in degrees)
+//warning: vectors will be normalized by default
+double GetAngle_deg(CCVector3& AB, CCVector3& AC)
+{
+	AB.normalize();
+	AC.normalize();
+	double dotprod = AB.dot(AC);
+	if (dotprod<=-1.0)
+		return 180.0;
+	else if (dotprod>1.0)
+		return 0.0;
+	return 180.0*acos(dotprod)/M_PI;
+}
+
 QStringList cc2DLabel::getLabelContent(int precision)
 {
 	QStringList body;
@@ -312,11 +330,11 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			body << areaStr;
 
 			//coordinates
-			QString coordStr1 = QString("P#%0: (%1;%2;%3)").arg(pointIndex1).arg(P1->x,0,'f',precision).arg(P1->y,0,'f',precision).arg(P1->z,0,'f',precision);
+			QString coordStr1 = QString("A#%0: (%1;%2;%3)").arg(pointIndex1).arg(P1->x,0,'f',precision).arg(P1->y,0,'f',precision).arg(P1->z,0,'f',precision);
 			body << coordStr1;
-			QString coordStr2 = QString("P#%0: (%1;%2;%3)").arg(pointIndex2).arg(P2->x,0,'f',precision).arg(P2->y,0,'f',precision).arg(P2->z,0,'f',precision);
+			QString coordStr2 = QString("B#%0: (%1;%2;%3)").arg(pointIndex2).arg(P2->x,0,'f',precision).arg(P2->y,0,'f',precision).arg(P2->z,0,'f',precision);
 			body << coordStr2;
-			QString coordStr3 = QString("P#%0: (%1;%2;%3)").arg(pointIndex3).arg(P3->x,0,'f',precision).arg(P3->y,0,'f',precision).arg(P3->z,0,'f',precision);
+			QString coordStr3 = QString("C#%0: (%1;%2;%3)").arg(pointIndex3).arg(P3->x,0,'f',precision).arg(P3->y,0,'f',precision).arg(P3->z,0,'f',precision);
 			body << coordStr3;
 
 			//normal
@@ -325,19 +343,11 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			body << normStr;
 
 			//angle
-			P1P2.normalize();
-			P1P3.normalize();
-			double d = P1P2.dot(P1P3);
-			if (d<=-1.0)
-				d = 180.0;
-			else if (d>1.0)
-				d = 0.0;
-			else
-			{
-				d = acos(d);
-				d = 180.0*d/M_PI;
-			}
-			QString angleStr = QString("Angle (P#%0->P#%1->P#%2): %3 degrees").arg(pointIndex2).arg(pointIndex1).arg(pointIndex3).arg(d,0,'f',precision);
+			CCVector3 P2P3 = *P3-*P2;
+			double angleAtP1 = GetAngle_deg(P1P2,P1P3);
+			double angleAtP2 = GetAngle_deg(P2P3,-P1P2);
+			double angleAtP3 = GetAngle_deg(-P1P3,-P2P3); //should be equal to 180-a1-a2!
+			QString angleStr = QString("Angles: A=%1 - B=%3 - C=%5 deg.").arg(angleAtP1,0,'f',precision).arg(angleAtP2,0,'f',precision).arg(angleAtP3,0,'f',precision);
 			body << angleStr;
 		}
 		break;
@@ -384,6 +394,9 @@ void cc2DLabel::drawMeOnly(CC_DRAW_CONTEXT& context)
 		drawMeOnly2D(context);
 }
 
+//unit point marker
+static QSharedPointer<ccSphere> c_unitPointMarker(0);
+
 void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 {
 	assert(!m_points.empty());
@@ -391,8 +404,7 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 	//standard case: list names pushing
 	bool pushName = MACRO_DrawNames(context);
 	if (pushName)
-		//glPushName(getUniqueID());
-		return;
+		glPushName(getUniqueID());
 
     const float c_sizeFactor = 4.0f;
     bool loop=false;
@@ -441,25 +453,40 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 
     case 1:
 		{
-			//point size
-			glPushAttrib(GL_POINT_BIT);
-			float size=1.0;
-			glGetFloatv(GL_POINT_SIZE,&size);
-			glPointSize(c_sizeFactor/*(float)context.pickedPointsSize*/*size);
-
-			//draw selected points
-			glColor3ubv(ccColor::red);
-			glBegin(GL_POINTS);
-			for (unsigned i=0; i<count; i++)
+			//display point marker as spheres
 			{
-				const CCVector3* P = m_points[i].cloud->getPoint(m_points[i].index);
-				glVertex3fv(P->u);
+				if (!c_unitPointMarker)
+				{
+					c_unitPointMarker = QSharedPointer<ccSphere>(new ccSphere(1.0f,0,"PointMarker",12));
+					c_unitPointMarker->showColors(true);
+					c_unitPointMarker->setVisible(true);
+					c_unitPointMarker->setEnabled(true);
+				}
+			
+				//build-up point maker own 'context'
+				bool pushName = MACRO_DrawNames(context);
+				CC_DRAW_CONTEXT markerContext = context;
+				markerContext.flags &= (~CC_DRAW_NAMES); //we must remove the 'push name flag' so that the sphere doesn't push its own!
+				markerContext._win = 0;
+
+				if (isSelected() && !pushName)
+					c_unitPointMarker->setColor(ccColor::red);
+				else
+					c_unitPointMarker->setColor(ccColor::magenta);
+
+				for (unsigned i=0; i<count; i++)
+				{
+					glMatrixMode(GL_MODELVIEW);
+					glPushMatrix();
+					const CCVector3* P = m_points[i].cloud->getPoint(m_points[i].index);
+					glTranslatef(P->x,P->y,P->z);
+					glScalef(context.pickedPointsRadius,context.pickedPointsRadius,context.pickedPointsRadius);
+					c_unitPointMarker->draw(markerContext);
+					glPopMatrix();
+				}
 			}
-			glEnd();
 
-			glPopAttrib();
-
-			if (m_dispIn3D)
+			if (m_dispIn3D && !pushName) //no need to display label in point picking mode
 			{
 				QFont font(context._win->getTextDisplayFont());
 				//font.setPointSize(font.pointSize()+2);
@@ -479,8 +506,8 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 		}
     }
 
-	//if (pushName)
-	//	glPopName();
+	if (pushName)
+		glPopName();
 }
 
 //display parameters
@@ -528,11 +555,9 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 		GLdouble zp;
 		gluProject(arrowDest.x,arrowDest.y,arrowDest.z,MM,MP,VP,&arrowDestX,&arrowDestY,&zp);
 
-		/*** label rectangle ***/
+		/*** label border ***/
 		bodyFont = context._win->getTextDisplayFont();
 		titleFont = QFont(context._win->getTextDisplayFont());
-		//int pointSize = titleFont.pointSize();
-		//titleFont.setPointSize(pointSize+2);
 		titleFont.setBold(true);
 		QFontMetrics titleFontMetrics(titleFont);
 		QFontMetrics bodyFontMetrics(bodyFont);
@@ -593,14 +618,14 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 	bool highlighted = (!pushName && isSelected());
 	//default background color
 	colorType defaultBkgColor[4];
-	memcpy(defaultBkgColor,ccColor::yellow,sizeof(colorType)*3);
+	memcpy(defaultBkgColor,context.labelDefaultCol,sizeof(colorType)*3);
 	defaultBkgColor[3]=(colorType)((float)context.labelsTransparency*(float)MAX_COLOR_COMP/100.0f);
 	//default border color (mustn't be totally transparent!)
 	colorType defaultBorderColor[4];
 	if (highlighted)
 		memcpy(defaultBorderColor,ccColor::red,sizeof(colorType)*3);
 	else
-		memcpy(defaultBorderColor,ccColor::yellow,sizeof(colorType)*3);
+		memcpy(defaultBorderColor,context.labelDefaultCol,sizeof(colorType)*3);
 	defaultBorderColor[3]=(colorType)((float)(50+context.labelsTransparency/2)*(float)MAX_COLOR_COMP/100.0f);
 
 	glPushAttrib(GL_COLOR_BUFFER_BIT);

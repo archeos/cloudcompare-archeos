@@ -25,9 +25,14 @@
 #ifndef CC_MAIN_APP_INTERFACE
 #define CC_MAIN_APP_INTERFACE
 
+//Qt
+#include <QString>
+
+//qCC_db
+#include <ccHObject.h>
+
 class QMainWindow;
 class ccGLWindow;
-class ccHObject;
 
 //! Main application interface (for plugins)
 class ccMainAppInterface
@@ -68,6 +73,9 @@ public:
 	**/
 	virtual void removeFromDB(ccHObject* obj, bool autoDelete=true)=0;
 
+	//! Returns currently selected entities ("read only")
+	virtual const ccHObject::Container& getSelectedEntities() const=0;
+
 	//! Console message level (see dispToConsole)
 	enum ConsoleMessageLevel {	STD_CONSOLE_MESSAGE = 0,
 								WRN_CONSOLE_MESSAGE = 1,
@@ -76,9 +84,9 @@ public:
 
     //! Prints a message to console
     /** \param message message
-        \param warning whether the message is a warning or not
+        \param level message level (standard, warning, error)
     **/
-    virtual void dispToConsole(const char* message, ConsoleMessageLevel level=STD_CONSOLE_MESSAGE)=0;
+    virtual void dispToConsole(QString message, ConsoleMessageLevel level=STD_CONSOLE_MESSAGE)=0;
 
 	//! Forces display of console widget
 	virtual void forceConsoleDisplay()=0;
@@ -91,7 +99,6 @@ public:
 
     //! Redraws all GL windows that have the 'refresh' flag on
     /** See ccGLWindow::toBeRefreshed and ccDrawableObject::prepareDisplayForRefresh.
-        Warning: automatically calls MainWindow::updateUI.
     **/
     virtual void refreshAll()=0;
 
