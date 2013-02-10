@@ -1,4 +1,4 @@
 debian/qCC.desktop /usr/share/applications
 debian/ccViewer.desktop /usr/share/applications
-ccViewer/images/cc.png /usr/share/icons/hicolor/16x16/apps
-qCC/images/menu/cc_main.png /usr/share/icons/hicolor/32x32/apps
+qCC/images/icon/cc_icon.svg /usr/share/icons/hicolor/scalable/apps
+qCC/images/icon/cc_viewer_icon.svg /usr/share/icons/hicolor/scalable/apps

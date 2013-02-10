@@ -3,8 +3,15 @@ Upstream-Name: cloudcompare
 Source: https://github.com/cloudcompare/trunk/ 
 
 Files: *
-Copyright: 2013 EDF R&D / TELECOM ParisTech
+Copyright: 2004-2013 EDF R&D / TELECOM ParisTech
+Author: Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
 License: GPL-2.0+
+
+Files: libs/qxt/*
+Copyright: 2006-2011, the LibQxt project
+License: GPL-2.0+
+
+Files: 
 
 Files: debian/*
 Copyright: 2013 Romain Janvier <romain.janvier@hotmail.fr>

@@ -5,5 +5,5 @@ Name=CloudCompare
 Comment=Meshing tool
 TryExec=qCC
 Exec=qCC %F
-Icon=cc_main
+Icon=cc_icon
 MimeType=model/mesh;
