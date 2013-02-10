@@ -28,6 +28,8 @@
 #include <QSettings>
 #include <QFileDialog>
 #include <QMenu>
+#include <QClipboard>
+#include <QApplication>
 
 //qCC_db
 #include <ccPointCloud.h>
@@ -42,6 +44,8 @@
 
 //system
 #include <assert.h>
+
+static unsigned s_pickedPointsStartIndex = 0;
 
 ccPointListPickingDlg::ccPointListPickingDlg(QWidget* parent)
 	: ccPointPickingGenericInterface(parent)
@@ -64,9 +68,7 @@ ccPointListPickingDlg::ccPointListPickingDlg(QWidget* parent)
 
 	tableWidget->verticalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 
-	const ccGui::ParamStruct& guiParams = ccGui::Parameters();
-	markerSizeSpinBox->setValue(guiParams.pickedPointsSize);
-	startIndexSpinBox->setValue(guiParams.pickedPointsStartIndex);
+	startIndexSpinBox->setValue(s_pickedPointsStartIndex);
 
 	connect(cancelToolButton,       SIGNAL(clicked()),          this,				SLOT(cancelAndExit()));
 	connect(revertToolButton,       SIGNAL(clicked()),          this,				SLOT(removeLastEntry()));
@@ -142,12 +144,14 @@ void ccPointListPickingDlg::cancelAndExit()
 	{
 		//Restore previous state
 		for (unsigned i=0;i<m_toBeAdded->getChildrenNumber();++i)
-			m_orderedLabelsContainer->removeChild(m_toBeAdded->getChild(i));
+			MainWindow::TheInstance()->db()->removeElement(m_toBeAdded->getChild(i));
+			//m_orderedLabelsContainer->removeChild(m_toBeAdded->getChild(i));
 		for (unsigned j=0;j<m_toBeDeleted->getChildrenNumber();++j)
 			m_toBeDeleted->getChild(j)->setVisible(true);
 		if (m_orderedLabelsContainer->getChildrenNumber() == 0)
 		{
-			m_associatedCloud->removeChild(m_orderedLabelsContainer);
+			MainWindow::TheInstance()->db()->removeElement(m_orderedLabelsContainer);
+			//m_associatedCloud->removeChild(m_orderedLabelsContainer);
 			m_orderedLabelsContainer=0;
 		}
 	}
@@ -240,7 +244,11 @@ void ccPointListPickingDlg::removeLastEntry()
 	}
 	else
 	{
-		m_associatedCloud->removeChild(lastVisibleLabel);
+		if (m_orderedLabelsContainer)
+			//m_orderedLabelsContainer->removeChild(lastVisibleLabel);
+			MainWindow::TheInstance()->db()->removeElement(lastVisibleLabel);
+		else
+			m_associatedCloud->removeChild(lastVisibleLabel);
 	}
 
 	updateList();
@@ -251,12 +259,9 @@ void ccPointListPickingDlg::removeLastEntry()
 
 void ccPointListPickingDlg::startIndexChanged(int value)
 {
-	ccGui::ParamStruct guiParams = ccGui::Parameters();
-
-	if (guiParams.pickedPointsStartIndex != (unsigned)value)
+	if (value != s_pickedPointsStartIndex)
 	{
-		guiParams.pickedPointsStartIndex = (unsigned)value;
-		ccGui::Set(guiParams);
+		s_pickedPointsStartIndex = (unsigned)value;
 
 		updateList();
 		if (m_associatedWin)
@@ -415,6 +420,16 @@ void ccPointListPickingDlg::processPickedPoint(ccPointCloud* cloud, unsigned poi
 	m_orderedLabelsContainer->addChild(newLabel,true);
 
 	m_toBeAdded->addChild(newLabel,false);
+
+	//automatically send the new point coordinates to the clipboard
+	QClipboard* clipboard = QApplication::clipboard();
+	if (clipboard)
+	{
+		const CCVector3* P = cloud->getPoint(pointIndex);
+		int precision = ccGui::Parameters().displayedNumPrecision;
+		int indexInList = startIndexSpinBox->value()+(int)m_orderedLabelsContainer->getChildrenNumber()-1;
+		clipboard->setText(QString("CC_POINT_#%0(%1;%2;%3)").arg(indexInList).arg(P->x,0,'f',precision).arg(P->y,0,'f',precision).arg(P->z,0,'f',precision));
+	}
 
 	updateList();
 

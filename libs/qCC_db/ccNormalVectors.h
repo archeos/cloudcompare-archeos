@@ -95,9 +95,9 @@ public:
                                     CCLib::DgmOctree* _theOctree=0);
 
 	//! Converts a normal vector to geological 'strike & dip' parameters (N[dip]°E - [strike]°SE)
-	/** \param N [in] normal (should be normalized!)
-		\param srike [out] strike
-		\param dip [out] dip
+	/** \param[in] N normal (should be normalized!)
+		\param[out] strike strike
+		\param[out] dip dip
 	**/
 	static void ConvertNormalToStrikeAndDip(const CCVector3& N, double& strike, double& dip);
 
@@ -118,6 +118,16 @@ public:
 		\param B [out] blue [0;MAX_COLOR_COMP]
 	**/
 	static void ConvertNormalToRGB(const CCVector3& N, colorType& R, colorType& G, colorType& B);
+
+	//! Converts a HSV color to RGB color space
+	/** \param H [out] hue [0;360[
+		\param S [out] saturation [0;1]
+		\param V [out] value [0;1]
+		\param R [out] red [0;MAX_COLOR_COMP]
+		\param G [out] green [0;MAX_COLOR_COMP]
+		\param B [out] blue [0;MAX_COLOR_COMP]
+	**/
+	static void ConvertHSVToRGB(double H, double S, double V, colorType& R, colorType& G, colorType& B);
 
 	//! Allocates normal HSV colors array
 	/** Mandatory for HSV color related methods (getNormalHSVColor, etc.)

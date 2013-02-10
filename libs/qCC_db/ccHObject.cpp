@@ -59,10 +59,11 @@
 #include <assert.h>
 
 ccHObject::ccHObject(QString name/*=QString()*/)
-: ccObject(name)
-, ccDrawableObject()
-, m_parent(0)
-, m_lastModificationTime_ms(0)
+	: ccObject(name)
+	, ccDrawableObject()
+	, m_parent(0)
+	, m_lastModificationTime_ms(0)
+	, m_selectionBehavior(SELECTION_AA_BBOX)
 {
 	setVisible(false);
 	lockVisibility(true);
@@ -338,6 +339,7 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 	//no need to display anything but clouds in "point picking mode"
 	drawInThisContext &= (!MACRO_DrawPointNames(context) || isKindOf(CC_POINT_CLOUD));
 
+	//apply 3D 'temporary' transformation (for display only)
 	if (draw3D && glTransEnabled)
 	{
 		glMatrixMode(GL_MODELVIEW);
@@ -345,6 +347,7 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 		glMultMatrixf(glTrans.data());
 	}
 
+	//draw entity
 	if (visible && drawInThisContext)
 	{
 		if ((!selected || !MACRO_SkipSelected(context)) &&
@@ -355,11 +358,38 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 		}
 	}
 
+	//draw entity's children
 	for (Container::iterator it = m_children.begin(); it!=m_children.end(); ++it)
 		(*it)->draw(context);
 
+	//if the entity is currently selected
 	if (selected && draw3D && drawInThisContext)
-		drawBB(context.bbDefaultCol);
+	{
+		switch (m_selectionBehavior)
+		{
+		case SELECTION_AA_BBOX:
+			drawBB(context.bbDefaultCol);
+			break;
+		case SELECTION_FIT_BBOX:
+			{
+				ccGLMatrix trans;
+				ccBBox box = getFitBB(trans);
+				if (box.isValid())
+				{
+					glMatrixMode(GL_MODELVIEW);
+					glPushMatrix();
+					glMultMatrixf(trans.data());
+					box.draw(context.bbDefaultCol);
+					glPopMatrix();
+				}
+			}
+			break;
+		case SELECTION_IGNORED:
+			break;
+		default:
+			assert(false);
+		}
+	}
 
 	if (draw3D && glTransEnabled)
 		glPopMatrix();
@@ -550,6 +580,10 @@ bool ccHObject::toFile(QFile& out) const
 			if (!m_children[i]->toFile(out))
 				return false;
 
+	//write current selection behavior (dataVersion>=23)
+	if (out.write((const char*)&m_selectionBehavior,sizeof(SelectionBehavior))<0)
+		return WriteError();
+
 	return true;
 }
 
@@ -593,6 +627,17 @@ bool ccHObject::fromFile(QFile& in, short dataVersion)
 				return false;
 			}
 		}
+	}
+
+	//write current selection behavior (dataVersion>=23)
+	if (dataVersion>=23)
+	{
+		if (in.read((char*)&m_selectionBehavior,sizeof(SelectionBehavior))<0)
+			return ReadError();
+	}
+	else
+	{
+		m_selectionBehavior = SELECTION_AA_BBOX;
 	}
 
 	return true;
