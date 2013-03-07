@@ -71,10 +71,19 @@ Subject: Dynamic directory for shaders
  			if (m_activeGLFilter && !filter)
  			{
 -				QString shadersPath = QApplication::applicationDirPath() + QString("/shaders");
-+				QString shadersPath = ShaderInstallDir + QString("/shaders");
++				QString shadersPath = ShaderInstallDir;
  				if (!m_activeGLFilter->init(Wp,Hp,qPrintable(shadersPath)))
  				{
  					ccConsole::Error("[GL Filter] GL filter can't be used during rendering (not enough memory)!");
+@@ -2680,7 +2684,7 @@ bool ccGLWindow::initGLFilter(int w, int
+ 	ccGlFilter* _filter = m_activeGLFilter;
+ 	m_activeGLFilter=0;
+ 
+-	QString shadersPath = QApplication::applicationDirPath() + QString("/shaders");
++	QString shadersPath = ShaderInstallDir;
+ 	//ccConsole::Print(QString("Shaders path: %1").arg(shadersPath));
+ 
+ 	if (!_filter->init(w,h,qPrintable(shadersPath)))
 --- /dev/null
 +++ b/qCC/config.h.in
 @@ -0,0 +1,2 @@

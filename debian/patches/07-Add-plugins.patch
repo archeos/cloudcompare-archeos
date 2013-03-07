@@ -10,6 +10,14 @@
  
 --- a/qCC/plugins/qHPR/CMakeLists.txt
 +++ b/qCC/plugins/qHPR/CMakeLists.txt
+@@ -1,6 +1,6 @@
+ cmake_minimum_required(VERSION 2.8)
+ 
+-option( INSTALL_QHPR_PLUGIN "Check to install qHPR plugin" OFF )
++option( INSTALL_QHPR_PLUGIN "Check to install qHPR plugin" ON )
+ 
+ if (INSTALL_QHPR_PLUGIN)
+ 
 @@ -13,5 +13,6 @@ include( ../CMakePluginTpl.cmake )
  
  target_link_libraries( ${PROJECT_NAME} qhull )
@@ -61,3 +69,66 @@
  			#endif
  
  			progressCb.update(++progress);
+--- a/qCC/plugins/qEDL/CMakeLists.txt
++++ b/qCC/plugins/qEDL/CMakeLists.txt
+@@ -1,6 +1,6 @@
+ cmake_minimum_required(VERSION 2.8)
+ 
+-option( INSTALL_QEDL_PLUGIN "Check to install qEDL plugin" OFF )
++option( INSTALL_QEDL_PLUGIN "Check to install qEDL plugin" ON )
+ 
+ if (INSTALL_QEDL_PLUGIN)
+ 
+--- a/qCC/plugins/qKinect/CMakeLists.txt
++++ b/qCC/plugins/qKinect/CMakeLists.txt
+@@ -1,6 +1,6 @@
+ cmake_minimum_required(VERSION 2.8)
+ 
+-option( INSTALL_QKINECT_PLUGIN "Check to install qKINECT plugin" OFF )
++option( INSTALL_QKINECT_PLUGIN "Check to install qKINECT plugin" ON )
+ 
+ if (INSTALL_QKINECT_PLUGIN)
+ 
+@@ -8,8 +8,8 @@ if (INSTALL_QKINECT_PLUGIN)
+ project( QKINECT_PLUGIN_DLL )
+ 
+ # libfreenect is needed to build library
+-set( LIBFREENECT_INCLUDE_DIR "" CACHE PATH "Include directory of libfreenect" )
+-set( LIBFREENECT_LIBRARY_FILE "" CACHE FILE "Library file of libfreenect" )
++set( LIBFREENECT_INCLUDE_DIR "/usr/include" CACHE PATH "Include directory of libfreenect" )
++set( LIBFREENECT_LIBRARY_FILE "-lfreenect" CACHE FILE "Library file of libfreenect" )
+ if (WIN32)
+ 	set( LIBFREENECT_SHARED_LIBRARY_FILE "" CACHE FILE "Shared library file of libfreenect (dll)" )
+ endif()
+--- a/qCC/plugins/qSSAO/CMakeLists.txt
++++ b/qCC/plugins/qSSAO/CMakeLists.txt
+@@ -1,6 +1,6 @@
+ cmake_minimum_required(VERSION 2.8)
+ 
+-option( INSTALL_QSSAO_PLUGIN "Check to install qSSAO plugin" OFF )
++option( INSTALL_QSSAO_PLUGIN "Check to install qSSAO plugin" ON )
+ 
+ if (INSTALL_QSSAO_PLUGIN)
+ 
+--- a/qCC/plugins/qKinect/cckinectDlg.cpp
++++ b/qCC/plugins/qKinect/cckinectDlg.cpp
+@@ -22,7 +22,7 @@
+ //**************************************************************************
+ //
+ 
+-#include "ccKinectDlg.h"
++#include "cckinectDlg.h"
+ 
+ #include <ccOctree.h>
+ 
+--- a/qCC/plugins/qKinect/qKinect.cpp
++++ b/qCC/plugins/qKinect/qKinect.cpp
+@@ -33,7 +33,7 @@
+ #include <ccNormalVectors.h>
+ 
+ //dialog
+-#include "ccKinectDlg.h"
++#include "cckinectDlg.h"
+ 
+ //Qt
+ #include <QElapsedTimer>

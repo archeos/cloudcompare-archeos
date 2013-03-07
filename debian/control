@@ -2,7 +2,9 @@ Source: cloudcompare
 Section: graphics
 Priority: extra
 Maintainer: Romain Janvier <romain.janvier@hotmail.fr>
-Build-Depends: debhelper (>= 9.0.0), cmake, libqt4-dev (>= 4.7), libqt4-opengl-dev (>= 4.7), libglew-dev, libboost-thread-dev (>= 1.38), liblas-dev (>= 1.2), libboost-program-options-dev (>= 1.38) 
+Build-Depends: debhelper (>= 9.0.0), cmake, libqt4-dev (>= 4.7), libqt4-opengl-dev (>= 4.7), 
+ libglew-dev, libboost-thread-dev (>= 1.38), liblas-dev (>= 1.2), libboost-program-options-dev (>= 1.38), 
+ freenect 
 Standards-Version: 3.9.4
 Homepage:http://www.danielgm.net/cc/
 Vcs-Git: git://github.com/archeos/cloudcompare-archeos.git
