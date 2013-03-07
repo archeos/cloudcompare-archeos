@@ -1,5 +1,5 @@
 01-Doc-must-live-in-a-good-dir.patch
-02-Dynamic-directory-for-shaders.patch
+02-Dynamic-directories.patch
 03-Use-Debian-libGLEW.patch
 04-Enable-Libblas-support.patch
 05-Change-CMakeLists-for-correct-hardening.patch
