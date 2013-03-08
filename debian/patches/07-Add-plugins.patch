@@ -132,3 +132,37 @@
  
  //Qt
  #include <QElapsedTimer>
+--- a/qCC/plugins/qHPR/qHPR.cpp
++++ b/qCC/plugins/qHPR/qHPR.cpp
+@@ -35,7 +35,7 @@
+ #include <ccProgressDialog.h>
+ 
+ //qCC
+-#include <ccGLWindow.h>
++#include "../../ccGLWindow.h"
+ 
+ //CCLib
+ #include <CloudSamplingTools.h>
+--- a/qCC/plugins/qPCV/CMakeLists.txt
++++ b/qCC/plugins/qPCV/CMakeLists.txt
+@@ -1,6 +1,6 @@
+ cmake_minimum_required(VERSION 2.8)
+ 
+-option( INSTALL_QPCV_PLUGIN "Check to install qPCV plugin" OFF )
++option( INSTALL_QPCV_PLUGIN "Check to install qPCV plugin" ON )
+ 
+ if (INSTALL_QPCV_PLUGIN)
+ 
+--- a/qCC/plugins/qPCV/qPCV.cpp
++++ b/qCC/plugins/qPCV/qPCV.cpp
+@@ -39,8 +39,8 @@
+ #include <ccProgressDialog.h>
+ 
+ //qCC
+-#include <ccCommon.h>
+-#include <ccDBRoot.h>
++#include "../../ccCommon.h"
++#include "../../db_tree/ccDBRoot.h"
+ 
+ qPCV::qPCV(QObject* parent/*=0*/)
+ 	: QObject(parent)
