@@ -9,46 +9,9 @@ Subject: Dynamic directory for shaders
  3 files changed, 15 insertions(+), 3 deletions(-)
  create mode 100644 qCC/config.h.in
 
---- a/qCC/CMakeLists.txt
-+++ b/qCC/CMakeLists.txt
-@@ -1,13 +1,22 @@
- cmake_minimum_required(VERSION 2.8)
- 
- if ( UNIX )
--	set( qCC_dest_release bin ) #default destination: /usr/bin
-+	set( qCC_dest_release /usr/bin ) #default destination: /usr/bin
- 	set( qCC_dest_debug bin/debug )
-+	set( qCC_shaders_dest_release /usr/share/cloudcompare/shaders )
-+    set( qCC_plugins_dest_release /usr/lib/cloudcompare/plugins )
- else()
- 	set( qCC_dest_release qCC )
- 	set( qCC_dest_debug qCC_debug )
-+	set( qCC_shaders_dest_release qCC/shaders )
-+    set( qCC_plugins_dest_release qCC/plugins )
- endif()
- 
-+# config / shader path
-+configure_file (
-+  "config.h.in"
-+  "${CMAKE_CURRENT_SOURCE_DIR}/config.h"
-+  )
- # Load plugins
- add_subdirectory( plugins )
- 
-@@ -118,8 +127,8 @@ endif()
- install_ext( TARGETS qCC ${qCC_dest_release} ${qCC_dest_debug} )
- 
- # Export 'bilateral' shader files to all install destinations
--install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${qCC_dest_release}/shaders ${qCC_dest_debug}/shaders )
--install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${qCC_dest_release}/shaders ${qCC_dest_debug}/shaders )
-+install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${qCC_shaders_dest_release} ${qCC_dest_debug}/shaders )
-+install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${qCC_shaders_dest_release} ${qCC_dest_debug}/shaders )
- 
- # Auxiliary files
- # set( auxFiles bin_other/history.txt bin_other/license.txt )
 --- a/qCC/ccGLWindow.cpp
 +++ b/qCC/ccGLWindow.cpp
-@@ -35,6 +35,9 @@
+@@ -28,6 +28,9 @@
  #include "db_tree/ccDBRoot.h"
  #endif
  
@@ -58,7 +21,7 @@ Subject: Dynamic directory for shaders
  //qCC_db
  #include <ccHObject.h>
  #include <ccBBox.h>
-@@ -58,6 +61,7 @@
+@@ -53,6 +56,7 @@
  #include <math.h>
  #include <algorithm>
  
@@ -66,49 +29,32 @@ Subject: Dynamic directory for shaders
  #define CC_GL_MAX_ZOOM_RATIO 1.0e6f
  #define CC_GL_MIN_ZOOM_RATIO 1.0e-6f
  
-@@ -2480,7 +2484,7 @@ bool ccGLWindow::renderToFile(const char
+@@ -2502,7 +2506,7 @@ bool ccGLWindow::renderToFile(const char
  
  			if (m_activeGLFilter && !filter)
  			{
--				QString shadersPath = QApplication::applicationDirPath() + QString("/shaders");
+-				QString shadersPath = ccGLWindow::getShadersPath();
 +				QString shadersPath = ShaderInstallDir;
+ 
  				if (!m_activeGLFilter->init(Wp,Hp,qPrintable(shadersPath)))
  				{
- 					ccConsole::Error("[GL Filter] GL filter can't be used during rendering (not enough memory)!");
-@@ -2680,7 +2684,7 @@ bool ccGLWindow::initGLFilter(int w, int
+@@ -2703,7 +2707,7 @@ bool ccGLWindow::initGLFilter(int w, int
  	ccGlFilter* _filter = m_activeGLFilter;
  	m_activeGLFilter=0;
  
--	QString shadersPath = QApplication::applicationDirPath() + QString("/shaders");
+-	QString shadersPath = ccGLWindow::getShadersPath();
 +	QString shadersPath = ShaderInstallDir;
+ 
  	//ccConsole::Print(QString("Shaders path: %1").arg(shadersPath));
  
- 	if (!_filter->init(w,h,qPrintable(shadersPath)))
 --- /dev/null
 +++ b/qCC/config.h.in
 @@ -0,0 +1,2 @@
-+#define ShaderInstallDir "@qCC_shaders_dest_release@"
-+#define PluginInstallDir "@qCC_plugins_dest_release@"
---- a/qCC/plugins/CMakePluginTpl.cmake
-+++ b/qCC/plugins/CMakePluginTpl.cmake
-@@ -70,12 +70,12 @@ target_link_libraries( ${PROJECT_NAME} C
- target_link_libraries( ${PROJECT_NAME} QCC_DB_DLL )
- target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
- 
--install_shared( ${PROJECT_NAME} ${qCC_dest_release}/plugins ${qCC_dest_debug}/plugins )
-+install_shared( ${PROJECT_NAME} ${qCC_plugins_dest_release} ${qCC_dest_debug}/plugins )
- 
- if( CC_SHADER_FOLDER )
- 	file( GLOB shaderFiles shaders/${CC_SHADER_FOLDER}/*.frag shaders/${CC_SHADER_FOLDER}/*.vert )
- 	foreach( filename ${shaderFiles} )
--		install_ext( FILES ${filename} ${qCC_dest_release}/shaders/${CC_SHADER_FOLDER} ${qCC_dest_debug}/shaders/${CC_SHADER_FOLDER} )
-+		install_ext( FILES ${filename} ${qCC_shaders_dest_release}/${CC_SHADER_FOLDER} ${qCC_dest_debug}/shaders/${CC_SHADER_FOLDER} )
- 	endforeach()
- endif()
- 
++#define ShaderInstallDir "@CloudCompare_shaders_dest_release@"
++#define PluginInstallDir "@CloudCompare_plugins_dest_release@"
 --- a/qCC/mainwindow.cpp
 +++ b/qCC/mainwindow.cpp
-@@ -24,6 +24,9 @@
+@@ -17,6 +17,9 @@
  
  #include "mainwindow.h"
  
@@ -118,19 +64,70 @@ Subject: Dynamic directory for shaders
  //CCLib Includes
  #include <GenericChunkedArray.h>
  #include <CloudSamplingTools.h>
-@@ -267,7 +270,7 @@ void MainWindow::loadPlugins()
-     ccConsole::Print(QString("Application path: ")+QCoreApplication::applicationDirPath());
- 
+@@ -272,7 +275,7 @@ void MainWindow::loadPlugins()
+     m_pluginsPath = path + "Plugins/ccPlugins";
+ #else
      //plugins are in bin/plugins
 -    m_pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
 +    m_pluginsPath = PluginInstallDir;
+ #endif
  
      ccConsole::Print(QString("Plugins lookup dir.: %1").arg(m_pluginsPath));
+--- a/qCC/CMakeLists.txt
++++ b/qCC/CMakeLists.txt
+@@ -1,13 +1,23 @@
+ cmake_minimum_required(VERSION 2.8)
  
-@@ -6818,4 +6821,4 @@ void doTestPrimitives()
- 	contour.push_back(CCVector2(27,05));
- 	addToDB(new ccExtru(contour,10));
- }
--//*/
-\ No newline at end of file
-+//*/
+ if ( UNIX )
+-	set( CloudCompare_dest_release bin ) #default destination: /usr/bin
++	set( CloudCompare_dest_release /usr/bin ) #default destination: /usr/bin
+ 	set( CloudCompare_dest_debug bin/debug )
++	set( CloudCompare_shaders_dest_release /usr/share/cloudcompare/shaders )
++    set( CloudCompare_plugins_dest_release /usr/lib/cloudcompare/plugins )
+ else()
+ 	set( CloudCompare_dest_release CloudCompare )
+ 	set( CloudCompare_dest_debug CloudCompare_debug )
++    set( CloudCompare_shaders_dest_release CloudCompare/shaders )
++    set( CloudCompare_plugins_dest_release CloudCompare/plugins )
+ endif()
+ 
++# config / shader path
++configure_file (
++  "config.h.in"
++  "${CMAKE_CURRENT_SOURCE_DIR}/config.h"
++  )
++
+ if( APPLE )
+    set( MAC_APP_NAME ${PROJECT_NAME}.app )
+    set( MAC_BUNDLE_MACOS_DIR ${CMAKE_INSTALL_PREFIX}/${CloudCompare_dest_release}/${MAC_APP_NAME}/Contents/MacOS )
+@@ -135,8 +145,8 @@ if( APPLE )
+    install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
+    install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
+ else()
+-   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${CloudCompare_dest_release}/shaders ${CloudCompare_dest_debug}/shaders )
+-   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${CloudCompare_dest_release}/shaders ${CloudCompare_dest_debug}/shaders )
++   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${CloudCompare_shaders_dest_release} ${CloudCompare_dest_debug}/shaders )
++   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${CloudCompare_shaders_dest_release} ${CloudCompare_dest_debug}/shaders )
+ endif()
+ 
+ 
+--- a/qCC/plugins/CMakePluginTpl.cmake
++++ b/qCC/plugins/CMakePluginTpl.cmake
+@@ -74,7 +74,7 @@ if( APPLE )
+    install( TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${MAC_BUNDLE_PLUGIN_DIR}/ccPlugins COMPONENT Runtime )
+    set( CC_PLUGINS ${CC_PLUGINS} ${MAC_BUNDLE_PLUGIN_DIR}/ccPlugins/lib${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "cc plugin list" )
+ else()
+-   install_shared( ${PROJECT_NAME} ${qCC_dest_release}/plugins ${CloudCompare_dest_debug}/plugins )
++    install_shared( ${PROJECT_NAME} ${CloudCompare_plugins_dest_release} ${CloudCompare_dest_debug}/plugins )
+ endif()
+ 
+ if( CC_SHADER_FOLDER )
+@@ -83,7 +83,7 @@ if( CC_SHADER_FOLDER )
+       if( APPLE )
+          install( FILES ${filename} DESTINATION ${MAC_BUNDLE_SHADERS_DIR}/${CC_SHADER_FOLDER} )
+       else()
+-         install_ext( FILES ${filename} ${CloudCompare_dest_release}/shaders/${CC_SHADER_FOLDER} ${CloudCompare_dest_debug}/shaders/${CC_SHADER_FOLDER} )
++          install_ext( FILES ${filename} ${CloudCompare_shaders_dest_release}/${CC_SHADER_FOLDER} ${qCC_dest_debug}/shaders/${CC_SHADER_FOLDER} )
+       endif()
+ 	endforeach()
+ endif()

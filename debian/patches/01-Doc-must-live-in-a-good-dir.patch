@@ -7,9 +7,40 @@ Subject: 0002-doc-must-live-in-a-good-dir
  qCC/CMakeLists.txt      |    8 ++++----
  2 files changed, 7 insertions(+), 7 deletions(-)
 
+--- a/qCC/CMakeLists.txt
++++ b/qCC/CMakeLists.txt
+@@ -141,7 +141,7 @@ endif()
+ 
+ 
+ # Auxiliary files
+-set( auxFiles bin_other/history.txt bin_other/license.txt )
++# set( auxFiles bin_other/history.txt bin_other/license.txt )
+ 
+ if( WIN32 )
+ 	# Export Qt dlls & plugins
+@@ -153,9 +153,9 @@ if( WIN32 )
+ endif()
+ 
+ # Install auxiliary files
+-foreach( filename ${auxFiles} )
+-	install_ext( FILES ${filename} ${CloudCompare_dest_release} ${CloudCompare_dest_debug} )
+-endforeach()
++#foreach( filename ${auxFiles} )
++#	install_ext( FILES ${filename} ${CloudCompare_dest_release} ${CloudCompare_dest_debug} )
++#endforeach()
+ 
+ # in order to ensure that everything else is installed first, put the Mac bundling in its own subdirectory
+ if( APPLE )
+@@ -168,4 +168,4 @@ if( APPLE )
+    set( MACOSX_BUNDLE_BUNDLE_VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}" )
+ 
+    add_subdirectory( Mac )
+-endif()
+\ No newline at end of file
++endif()
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
-@@ -107,6 +107,6 @@ if( WIN32 )
+@@ -110,9 +110,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files
@@ -19,24 +50,13 @@ Subject: 0002-doc-must-live-in-a-good-dir
 +#foreach( filename ${auxFiles} )
 +#	install_ext( FILES ${filename} ${ccViewer_dest_release} ${ccViewer_dest_debug} )
 +#endforeach()
---- a/qCC/CMakeLists.txt
-+++ b/qCC/CMakeLists.txt
-@@ -122,7 +122,7 @@ install_ext( FILES ${CC_FBO_SOURCE_DIR}/
- install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${qCC_dest_release}/shaders ${qCC_dest_debug}/shaders )
  
- # Auxiliary files
--set( auxFiles bin_other/history.txt bin_other/license.txt )
-+# set( auxFiles bin_other/history.txt bin_other/license.txt )
+ # Put together our App bundle on Mac OS X
+ if( APPLE )
+@@ -131,4 +131,4 @@ if( APPLE )
+    set( MACOSX_BUNDLE_BUNDLE_VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}" )
  
- if( WIN32 )
- 	# Export Qt dlls & plugins
-@@ -134,6 +134,6 @@ if( WIN32 )
- endif()
- 
- # Install auxiliary files
--foreach( filename ${auxFiles} )
--	install_ext( FILES ${filename} ${qCC_dest_release} ${qCC_dest_debug} )
--endforeach()
-+# foreach( filename ${auxFiles} )
-+#	install_ext( FILES ${filename} ${qCC_dest_aux} ${qCC_dest_debug} )
-+# endforeach()
+    add_subdirectory( Mac )
+-endif( APPLE )
+\ No newline at end of file
++endif( APPLE )

@@ -125,5 +125,6 @@ pip-log.txt
 .DS_Store
 
 # quilt
-.pc
+.pc/
+*.rej
 /build_64bits_msvc10/

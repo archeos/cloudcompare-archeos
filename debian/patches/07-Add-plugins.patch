@@ -1,4 +1,4 @@
---- a/qCC/plugins/qBlur/CMakeLists.txt
+I/
 +++ b/qCC/plugins/qBlur/CMakeLists.txt
 @@ -1,6 +1,6 @@
  cmake_minimum_required(VERSION 2.8)
@@ -35,40 +35,6 @@
  
  if (INSTALL_QPOISSON_RECON_PLUGIN)
  
---- a/qCC/plugins/qPoissonRecon/qPoissonRecon.cpp
-+++ b/qCC/plugins/qPoissonRecon/qPoissonRecon.cpp
-@@ -44,6 +44,8 @@
- #include "Windows.h"
- #endif
- 
-+//NOT PORTABLE
-+#include <time.h>
- qPoissonRecon::qPoissonRecon(QObject* parent/*=0*/)
- 	: QObject(parent)
- 	, m_action(0)
-@@ -187,15 +189,20 @@ void qPoissonRecon::doAction()
- 		s_depth = depth;
- 		s_mesh = &mesh;
- 		s_info = &info;
-+        //ugly isn't it ?
-+        struct timespec waiter;
-+        waiter.tv_sec = 0;
-+        waiter.tv_nsec = 500000000;
-+ 
- 		QFuture<void> future = QtConcurrent::run(doReconstruct);
- 
- 		unsigned progress = 0;
- 		while (!future.isFinished())
- 		{
- 		    #if defined(_WIN32) || defined(WIN32)
--			::Sleep(500);
-+            ::Sleep(500);
- 			#else
--			sleep(500);
-+            nanosleep(&waiter, NULL);
- 			#endif
- 
- 			progressCb.update(++progress);
 --- a/qCC/plugins/qEDL/CMakeLists.txt
 +++ b/qCC/plugins/qEDL/CMakeLists.txt
 @@ -1,6 +1,6 @@
@@ -110,31 +76,9 @@
  
  if (INSTALL_QSSAO_PLUGIN)
  
---- a/qCC/plugins/qKinect/cckinectDlg.cpp
-+++ b/qCC/plugins/qKinect/cckinectDlg.cpp
-@@ -22,7 +22,7 @@
- //**************************************************************************
- //
- 
--#include "ccKinectDlg.h"
-+#include "cckinectDlg.h"
- 
- #include <ccOctree.h>
- 
---- a/qCC/plugins/qKinect/qKinect.cpp
-+++ b/qCC/plugins/qKinect/qKinect.cpp
-@@ -33,7 +33,7 @@
- #include <ccNormalVectors.h>
- 
- //dialog
--#include "ccKinectDlg.h"
-+#include "cckinectDlg.h"
- 
- //Qt
- #include <QElapsedTimer>
 --- a/qCC/plugins/qHPR/qHPR.cpp
 +++ b/qCC/plugins/qHPR/qHPR.cpp
-@@ -35,7 +35,7 @@
+@@ -28,7 +28,7 @@
  #include <ccProgressDialog.h>
  
  //qCC
@@ -155,7 +99,7 @@
  
 --- a/qCC/plugins/qPCV/qPCV.cpp
 +++ b/qCC/plugins/qPCV/qPCV.cpp
-@@ -39,8 +39,8 @@
+@@ -32,8 +32,8 @@
  #include <ccProgressDialog.h>
  
  //qCC
