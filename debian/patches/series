@@ -1,7 +1,6 @@
 01-Doc-must-live-in-a-good-dir.patch
 02-Dynamic-directories.patch
 03-Use-Debian-libGLEW.patch
-04-Enable-Libblas-support.patch
-05-Change-CMakeLists-for-correct-hardening.patch
-06-Fix-local-decimal-separator.patch
-07-path-to-cc-headers-in-plugins.patch
+04-Change-CMakeLists-for-proper-hardening.patch
+05-Fix-local-decimal-separator.patch
+06-Path-to-cc-headers-in-plugins.patch

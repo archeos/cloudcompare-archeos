@@ -13,7 +13,10 @@ override_dh_auto_clean:
 	rm -f qCC/config.h
 
 override_dh_auto_configure:
-	dh_auto_configure -- -DCMAKE_INSTALL_PREFIX="/usr" -DINSTALL_QBLUR_PLUGIN=ON \
+	dh_auto_configure -- -DOPTION_USE_LIBLAS=ON \
+		-DLIBLAS_INCLUDE_DIR="/usr/include/liblas" \
+		-DLIBLAS_RELEASE_LIBRARY_FILE="/usr/lib/liblas.a" \
+		-DINSTALL_QBLUR_PLUGIN=ON \
 		-DINSTALL_QHPR_PLUGIN=ON \
 		-DINSTALL_QPOISSON_RECON_PLUGIN=ON \
 		-DINSTALL_QEDL_PLUGIN=ON \
