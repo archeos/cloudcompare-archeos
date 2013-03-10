@@ -36,7 +36,6 @@
 
 //CCLib
 #include <ScalarField.h>
-#include <CCMiscTools.h>
 
 //Qt
 #include <QLabel>
@@ -69,8 +68,8 @@ void ccRenderingTools::ShowDepthBuffer(ccGBLSensor* sensor, QWidget* parent)
 		}
 		else if (*_zBuff > 0.0)
 		{
-			maxDist = ccMax(maxDist,*_zBuff);
-			minDist = ccMin(minDist,*_zBuff);
+			maxDist = std::max(maxDist,*_zBuff);
+			minDist = std::min(minDist,*_zBuff);
 		}
 		++_zBuff;
 	}
@@ -164,7 +163,7 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 			return;
 
 		//number of cubes available for ramp display
-		int numberOfCubes = ccMin(maxNumberOfCubes-addedCubes,colorRampSteps);
+		int numberOfCubes = std::min(maxNumberOfCubes-addedCubes,colorRampSteps);
 
 		DistanceType startValue = minVal; //we want it to be the same color as 'minVal' even if we start at '0'
 		if (dispZero)
@@ -209,8 +208,8 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 
 			if (logScale)
 			{
-				DistanceType endValueLog = log10(ccMax((DistanceType)ZERO_TOLERANCE,fabs(endValue)));
-				DistanceType startValueLog = log10(ccMax((DistanceType)ZERO_TOLERANCE,fabs(startValue)));
+				DistanceType endValueLog = log10(std::max<double>(ZERO_TOLERANCE,fabs(endValue)));
+				DistanceType startValueLog = log10(std::max<double>(ZERO_TOLERANCE,fabs(startValue)));
 				intervale = (endValueLog-startValueLog)/(DistanceType)numberOfCubes;
 				firstValue = startValueLog;
 			}
@@ -267,7 +266,7 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 		if (symmetry)
 		{
 			//we display the color ramp between -maxDisp and +maxDisp
-			DistanceType maxDisp = ccMax(-minVal,maxVal);
+			DistanceType maxDisp = std::max(-minVal,maxVal);
 
 			bool dispZero = true;
 			bool dispMinSat = (minSaturation>0.0);
@@ -281,7 +280,7 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 				return;
 
 			//number of cubes available for ramp display
-			int numberOfCubes = ccMin((maxNumberOfCubes-addedCubes)/2,colorRampSteps);
+			int numberOfCubes = std::min((maxNumberOfCubes-addedCubes)/2,colorRampSteps);
 
 			//1st section: -maxDisp
 			DistanceType startValue = -maxDisp;
@@ -307,8 +306,8 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 
 				if (logScale)
 				{
-					DistanceType endValueLog = log10(ccMax((DistanceType)ZERO_TOLERANCE,fabs(-endValue)));
-					DistanceType startValueLog = log10(ccMax((DistanceType)ZERO_TOLERANCE,fabs(-startValue)));
+					DistanceType endValueLog = log10(std::max<double>(ZERO_TOLERANCE,fabs(-endValue)));
+					DistanceType startValueLog = log10(std::max<double>(ZERO_TOLERANCE,fabs(-startValue)));
 					intervale = -(endValueLog-startValueLog)/(DistanceType)numberOfCubes;
 					firstValue = startValueLog;
 				}
@@ -377,8 +376,8 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 
 				if (logScale)
 				{
-					DistanceType endValueLog = log10(ccMax((DistanceType)ZERO_TOLERANCE,fabs(maxSaturation)));
-					DistanceType startValueLog = log10(ccMax((DistanceType)ZERO_TOLERANCE,fabs(minSaturation)));
+					DistanceType endValueLog = log10(std::max<double>(ZERO_TOLERANCE,fabs(maxSaturation)));
+					DistanceType startValueLog = log10(std::max<double>(ZERO_TOLERANCE,fabs(minSaturation)));
 					intervale = (endValueLog-startValueLog)/(DistanceType)numberOfCubes;
 					firstValue = startValueLog;
 				}
@@ -442,7 +441,7 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 		return;
 
 	//scale height
-	unsigned n = theScaleElements.size();
+	unsigned n = (unsigned)theScaleElements.size();
 	//assert(theCubeEquivalentDist.size()+(dispZero ? 1 : 0)==n);
 	int scaleHeight = (cubeSize+2*spaceBetweenElements)*n;
 
@@ -468,11 +467,8 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 	ccGLWindow* win = (ccGLWindow*)context._win;
 	assert(win);
 
-	QFont font = win->font();
-	font.setPointSize(ccGui::Parameters().defaultFontSize);
-
 	if (theScaleElements[0].textDisplayed)
-		win->displayText(QString::number(theScaleElements[0].value, logScale ? 'E' : 'f', ccGui::Parameters().displayedNumPrecision), halfW+x-5, y+halfH, true, 0, font);
+		win->displayText(QString::number(theScaleElements[0].value, logScale ? 'E' : 'f', ccGui::Parameters().displayedNumPrecision), halfW+x-5, y+halfH, ccGLWindow::ALIGN_HRIGHT | ccGLWindow::ALIGN_VMIDDLE);
 
 	const colorType* lineColor = ccColor::white;
 	//clear background?
@@ -612,15 +608,16 @@ void ccRenderingTools::DrawColorRamp(const CC_DRAW_CONTEXT& context)
 		if (theScaleElements[i+1].textDisplayed)
 		{
 			DistanceType dispValue = theScaleElements[i+1].value;
-			win->displayText(QString::number(dispValue,logScale ? 'E' : 'f',ccGui::Parameters().displayedNumPrecision), halfW+x-5, y+halfH, true, 0, font);
+			win->displayText(QString::number(dispValue,logScale ? 'E' : 'f',ccGui::Parameters().displayedNumPrecision), halfW+x-5, y+halfH, ccGLWindow::ALIGN_HRIGHT | ccGLWindow::ALIGN_VMIDDLE);
 		}
 	}
 
 	//Scale title
 	if (context.colorRampTitle[0]!=0)
 	{
-		QString sfTitle = QString("[")+QString(context.colorRampTitle)+QString("]");
-		win->displayText(sfTitle, context.glW-cubeSize/2, (y+cubeSize)+halfH, true, 0, font);
+		//QString sfTitle = QString("[%1]").arg(context.colorRampTitle);
+		QString sfTitle(context.colorRampTitle);
+		win->displayText(sfTitle, context.glW-cubeSize/2, (y+cubeSize)+halfH, ccGLWindow::ALIGN_HRIGHT | ccGLWindow::ALIGN_VTOP);
 	}
 
 }

@@ -67,10 +67,10 @@ public:
 	//! Picking mode
 	enum PICKING_MODE { NO_PICKING,
 						ENTITY_PICKING,
-						POINT_PICKING,
-						AUTO_POINT_PICKING,
-						TRIANGLE_PICKING,
 						LABELS_PICKING,
+						POINT_PICKING,
+						TRIANGLE_PICKING,
+						AUTO_POINT_PICKING,
 						DEFAULT_PICKING,
 	};
 
@@ -116,7 +116,7 @@ public:
     virtual void releaseTexture(unsigned texID);
 	virtual void display3DLabel(const QString& str, const CCVector3& pos3D, const unsigned char* rgbColor=0, const QFont& font=QFont());
 	virtual bool supportOpenGLVersion(unsigned openGLVersionFlag);
-    virtual void displayText(QString text, int x, int y, bool alignRight=false, const unsigned char* rgbColor=0, const QFont& font=QFont());
+    virtual void displayText(QString text, int x, int y, unsigned char align=ALIGN_DEFAULT, unsigned char bkgAlpha=0, const unsigned char* rgbColor=0, const QFont* font=0);
 	virtual const QFont& getTextDisplayFont() {return m_font;}
 	virtual const ccViewportParameters& getViewportParameters() const { return m_params; }
 
@@ -408,11 +408,11 @@ protected:
     CCVector3 m_currentMouseOrientation;
 
 	//! Complete visualization matrix (GL style - double version)
-	double m_viewMatd[16];
+	double m_viewMatd[OPENGL_MATRIX_SIZE];
 	//! Whether the model veiw matrix is valid (or need to be recomputed)
     bool m_validModelviewMatrix;
 	//! Projection matrix (GL style - double version)
-	double m_projMatd[16];
+	double m_projMatd[OPENGL_MATRIX_SIZE];
 	//! Whether the projection matrix is valid (or need to be recomputed)
     bool m_validProjectionMatrix;
 
@@ -509,6 +509,9 @@ protected:
 
 	//! Default font
 	QFont m_font;
+   
+private:
+   static QString  getShadersPath();
 };
 
 #endif

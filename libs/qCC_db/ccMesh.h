@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2247                                                              $
-//$LastChangedDate:: 2012-10-04 23:34:01 +0200 (jeu., 04 oct. 2012)        $
-//**************************************************************************
-//
 
 #ifndef CC_MESH_HEADER
 #define CC_MESH_HEADER
@@ -97,6 +90,7 @@ public:
 
 	//inherited methods (ccDrawableObject)
 	virtual void setDisplay(ccGenericGLDisplay* win);
+	virtual void toggleMaterials() {showMaterials(!materialsShown());}
 
 	//! Returns max capacity
 	virtual unsigned maxSize() const;
@@ -310,4 +304,4 @@ protected:
 	bool m_stippling;
 };
 
-#endif
+#endif //CC_MESH_HEADER

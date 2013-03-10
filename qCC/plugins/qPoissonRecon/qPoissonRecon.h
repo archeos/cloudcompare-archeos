@@ -14,13 +14,6 @@
 //#               COPYRIGHT: Daniel Girardeau-Montaut                      #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1743                                                              $
-//$LastChangedDate:: 2010-12-03 16:51:30 +0100 (ven., 03 déc. 2010)       $
-//**************************************************************************
-//
 
 #ifndef Q_POISSON_RECON_PLUGIN_HEADER
 #define Q_POISSON_RECON_PLUGIN_HEADER
@@ -30,7 +23,7 @@
 
 #include "../ccStdPluginInterface.h"
 
-//! Wrapper to the "Poisson Surface Reconstruction (Version 2)" algorithm
+//! Wrapper to the "Poisson Surface Reconstruction (Version 3)" algorithm
 /** "Poisson Surface Reconstruction", M. Kazhdan, M. Bolitho, and H. Hoppe
 	Symposium on Geometry Processing (June 2006), pages 61--70
 	http://www.cs.jhu.edu/~misha/Code/PoissonRecon/

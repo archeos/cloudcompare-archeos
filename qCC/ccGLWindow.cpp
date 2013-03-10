@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2228                                                              $
-//$LastChangedDate:: 2012-07-27 17:38:19 +0200 (ven., 27 juil. 2012)       $
-//**************************************************************************
-//
 
 //CCLib
 #include <CCConst.h>
@@ -41,6 +34,7 @@
 #include <ccCalibratedImage.h>
 #include <cc2DLabel.h>
 #include <ccGenericPointCloud.h>
+#include <ccGenericMesh.h>
 #include <ccTimer.h>
 
 //CCFbo
@@ -55,6 +49,7 @@
 #include <QSettings>
 
 //System
+#include <string.h>
 #include <math.h>
 #include <algorithm>
 
@@ -132,9 +127,9 @@ ccGLWindow::ccGLWindow(QWidget *parent, const QGLFormat& format, QGLWidget* shar
 	//matrices
 	m_params.baseViewMat.toIdentity();
 	//m_viewMat.toZero();
-	memset(m_viewMatd,	0, sizeof(double)*16);
+	memset(m_viewMatd,	0, sizeof(double)*OPENGL_MATRIX_SIZE);
 	//m_projMat.toZero();
-	memset(m_projMatd,	0, sizeof(double)*16);
+	memset(m_projMatd,	0, sizeof(double)*OPENGL_MATRIX_SIZE);
 
 	//default modes
 	setPickingMode(ENTITY_PICKING);
@@ -533,15 +528,13 @@ void ccGLWindow::paintGL()
 
 		if (m_hotZoneActivated)
 		{
-			QPixmap plusPix(":/CC/Other/images/other/plus.png");
-			QPixmap minusPix(":/CC/Other/images/other/minus.png");
-			GLuint plusTex = bindTexture(plusPix);
-			GLuint minusTex = bindTexture(minusPix);
-
 			//display parameters
-			const int c_iconSize = 16;
-			const int c_margin = 16;
-			const int c_alphaChannel = 200;
+			static const QPixmap c_psi_plusPix(":/CC/Other/images/other/plus.png");
+			static const QPixmap c_psi_minusPix(":/CC/Other/images/other/minus.png");
+			static const char c_psi_title[] = "Default point size";
+			static const int c_psi_margin = 16;
+			static const int c_psi_iconSize = 16;
+			static const unsigned char c_psi_alphaChannel = 200;
 
 			QFont newFont(m_font);
 			newFont.setPointSize(12);
@@ -551,43 +544,43 @@ void ccGLWindow::paintGL()
 			glEnable(GL_BLEND);
 
 			//label
-			//QFontMetrics::width("Point size");
-			QString label("Point size");
+			//QFontMetrics::width(c_psi_title);
+			QString label(c_psi_title);
 			QRect rect = QFontMetrics(newFont).boundingRect(label);
 			//Some versions of Qt seem to need glColorf instead of glColorub! (see https://bugreports.qt-project.org/browse/QTBUG-6217)
-			//glColor4ub(133,193,39,c_alphaChannel);
-			glColor4f(0.52f,0.76f,0.15f,(float)c_alphaChannel/(float)MAX_COLOR_COMP);
-			renderText(c_margin,(c_margin+c_iconSize/2)+(rect.height()/2)*2/3,label,newFont); // --> 2/3 to compensate the effect of the upper case letter (P)
+			//glColor4ub(133,193,39,c_psi_alphaChannel);
+			glColor4f(0.52f,0.76f,0.15f,(float)c_psi_alphaChannel/(float)MAX_COLOR_COMP);
+			renderText(c_psi_margin,(c_psi_margin+c_psi_iconSize/2)+(rect.height()/2)*2/3,label,newFont); // --> 2/3 to compensate the effect of the upper case letter (P)
 
 			//icons
 			int halfW = (m_glWidth>>1);
 			int halfH = (m_glHeight>>1);
 
-			int xStart = c_margin+rect.width()+c_margin;
-			int yStart = c_margin;
+			int xStart = c_psi_margin+rect.width()+c_psi_margin;
+			int yStart = c_psi_margin;
 
 			//"minus"
-			ccGLUtils::DisplayTexture2DPosition(minusTex,-halfW+xStart,halfH-(yStart+c_iconSize),c_iconSize,c_iconSize,c_alphaChannel);
+			ccGLUtils::DisplayTexture2DPosition(bindTexture(c_psi_minusPix),-halfW+xStart,halfH-(yStart+c_psi_iconSize),c_psi_iconSize,c_psi_iconSize,c_psi_alphaChannel);
 			m_hotZoneMinusIconROI[0]=xStart;
 			m_hotZoneMinusIconROI[1]=yStart;
-			m_hotZoneMinusIconROI[2]=xStart+c_iconSize;
-			m_hotZoneMinusIconROI[3]=yStart+c_iconSize;
-			xStart += c_iconSize;
+			m_hotZoneMinusIconROI[2]=xStart+c_psi_iconSize;
+			m_hotZoneMinusIconROI[3]=yStart+c_psi_iconSize;
+			xStart += c_psi_iconSize;
 
 			//separator
-			glColor4ub(133,193,39,c_alphaChannel);
+			glColor4ub(133,193,39,c_psi_alphaChannel);
 			glBegin(GL_POINTS);
-			glVertex2i(-halfW+xStart+c_margin/2,halfH-(yStart+c_iconSize/2));
+			glVertex2i(-halfW+xStart+c_psi_margin/2,halfH-(yStart+c_psi_iconSize/2));
 			glEnd();
-			xStart += c_margin;
+			xStart += c_psi_margin;
 
 			//"plus"
-			ccGLUtils::DisplayTexture2DPosition(plusTex,-halfW+xStart,halfH-(yStart+c_iconSize),c_iconSize,c_iconSize,c_alphaChannel);
+			ccGLUtils::DisplayTexture2DPosition(bindTexture(c_psi_plusPix),-halfW+xStart,halfH-(yStart+c_psi_iconSize),c_psi_iconSize,c_psi_iconSize,c_psi_alphaChannel);
 			m_hotZonePlusIconROI[0]=xStart;
 			m_hotZonePlusIconROI[1]=m_hotZoneMinusIconROI[1];
-			m_hotZonePlusIconROI[2]=xStart+c_iconSize;
+			m_hotZonePlusIconROI[2]=xStart+c_psi_iconSize;
 			m_hotZonePlusIconROI[3]=m_hotZoneMinusIconROI[3];
-			xStart += c_iconSize;
+			xStart += c_psi_iconSize;
 
 			glDisable(GL_BLEND);
 			glPopAttrib();
@@ -707,7 +700,7 @@ void ccGLWindow::draw3D(CC_DRAW_CONTEXT& context, bool doDrawCross, ccFrameBuffe
 			displayCustomLight();
 	}
 
-	//we activate current shader (if activated)
+	//we activate the current shader (if any)
 	if (m_activeShader)
 		m_activeShader->start();
 
@@ -1051,11 +1044,14 @@ void ccGLWindow::drawScale(const colorType color[] /*= white*/)
 	//we choose the value closest to equivalentWidth with the right granularity
 	equivalentWidth = floor(std::max(equivalentWidth/granularity,1.0f))*granularity;
 
+	QFontMetrics fm(m_font);
+
 	//we deduce the scale drawing width
 	float scaleW = equivalentWidth*totalZoom;
 	float dW = 2*CC_DISPLAYED_TRIHEDRON_AXES_LENGTH+20.0;
+	float dH = std::max<float>((float)fm.height()*1.25,CC_DISPLAYED_TRIHEDRON_AXES_LENGTH+5.0);
 	float w = float(m_glWidth)*0.5-dW;
-	float h = float(m_glHeight)*0.5-10.0-QFontMetrics(m_font).height();
+	float h = float(m_glHeight)*0.5-dH;
 
 	//scale OpenGL drawing
 	glColor3ubv(color);
@@ -1071,7 +1067,7 @@ void ccGLWindow::drawScale(const colorType color[] /*= white*/)
 	QString text = QString::number(equivalentWidth);
 	//Some versions of Qt seem to need glColorf instead of glColorub! (see https://bugreports.qt-project.org/browse/QTBUG-6217)
 	glColor3f((float)color[0]/(float)MAX_COLOR_COMP,(float)color[1]/(float)MAX_COLOR_COMP,(float)color[2]/(float)MAX_COLOR_COMP);
-	renderText(m_glWidth-int(scaleW*0.5+dW)-QFontMetrics(m_font).width(text)/2, m_glHeight-10, text, m_font);
+	renderText(m_glWidth-int(scaleW*0.5+dW)-fm.width(text)/2, m_glHeight-dH/2+fm.height()/3, text, m_font);
 }
 
 void ccGLWindow::drawAxis()
@@ -1304,7 +1300,7 @@ void ccGLWindow::getContext(CC_DRAW_CONTEXT& context)
 
 	//point picking
 	float totalZoom = computeTotalZoom();
-	totalZoom = std::max<float>(ZERO_TOLERANCE,totalZoom);
+	totalZoom = std::max((float)ZERO_TOLERANCE,totalZoom);
 	context.pickedPointsRadius = (float)guiParams.pickedPointsSize / totalZoom ;
 	context.pickedPointsTextShift = 5.0 / totalZoom; //5 pixels shift
 
@@ -1449,20 +1445,19 @@ void tbPointToVector(int x, int y, int width, int height, CCVector3& v)
 	v.x = float(2.0 * std::max(std::min(x,width-1),-width+1) - width) / (float)width;
 	v.y = float(height - 2.0 * std::max(std::min(y,height-1),-height+1)) / (float)height;
 
-	double d = v.x*v.x + v.y*v.y;
+	double d2 = v.x*v.x + v.y*v.y;
 
 	//projection sur la sphère centrée au centre de la fenêtre
-	if (d > 1.0)
+	if (d2 > 1.0)
 	{
-		PointCoordinateType a = (PointCoordinateType)(1.0 / sqrt(d));
-
-		v.x *= a;
-		v.y *= a;
-		v.z = (PointCoordinateType)0.0;
+		double d = sqrt(d2);
+		v.x /= d;
+		v.y /= d;
+		v.z = 0;
 	}
 	else
 	{
-		v.z = (PointCoordinateType)(sqrt(1.0 - d));
+		v.z = (PointCoordinateType)(sqrt(1.0-d2));
 	}
 }
 
@@ -1789,8 +1784,8 @@ void ccGLWindow::mouseReleaseEvent(QMouseEvent *event)
 				if (!hotZoneClick && m_pickingMode != NO_PICKING)
 				{
 					PICKING_MODE pickingMode = m_pickingMode;
-					if (pickingMode == ENTITY_PICKING && QApplication::keyboardModifiers() & Qt::ShiftModifier)
-						pickingMode = AUTO_POINT_PICKING;
+					if (pickingMode == ENTITY_PICKING && (QApplication::keyboardModifiers() & Qt::ShiftModifier))
+						pickingMode = AUTO_POINT_PICKING; //shift+click = point picking
 
 					startPicking(event->x(),event->y(),pickingMode);
 
@@ -1853,17 +1848,21 @@ int ccGLWindow::startPicking(int cursorX, int cursorY, PICKING_MODE pickingMode)
 	{
 	case ENTITY_PICKING:
 	case LABELS_PICKING:
-		pickingFlags |= CC_DRAW_NAMES;
+		pickingFlags |= CC_DRAW_ENTITY_NAMES;
 		break;
 	case POINT_PICKING:
-	case AUTO_POINT_PICKING:
-		pickingFlags |= CC_DRAW_NAMES;
+		pickingFlags |= CC_DRAW_ENTITY_NAMES;
 		pickingFlags |= CC_DRAW_POINT_NAMES;
 		break;
 	case TRIANGLE_PICKING:
-		pickingFlags |= CC_DRAW_NAMES;
+		pickingFlags |= CC_DRAW_ENTITY_NAMES;
 		pickingFlags |= CC_DRAW_TRI_NAMES;
-	case NO_PICKING:
+		break;
+	case AUTO_POINT_PICKING:
+		pickingFlags |= CC_DRAW_ENTITY_NAMES;
+		pickingFlags |= CC_DRAW_POINT_NAMES;
+		pickingFlags |= CC_DRAW_TRI_NAMES;
+		break;
 	default:
 		return -1;
 	}
@@ -1916,7 +1915,7 @@ int ccGLWindow::startPicking(int cursorX, int cursorY, PICKING_MODE pickingMode)
 		//Warning we must reset properly the projection matrix
 		setStandardOrthoCenter();
 		glMatrixMode(GL_PROJECTION);
-		double orthoProjMatd[16];
+		double orthoProjMatd[OPENGL_MATRIX_SIZE];
 		glGetDoublev(GL_PROJECTION_MATRIX, orthoProjMatd);
 		glLoadIdentity();
 		gluPickMatrix((float)cursorX,(float)(viewport[3]-cursorY),5,5,viewport);
@@ -1946,8 +1945,8 @@ int ccGLWindow::startPicking(int cursorX, int cursorY, PICKING_MODE pickingMode)
 		return -1;
 	}
 
-	int selectedID=-1,pointID=-1;
-	processHits(hits,selectedID,pointID);
+	int selectedID=-1,subID=-1;
+	processHits(hits,selectedID,subID);
 
 	//standard "entity" picking
 	if (pickingMode == ENTITY_PICKING)
@@ -1955,33 +1954,57 @@ int ccGLWindow::startPicking(int cursorX, int cursorY, PICKING_MODE pickingMode)
 		emit entitySelectionChanged(selectedID);
 		m_updateFBO=true;
 	}
-
 	//"3D point" picking
 	else if (pickingMode == POINT_PICKING)
 	{
-		if (selectedID>=0 && pointID>=0)
+		if (selectedID>=0 && subID>=0)
 		{
-			emit pointPicked(selectedID,(unsigned)pointID,cursorX,cursorY);
+			emit pointPicked(selectedID,(unsigned)subID,cursorX,cursorY);
 			//TODO: m_updateFBO=true;?
 		}
 	}
 	else if (pickingMode == AUTO_POINT_PICKING)
 	{
-		if (m_globalDBRoot && selectedID>=0 && pointID>=0)
+		if (m_globalDBRoot && selectedID>=0 && subID>=0)
 		{
-			//auto spawn the corresponding label
 			ccHObject* obj = m_globalDBRoot->find(selectedID);
-			if (obj && obj->isKindOf(CC_POINT_CLOUD))
+			if (obj)
 			{
-				cc2DLabel* label = new cc2DLabel();
-				label->addPoint(static_cast<ccGenericPointCloud*>(obj),pointID);
-				label->setVisible(true);
-				label->setDisplay(obj->getDisplay());
-				label->setPosition((float)(cursorX+20)/(float)width(),(float)(cursorY+20)/(float)height());
-				obj->addChild(label,true);
-				emit newLabel(static_cast<ccHObject*>(label));
-				QApplication::processEvents();
-				redraw();
+				//auto spawn the right label
+				cc2DLabel* label = 0;
+				if (obj->isKindOf(CC_POINT_CLOUD))
+				{
+					label = new cc2DLabel();
+					label->addPoint(static_cast<ccGenericPointCloud*>(obj),subID);
+					obj->addChild(label,true);
+				}
+				else if (obj->isKindOf(CC_MESH))
+				{
+					label = new cc2DLabel();
+					ccGenericMesh *mesh = static_cast<ccGenericMesh*>(obj);
+					ccGenericPointCloud *cloud = mesh->getAssociatedCloud();
+					assert(cloud);
+					CCLib::TriangleSummitsIndexes *summitsIndexes = mesh->getTriangleIndexes(subID);
+					label->addPoint(cloud,summitsIndexes->i1);
+					label->addPoint(cloud,summitsIndexes->i2);
+					label->addPoint(cloud,summitsIndexes->i3);
+					cloud->addChild(label,true);
+					if (!cloud->isEnabled())
+					{
+						cloud->setVisible(false);
+						cloud->setEnabled(true);
+					}
+				}
+
+				if (label)
+				{
+					label->setVisible(true);
+					label->setDisplay(obj->getDisplay());
+					label->setPosition((float)(cursorX+20)/(float)width(),(float)(cursorY+20)/(float)height());
+					emit newLabel(static_cast<ccHObject*>(label));
+					QApplication::processEvents();
+					redraw();
+				}
 			}
 		}
 	}
@@ -1992,8 +2015,8 @@ int ccGLWindow::startPicking(int cursorX, int cursorY, PICKING_MODE pickingMode)
 
 void ccGLWindow::processHits(GLint hits, int& entID, int& subCompID)
 {
-	entID = -1;		//-1 means "nothing selected"
-	subCompID = -1; //-1 means "nothing selected"
+	//-1 means "nothing selected"
+	subCompID = entID = -1;
 
 	if (hits<1)
 		return;
@@ -2002,19 +2025,18 @@ void ccGLWindow::processHits(GLint hits, int& entID, int& subCompID)
 	const GLuint* _selectBuf = m_pickingBuffer;
 	for (int i=0;i<hits;++i)
 	{
-		const GLuint& n = _selectBuf[0]; //number of names on stack: should be 1 (CC_DRAW_NAMES mode) or 2 (CC_DRAW_POINT_NAMES mode)!
-		if (n) //strangely, we get sometimes empty sets?!
+		const GLuint& n = _selectBuf[0]; //number of names on stack
+		if (n) //strangely, we get empty sets sometimes?!
 		{
-			assert(n==1 || n==2);
+			assert(n==1 || n==2); //n should be esqual to 1 (CC_DRAW_ENTITY_NAMES mode) or 2 (CC_DRAW_POINT_NAMES/CC_DRAW_TRIANGLES_NAMES modes)!
 			const GLuint& minDepth = _selectBuf[1];//(GLfloat)_selectBuf[1]/(GLfloat)0xffffffff;
 			//const GLuint& maxDepth = _selectBuf[2];
 
-			//if there is multiple hits, we keep only the nearest
+			//if there are multiple hits, we keep only the nearest
 			if (i == 0 || minDepth < minMinDepth)
 			{
 				entID = _selectBuf[3];
-				if (n>1)
-					subCompID = _selectBuf[4];
+				subCompID = (n>1 ? _selectBuf[4] : -1);
 				minMinDepth = minDepth;
 			}
 		}
@@ -2480,7 +2502,8 @@ bool ccGLWindow::renderToFile(const char* filename, float zoomFactor/*=1.0*/, bo
 
 			if (m_activeGLFilter && !filter)
 			{
-				QString shadersPath = QApplication::applicationDirPath() + QString("/shaders");
+				QString shadersPath = ccGLWindow::getShadersPath();
+
 				if (!m_activeGLFilter->init(Wp,Hp,qPrintable(shadersPath)))
 				{
 					ccConsole::Error("[GL Filter] GL filter can't be used during rendering (not enough memory)!");
@@ -2680,7 +2703,8 @@ bool ccGLWindow::initGLFilter(int w, int h)
 	ccGlFilter* _filter = m_activeGLFilter;
 	m_activeGLFilter=0;
 
-	QString shadersPath = QApplication::applicationDirPath() + QString("/shaders");
+	QString shadersPath = ccGLWindow::getShadersPath();
+
 	//ccConsole::Print(QString("Shaders path: %1").arg(shadersPath));
 
 	if (!_filter->init(w,h,qPrintable(shadersPath)))
@@ -2711,29 +2735,78 @@ void ccGLWindow::display3DLabel(const QString& str, const CCVector3& pos3D, cons
 	renderText(pos3D.x, pos3D.y, pos3D.z, str, font);
 }
 
-void ccGLWindow::displayText(QString text, int x, int y, bool alignRight/*=false*/, const unsigned char* rgbColor/*=0*/, const QFont& font/*=QFont()*/)
+void ccGLWindow::displayText(QString text, int x, int y, unsigned char align/*=ALIGN_HLEFT | ALIGN_VTOP*/, unsigned char bkgAlpha/*=0*/, const unsigned char* rgbColor/*=0*/, const QFont* font/*=0*/)
 {
 	makeCurrent();
 
 	int x2 = x;
 	int y2 = m_glHeight-1-y;
 
-	if (m_captureModeZoomFactor != 1.0f)
-	{
-		x2 = (int)(m_captureModeZoomFactor * (float)x2);
-		y2 = (int)(m_captureModeZoomFactor * (float)y2);
-	}
-
-	if (alignRight)
-	{
-		QFontMetrics fm(font);
-		x2 -= fm.width(text);
-		y2 += fm.height()/2;
-	}
+	//FIXME: doesn't work!
+	//if (m_captureModeZoomFactor != 1.0f)
+	//{
+	//	x2 = (int)(m_captureModeZoomFactor * (float)x2);
+	//	y2 = (int)(m_captureModeZoomFactor * (float)y2);
+	//}
 
 	//Some versions of Qt seem to need glColorf instead of glColorub! (see https://bugreports.qt-project.org/browse/QTBUG-6217)
 	const unsigned char* col = (rgbColor ? rgbColor : ccGui::Parameters().textDefaultCol);
-	//glColor3ubv(col);
+
+	QFont textFont = (font ? *font : m_font);
+
+	QFontMetrics fm(textFont);
+	int margin = fm.height()/4;
+
+	bool drawBackground = true;
+	if (align != (ALIGN_HLEFT | ALIGN_VTOP) || bkgAlpha != 0)
+	{
+		QRect rect = fm.boundingRect(text);
+
+		//text alignment
+		if (align & ALIGN_HMIDDLE)
+			x2 -= rect.width()/2;
+		else if (align & ALIGN_HRIGHT)
+			x2 -= rect.width();
+		if (align & ALIGN_VMIDDLE)
+			y2 += rect.height()/2;
+		else if (align & ALIGN_VBOTTOM)
+			y2 += rect.height();
+
+		//background is not totally transparent
+		if (bkgAlpha != 0)
+		{
+			//inverted color with a bit of transparency
+			glPushAttrib(GL_COLOR_BUFFER_BIT);
+			glEnable(GL_BLEND);
+			glColor4f(1.0f-(float)col[0]/(float)MAX_COLOR_COMP,1.0f-(float)col[1]/(float)MAX_COLOR_COMP,1.0f-(float)col[2]/(float)MAX_COLOR_COMP,(float)bkgAlpha/(float)100);
+			int xB = x2 - m_glWidth/2;
+			int yB = m_glHeight/2 - y2;
+			yB += margin/2; //empirical compensation
+
+			glBegin(GL_POLYGON);
+			glVertex2d(xB - margin, yB - margin);
+			glVertex2d(xB - margin, yB + rect.height() + margin/2);
+			glVertex2d(xB + rect.width() + margin, yB + rect.height() + margin/2); 
+			glVertex2d(xB + rect.width() + margin, yB - margin); 
+			glEnd();
+			glPopAttrib();
+		}
+	}
+
 	glColor3f((float)col[0]/(float)MAX_COLOR_COMP,(float)col[1]/(float)MAX_COLOR_COMP,(float)col[2]/(float)MAX_COLOR_COMP);
-	renderText(x2, y2, text, font);
+	y2 -= margin; //empirical compensation
+	renderText(x2, y2, text, textFont);
 }
+
+QString  ccGLWindow::getShadersPath()
+{
+#if defined(Q_OS_MAC)
+   // shaders are in the bundle
+   QString  path = QCoreApplication::applicationDirPath();
+   path.remove( "MacOS" );
+   return path + "Shaders";
+#else
+   return QApplication::applicationDirPath() + "/shaders";
+#endif
+}
+

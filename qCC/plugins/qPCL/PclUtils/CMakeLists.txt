@@ -8,9 +8,9 @@ if( NOT MSVC )
 endif()
 
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
-include_directories( ${qCC_SOURCE_DIR} )
-include_directories( ${qCC_SOURCE_DIR}/db_tree )
-include_directories( ${qCC_SOURCE_DIR}/plugins )
+include_directories( ${CloudCompare_SOURCE_DIR} )
+include_directories( ${CloudCompare_SOURCE_DIR}/db_tree )
+include_directories( ${CloudCompare_SOURCE_DIR}/plugins )
 include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
 include_directories( ${EXTERNAL_LIBS_INCLUDE_DIR} )
 include_directories( ${CC_DLL_SOURCE_DIR}/include )
@@ -28,10 +28,10 @@ include_directories(utils)
 project( PclUtils )
 
 
-file( GLOB header_list filters/*.h filters/dialogs/*.h utils/*.h qtHelper/*.h)
-file( GLOB source_list filters/*.cpp filters/dialogs/*.cpp utils/*.cpp qtHelper/*.cpp)
-file( GLOB impl_list utils/*.hpp)
-file( GLOB ui_list filters/dialogs/*.ui )
+file( GLOB_RECURSE header_list *.h )
+file( GLOB_RECURSE source_list *.cpp )
+file( GLOB_RECURSE impl_list *.hpp)
+file( GLOB_RECURSE ui_list *.ui )
 #file( GLOB qrc_list icons/*.qrc )
 #file( GLOB rc_list *.rc )
 
@@ -49,6 +49,12 @@ set_default_cc_preproc( ${PROJECT_NAME} )
 # Add custom prepocessor definitions
 if (WIN32)
 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_USE_AS_DLL QCC_DB_USE_AS_DLL )
+endif()
+
+# Luca's PCL patch support
+OPTION( OPTION_LP_PCL_PATCH_ENABLED "Check wheter Luca's PCL patch has been applied on PCL installation or not" OFF )
+if( ${OPTION_LP_PCL_PATCH_ENABLED} )
+	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS LP_PCL_PATCH_ENABLED )
 endif()
 
 link_directories( ${PCL_LIBRARY_DIRS} )

@@ -81,6 +81,7 @@ ccDBRoot::ccDBRoot(ccCustomQTreeView* dbTreeWidget, QTreeView* propertiesTreeWid
 	m_toggleSelectedEntitiesNormals = new QAction("Toggle normals",this);
 	m_toggleSelectedEntitiesMat = new QAction("Toggle materials/textures",this);
 	m_toggleSelectedEntitiesSF = new QAction("Toggle SF",this);
+	m_toggleSelectedEntities3DName = new QAction("Toggle 3D name",this);
 	m_addEmptyGroup = new QAction("Add empty group",this);
 
 	m_contextMenuPos = QPoint(-1,-1);
@@ -99,6 +100,7 @@ ccDBRoot::ccDBRoot(ccCustomQTreeView* dbTreeWidget, QTreeView* propertiesTreeWid
 	connect(m_toggleSelectedEntitiesNormals,	SIGNAL(triggered()),								this, SLOT(toggleSelectedEntitiesNormals()));
 	connect(m_toggleSelectedEntitiesMat,		SIGNAL(triggered()),								this, SLOT(toggleSelectedEntitiesMat()));
 	connect(m_toggleSelectedEntitiesSF,			SIGNAL(triggered()),								this, SLOT(toggleSelectedEntitiesSF()));
+	connect(m_toggleSelectedEntities3DName,		SIGNAL(triggered()),								this, SLOT(toggleSelectedEntities3DName()));
 	connect(m_addEmptyGroup,					SIGNAL(triggered()),								this, SLOT(addEmptyGroup()));
 
     //other DB tree signals/slots connection
@@ -279,15 +281,15 @@ void ccDBRoot::deleteSelectedEntities()
 		anObject->prepareDisplayForRefresh_recursive();
 
 		//DGM FIXME: what a burden... we should find something simpler (shared pointers?)
-		//specific case: if the entity is a cloud, we must look for 2-points
-		//or 3-points labels that may have a dependence to it
 		if (anObject->isKindOf(CC_POINT_CLOUD))
 		{
+			//specific case: if the entity is a cloud, we must look for 2-points
+			//or 3-points labels that may have a dependence to it
 			ccHObject::Container allLabels;
 			if (m_treeRoot->filterChildren(allLabels,true,CC_2D_LABEL) != 0)
 			{
-				unsigned labelCount = allLabels.size();
-				for (unsigned i=0;i<allLabels.size();++i)
+				size_t labelCount = allLabels.size();
+				for (size_t i=0;i<allLabels.size();++i)
 				{
 					cc2DLabel* label = static_cast<cc2DLabel*>(allLabels[i]);
 					for (unsigned j=1;j<label->size();++j) //the first point is always the parent cloud!
@@ -299,6 +301,14 @@ void ccDBRoot::deleteSelectedEntities()
 						}
 				}
 			}
+		}
+
+		if (anObject->isKindOf(CC_MESH))
+		{
+			//specific case: the object is a mesh and its parent is its vertices!
+			//(can happen if a Delaunay mesh is computed directly in CC)
+			if (anObject->getParent() && anObject->getParent() == static_cast<ccGenericMesh*>(anObject)->getAssociatedCloud())
+				anObject->getParent()->setVisible(true);
 		}
 
         ccHObject* parent = anObject->getParent();
@@ -441,9 +451,11 @@ bool ccDBRoot::setData(const QModelIndex &index, const QVariant &value, int role
 			{
 				item->setName(value.toString());
 
-				//particular case: labels name is their title!
-				if (item->isKindOf(CC_2D_LABEL))
-					if (item->isVisible() && item->isEnabled() && item->getDisplay())
+				//particular cases:
+				// - labels name is their title (so we update them)
+				// - name might be displayed in 3D
+				if (item->nameShownIn3D() || item->isKindOf(CC_2D_LABEL))
+					if (item->isEnabled() && item->isVisible() && item->getDisplay())
 						item->getDisplay()->redraw();
 
 				reflectObjectPropChange(item);
@@ -601,6 +613,20 @@ void ccDBRoot::selectEntity(int uniqueID)
 	selectEntity(obj);
 }
 
+void ccDBRoot::unselectEntity(ccHObject* obj)
+{
+	if (obj && obj->isSelected())
+	{
+		QModelIndex objIndex = index(obj);
+		if (objIndex.isValid())
+		{
+			QItemSelectionModel* selectionModel = m_dbTreeWidget->selectionModel();
+			assert(selectionModel);
+			selectionModel->select(objIndex,QItemSelectionModel::Deselect);
+		}
+	}
+}
+
 void ccDBRoot::selectEntity(ccHObject* obj)
 {
     bool ctrlPushed = (QApplication::keyboardModifiers () & Qt::ControlModifier);
@@ -609,11 +635,11 @@ void ccDBRoot::selectEntity(ccHObject* obj)
 	assert(selectionModel);
 
 	//valid object? then we will try to select (or toggle) it
-        if (obj)
-        {
-            QModelIndex selectedIndex = index(obj);
-            if (selectedIndex.isValid())
-            {
+	if (obj)
+	{
+		QModelIndex selectedIndex = index(obj);
+		if (selectedIndex.isValid())
+		{
 			//if CTRL is pushed
 			if (ctrlPushed)
 			{
@@ -638,14 +664,16 @@ void ccDBRoot::selectEntity(ccHObject* obj)
 				selectionModel->select(selectedIndex,QItemSelectionModel::ClearAndSelect);
 			}
 
-                //hack: auto-scroll to selected element
+			//hack: auto-scroll to selected element
 			if (obj->isSelected() && !ctrlPushed)
-                    m_dbTreeWidget->scrollTo(selectedIndex);
-            }
-        }
+				m_dbTreeWidget->scrollTo(selectedIndex);
+		}
+	}
 	//otherwise we clear current selection (if CTRL is not pushed)
 	else if (!ctrlPushed)
+	{
 		selectionModel->clear();
+	}
 }
 
 ccHObject* ccDBRoot::find(int uniqueID) const
@@ -658,6 +686,7 @@ void ccDBRoot::showPropertiesView(ccHObject* obj)
     m_ccPropDelegate->fillModel(obj);
 
     m_propertiesTreeWidget->setEnabled(true);
+	m_propertiesTreeWidget->setColumnWidth(0,115);
 }
 
 void ccDBRoot::hidePropertiesView()
@@ -801,10 +830,11 @@ Qt::ItemFlags ccDBRoot::flags(const QModelIndex &index) const
 	assert(item);
 	if (item)
 	{
-		if (item->isA(CC_HIERARCHY_OBJECT) ||
-			item->isKindOf(CC_POINT_CLOUD) ||
-			item->isKindOf(CC_MESH)        ||
-			item->isKindOf(CC_IMAGE)       ||
+		if (item->isA(CC_HIERARCHY_OBJECT)	||
+			item->isKindOf(CC_POINT_CLOUD)	||
+			item->isKindOf(CC_MESH)			||
+			item->isKindOf(CC_IMAGE)		||
+			item->isKindOf(CC_2D_LABEL)		||
 			item->isKindOf(CC_PRIMITIVE))
 		{
 			defaultFlags |= (Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
@@ -909,7 +939,6 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 					ccConsole::Error("Outside meshes can't be added to mesh groups!");
 					return false;
 				}
-
 			}
 			else if (/*item->isKindOf(CC_PRIMITIVE) || */item->isKindOf(CC_IMAGE))
 			{
@@ -917,6 +946,40 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 				{
 					ccConsole::Error("This kind of entity can't leave their parent!");
 					return false;
+				}
+			}
+			else if (oldParent != newParent)
+			{
+				//a label or a group of labels can't be moved to another cloud!
+				ccHObject::Container labels;
+				if (item->isA(CC_2D_LABEL))
+					labels.push_back(item);
+				else
+					item->filterChildren(labels,true,CC_2D_LABEL);
+
+				//for all labels in the sub-tree
+				for (ccHObject::Container::const_iterator it = labels.begin(); it != labels.end(); ++it)
+				{
+					cc2DLabel* label = static_cast<cc2DLabel*>(*it);
+					bool canMove = false;
+					for (unsigned j=0;j<label->size();++j)
+					{
+						assert(label->getPoint(j).cloud);
+						//3 options to allow moving a label:
+						if (item->isAncestorOf(label->getPoint(j).cloud) //label's cloud is inside sub-tree
+							|| newParent == label->getPoint(j).cloud //destination is label's cloud
+							|| label->getPoint(j).cloud->isAncestorOf(newParent)) //destination is below label's cloud
+						{
+							canMove = true;
+							break;
+						}
+					}
+
+					if (!canMove)
+					{
+						ccConsole::Error("Labels (or group of) can't leave their parent!");
+						return false;
+					}
 				}
 			}
 		}
@@ -1145,9 +1208,14 @@ void ccDBRoot::toggleSelectedEntitiesMat()
 	toggleSelectedEntitiesProperty(5);
 }
 
+void ccDBRoot::toggleSelectedEntities3DName()
+{
+	toggleSelectedEntitiesProperty(6);
+}
+
 void ccDBRoot::toggleSelectedEntitiesProperty(unsigned prop)
 {
-	if (prop>4)
+	if (prop>6)
 	{
 		ccConsole::Warning("[ccDBRoot::toggleSelectedEntitiesProperty] Internal error: invalid 'prop' value");
 		return;
@@ -1174,23 +1242,22 @@ void ccDBRoot::toggleSelectedEntitiesProperty(unsigned prop)
 			item->setEnabled(!item->isEnabled());
 			break;
 		case 1: //visibility
-			item->setVisible(!item->isVisible());
+			item->toggleVisibility();
 			break;
 		case 2: //color
-			item->showColors(!item->colorsShown());
+			item->toggleColors();
 			break;
 		case 3: //normal
-			item->showNormals(!item->normalsShown());
+			item->toggleNormals();
 			break;
 		case 4: //SF
-			item->showSF(!item->sfShown());
+			item->toggleSF();
 			break;
 		case 5: //Materials/textures
-			if (item->isKindOf(CC_MESH))
-			{
-				ccGenericMesh* mesh = static_cast<ccGenericMesh*>(item);
-				mesh->showMaterials(!mesh->materialsShown());
-			}
+			item->toggleMaterials();
+			break;
+		case 6: //3D name
+			item->toggleShowName();
 			break;
 		}
 		item->prepareDisplayForRefresh();
@@ -1279,6 +1346,7 @@ void ccDBRoot::showContextMenu(const QPoint& pnt)
 			{
 				menu.addAction(m_toggleSelectedEntitiesMat);
 			}
+			menu.addAction(m_toggleSelectedEntities3DName);
 			menu.addSeparator();
 			menu.addAction(m_deleteSelectedEntities);
 			if (hasMoreThan2Children)

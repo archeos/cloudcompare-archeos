@@ -14,14 +14,8 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2247                                                              $
-//$LastChangedDate:: 2012-10-04 23:34:01 +0200 (jeu., 04 oct. 2012)        $
-//**************************************************************************
-//
 
+//Always first
 #include "ccIncludeGL.h"
 
 #include "ccMesh.h"
@@ -41,6 +35,7 @@
 #include <QGLFormat>
 
 //System
+#include <string.h>
 #include <assert.h>
 
 ccMesh::ccMesh(ccGenericPointCloud* vertices)
@@ -589,9 +584,12 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 		int decimStep = (lodEnabled ? (int)ceil((float)triNum*3 / (float)MAX_LOD_FACES_NUMBER) : 1);
 
 		//GL name push
-		bool pushName = MACRO_DrawNames(context);
+		bool pushName = MACRO_DrawEntityNames(context);
 		if (pushName)
 			glPushName(getUniqueID());
+
+		//special case: triangle names pushing (for picking)
+		bool pushTriangleNames = MACRO_DrawTriangleNames(context); 
 
 		//vertices visibility
 		const ccGenericPointCloud::VisibilityTableType* visibilityArray = m_associatedCloud->getTheVisibilityArray();
@@ -646,7 +644,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 		{
 			if (isColorOverriden())
 			{
-				glColor3ubv(tempColor);
+				glColor3ubv(m_tempColor);
 				glParams.showColors = false;
 			}
 			else
@@ -685,7 +683,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 			glEnable(GL_POLYGON_STIPPLE);
 		}
 
-		if (!visFiltering && !(applyMaterials || showTextures) && (!glParams.showSF || greyForNanScalarValues))
+		if (!pushTriangleNames && !visFiltering && !(applyMaterials || showTextures) && (!glParams.showSF || greyForNanScalarValues))
 		{
 			#define OPTIM_MEM_CPY //use optimized mem. transfers
 			#ifdef OPTIM_MEM_CPY
@@ -969,7 +967,11 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 				glEnable(GL_TEXTURE_2D);
 			}
 
-			glBegin(lodEnabled ? GL_POINTS : showWired ? GL_LINE_LOOP : GL_TRIANGLES);
+			if (pushTriangleNames)
+				glPushName(0);
+
+			GLenum triangleDisplayType = lodEnabled ? GL_POINTS : showWired ? GL_LINE_LOOP : GL_TRIANGLES;
+			glBegin(triangleDisplayType);
 
 			for (n=0;n<triNum;++n)
 			{
@@ -1073,7 +1075,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 						//if we don't have any current material, we apply default one
 						(newMatlIndex>=0 ? (*m_materials)[newMatlIndex] : context.defaultMat).applyGL(glParams.showNorms/* || showTriNormals*/,false);
-						glBegin(GL_TRIANGLES);
+						glBegin(triangleDisplayType);
 						lasMtlIndex=newMatlIndex;
 					}
 
@@ -1088,6 +1090,18 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 						Tx2 = (txInd[1]>=0 ? m_texCoords->getValue(txInd[1]) : 0);
 						Tx3 = (txInd[2]>=0 ? m_texCoords->getValue(txInd[2]) : 0);
 					}
+				}
+
+				if (pushTriangleNames)
+				{
+					glEnd();
+					glLoadName(n);
+					glBegin(triangleDisplayType);
+				}
+				else if (showWired)
+				{
+					glEnd();
+					glBegin(triangleDisplayType);
 				}
 
 				//vertex 1
@@ -1116,15 +1130,13 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 				if (Tx3)
 					glTexCoord2fv(Tx3);
 				glVertex3fv(m_associatedCloud->getPoint(tsi->i3)->u);
-
-				if (showWired)
-				{
-					glEnd();
-					glBegin(GL_LINE_LOOP);
-				}
 			}
+
 			glEnd();
 
+			if (pushTriangleNames)
+				glPopName();
+			
 			if (showTextures)
 			{
 #ifdef TEST_TEXTURED_BUNDLER_IMPORT
@@ -1879,14 +1891,14 @@ bool ccMesh::getColorFromTexture(unsigned triIndex, const CCVector3& P, colorTyp
 //we use as many static variables as we can to limit the size of the heap used by each recursion...
 static const unsigned s_defaultSubdivideGrowRate = 50;
 static float s_maxSubdivideArea = 1;
-static QMap<__int64,unsigned> s_alreadyCreatedVertices; //map to store already created edges middle points
+static QMap<qint64,unsigned> s_alreadyCreatedVertices; //map to store already created edges middle points
 
-static __int64 GenerateKey(unsigned edgeIndex1, unsigned edgeIndex2)
+static qint64 GenerateKey(unsigned edgeIndex1, unsigned edgeIndex2)
 {
 	if (edgeIndex1>edgeIndex2)
 		std::swap(edgeIndex1,edgeIndex2);
 
-	return ((((__int64)edgeIndex1)<<32) | (__int64)edgeIndex2);
+	return ((((qint64)edgeIndex1)<<32) | (qint64)edgeIndex2);
 }
 
 bool ccMesh::pushSubdivide(/*PointCoordinateType maxArea, */unsigned indexA, unsigned indexB, unsigned indexC)
@@ -1930,8 +1942,8 @@ bool ccMesh::pushSubdivide(/*PointCoordinateType maxArea, */unsigned indexA, uns
 		//add new vertices
 		unsigned indexG1 = 0;
 		{
-			__int64 key = GenerateKey(indexA,indexB);
-			QMap<__int64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(key);
+			qint64 key = GenerateKey(indexA,indexB);
+			QMap<qint64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(key);
 			if (it == s_alreadyCreatedVertices.end())
 			{
 				//generate new vertex
@@ -1963,8 +1975,8 @@ bool ccMesh::pushSubdivide(/*PointCoordinateType maxArea, */unsigned indexA, uns
 		}
 		unsigned indexG2 = 0;
 		{
-			__int64 key = GenerateKey(indexB,indexC);
-			QMap<__int64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(key);
+			qint64 key = GenerateKey(indexB,indexC);
+			QMap<qint64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(key);
 			if (it == s_alreadyCreatedVertices.end())
 			{
 				//generate new vertex
@@ -1996,8 +2008,8 @@ bool ccMesh::pushSubdivide(/*PointCoordinateType maxArea, */unsigned indexA, uns
 		}
 		unsigned indexG3 = vertices->size();
 		{
-			__int64 key = GenerateKey(indexC,indexA);
-			QMap<__int64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(key);
+			qint64 key = GenerateKey(indexC,indexA);
+			QMap<qint64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(key);
 			if (it == s_alreadyCreatedVertices.end())
 			{
 				//generate new vertex
@@ -2132,19 +2144,19 @@ ccMesh* ccMesh::subdivide(float maxArea) const
 			//test all edges
 			int indexG1 = -1;
 			{
-				QMap<__int64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(GenerateKey(indexA,indexB));
+				QMap<qint64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(GenerateKey(indexA,indexB));
 				if (it != s_alreadyCreatedVertices.end())
 					indexG1 = (int)it.value();
 			}
 			int indexG2 = -1;
 			{
-				QMap<__int64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(GenerateKey(indexB,indexC));
+				QMap<qint64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(GenerateKey(indexB,indexC));
 				if (it != s_alreadyCreatedVertices.end())
 					indexG2 = (int)it.value();
 			}
 			int indexG3 = -1;
 			{
-				QMap<__int64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(GenerateKey(indexC,indexA));
+				QMap<qint64,unsigned>::const_iterator it = s_alreadyCreatedVertices.find(GenerateKey(indexC,indexA));
 				if (it != s_alreadyCreatedVertices.end())
 					indexG3 = (int)it.value();
 			}

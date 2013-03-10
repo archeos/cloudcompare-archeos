@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2172                                                              $
-//$LastChangedDate:: 2012-06-24 18:33:24 +0200 (dim., 24 juin 2012)        $
-//**************************************************************************
-//
 
 #ifndef CC_MESH_GROUP_HEADER
 #define CC_MESH_GROUP_HEADER
@@ -69,6 +62,7 @@ public:
     virtual void showSF(bool state);
     virtual void setTempColor(const colorType* col, bool autoActivate = true);
     virtual void enableTempColor(bool state);
+	virtual void toggleMaterials();
 
 	//inherited methods (GenericIndexedMesh)
 	virtual unsigned size() const;
@@ -93,4 +87,4 @@ protected:
 	int currentChildIndex;
 };
 
-#endif
+#endif //CC_MESH_GROUP_HEADER

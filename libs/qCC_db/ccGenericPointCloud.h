@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2225                                                              $
-//$LastChangedDate:: 2012-07-25 23:26:33 +0200 (mer., 25 juil. 2012)       $
-//**************************************************************************
-//
 
 #ifndef CC_GENERIC_POINT_CLOUD_HEADER
 #define CC_GENERIC_POINT_CLOUD_HEADER
@@ -215,6 +208,18 @@ public:
 	//inherited from ccSerializableObject
 	virtual bool isSerializable() const { return true; }
 
+	//! Sets point size
+	/** Overrides default value one if superior than 0
+		(see glPointSize).
+	**/
+	void setPointSize(unsigned size = 0) { m_pointSize = size; }
+
+	//! Returns current point size
+	/** 0 means that the cloud will use current OpenGL value
+		(see glPointSize).
+	**/
+	unsigned char getPointSize() const { return m_pointSize; }
+
 protected:
 
     //inherited from ccHObject
@@ -230,6 +235,9 @@ protected:
 	//! Original shift (information backup)
 	double m_originalShift[3];
 
+	//! Point size (won't be applied if 0)
+	unsigned char m_pointSize;
+
 };
 
-#endif
+#endif //CC_GENERIC_POINT_CLOUD_HEADER

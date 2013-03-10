@@ -21,6 +21,10 @@
 #include <QtGui/QApplication>
 #include <QMessageBox>
 
+#ifdef Q_OS_MAC
+#include <QFileOpenEvent>
+#endif
+ 
 //qCC
 #include <ccConsole.h>
 
@@ -33,9 +37,55 @@
 
 #include "ccviewer.h"
 
+
+class ccApplication : public QApplication
+{
+   public:
+      ccApplication( int &argc, char **argv ) :
+         QApplication( argc, argv )
+      {
+         setOrganizationName("CCCorp");
+         setApplicationName("CloudCompareViewer");
+#ifdef Q_OS_MAC
+         mViewer = NULL;
+         
+         // Mac OS X apps don't show icons in menus
+         setAttribute( Qt::AA_DontShowIconsInMenus );
+#endif
+      }
+
+#ifdef Q_OS_MAC
+      void  setViewer( ccViewer *inViewer ) { mViewer = inViewer; }
+            
+   protected:
+      bool  event( QEvent *inEvent )
+      {
+         switch ( inEvent->type() )
+         {
+            case QEvent::FileOpen:
+            {
+               if ( mViewer == NULL )
+                  return false;
+               
+               QStringList fileName( static_cast<QFileOpenEvent *>(inEvent)->file() );
+            
+               mViewer->addToDB( fileName );
+               return true;
+            }
+               
+            default:
+               return QApplication::event( inEvent );
+         }
+      }
+   
+   private:
+      ccViewer *mViewer;
+#endif
+};
+
 int main(int argc, char *argv[])
 {
-	QApplication a(argc, argv);
+	ccApplication a(argc, argv);
 
 	//OpenGL?
     if (!QGLFormat::hasOpenGL())
@@ -44,10 +94,6 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-	//Global settings 'header'
-    QCoreApplication::setOrganizationName("CCCorp");
-    QCoreApplication::setApplicationName("CloudCompareViewer");
-
     //common data initialization
 	ccObject::ResetUniqueIDCounter();
     ccTimer::Init();
@@ -55,6 +101,9 @@ int main(int argc, char *argv[])
 	ccColorTablesManager::GetUniqueInstance(); //force pre-computed color tables initialization
 
 	ccViewer w/*(0,Qt::Window|Qt::CustomizeWindowHint)*/;
+#ifdef Q_OS_MAC
+   a.setViewer( &w );
+#endif
 	w.show();
 
 	//init console
@@ -63,12 +112,58 @@ int main(int argc, char *argv[])
 	//files to open are passed as argument
 	if (argc>1)
     {
-		//any argument is assumed to be a filename --> we try to load it
+		//parse arguments
 		QStringList filenames;
-        for (int i=1;i<argc;++i)
-			filenames << QString(argv[i]);
-		w.addToDB(filenames);
+		int i=1;
+		while (i<argc)
+		{
+			QString argument = QString(argv[i++]).toUpper();
+
+			//Argument '-WIN X Y W H' (to set window size and position)
+			if (argument.toUpper() == "-WIN")
+			{
+				bool ok=true;
+				if (i+3<argc)
+				{
+					bool converionOk;
+					int x = QString(argv[i]).toInt(&converionOk); ok &= converionOk;
+					int y = QString(argv[i+1]).toInt(&converionOk); ok &= converionOk;
+					int width = QString(argv[i+2]).toInt(&converionOk); ok &= converionOk;
+					int height = QString(argv[i+3]).toInt(&converionOk); ok &= converionOk;
+					i+=4;
+
+					if (ok)
+					{
+						//change window position and size
+						w.move(x,y);
+						w.resize(width,height);
+					}
+				}
+				if (!ok)
+				{
+					ccLog::Warning("Invalid arguments! 4 integer values are expected after '-win' (X Y W H)");
+					break;
+				}
+			}
+			else if (argument == "-TOP")
+			{
+				w.setWindowFlags(w.windowFlags() | Qt::CustomizeWindowHint | Qt::WindowStaysOnTopHint);
+				w.show();
+			}
+			else //any other argument is assumed to be a filename (that will we try to load)
+			{
+				filenames << argument;
+			}
+		}
+
+		if (!filenames.empty())
+			w.addToDB(filenames);
     }
+
+#ifdef Q_OS_MAC   
+   // process events to load any files on the command line
+   QCoreApplication::processEvents();
+#endif
 
     w.checkForLoadedEntities();
 

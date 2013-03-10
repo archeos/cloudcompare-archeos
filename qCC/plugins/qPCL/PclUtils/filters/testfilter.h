@@ -26,6 +26,10 @@
 //System
 #include <iostream>
 
+#if !defined(_WIN32) && !defined(WIN32)
+#include <unistd.h>
+#endif
+
 class Test:  public QObject
 {
 private:
@@ -41,7 +45,7 @@ public:
         for (int i = 0; i < 10; i++)
         {
 #ifndef WIN32
-            sleep(1);
+            usleep(1);
 #endif
             std::cout << "echo: " << i << std::endl;
         }

@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2172                                                              $
-//$LastChangedDate:: 2012-06-24 18:33:24 +0200 (dim., 24 juin 2012)        $
-//**************************************************************************
-//
 
 #ifndef CC_GL_MATRIX_HEADER
 #define CC_GL_MATRIX_HEADER
@@ -31,6 +24,9 @@
 //CCLib
 #include <CCGeom.h>
 #include <Matrix.h>
+
+//! Model view matrix size (OpenGL)
+static const unsigned OPENGL_MATRIX_SIZE = 16;
 
 //Matrix element shortcuts in (line,column) order
 #define CC_MAT_R11 m_mat[0]
@@ -284,7 +280,7 @@ public:
 protected:
 
 	//! Internal 4x4 GL-style matrix data
-	float m_mat[16];
+	float m_mat[OPENGL_MATRIX_SIZE];
 };
 
-#endif
+#endif //CC_GL_MATRIX_HEADER

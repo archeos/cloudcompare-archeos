@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author::                                                                $
-//$Rev::                                                                   $
-//$LastChangedDate::                                                       $
-//**************************************************************************
-//
 
 #include "ccIncludeGL.h"
 
@@ -32,6 +25,9 @@
 
 //Qt
 #include <QDataStream>
+
+//system
+#include <string.h>
 
 cc2DViewportLabel::cc2DViewportLabel(const char* name/*=0*/)
 	: cc2DViewportObject(name ? name : "")
@@ -133,7 +129,7 @@ void cc2DViewportLabel::drawMeOnly(CC_DRAW_CONTEXT& context)
 	glLineStipple(1, 0xAAAA);
 	glEnable(GL_LINE_STIPPLE);
 
-	const colorType* defaultColor = selected ? ccColor::red : context.textDefaultCol;
+	const colorType* defaultColor = m_selected ? ccColor::red : context.textDefaultCol;
 	glColor3ubv(defaultColor); 
 
 	glBegin(GL_LINE_LOOP);
@@ -157,6 +153,6 @@ void cc2DViewportLabel::drawMeOnly(CC_DRAW_CONTEXT& context)
 		int xStart = (int)(dx+0.5f*(float)context.glW+std::min<float>(m_roi[0],m_roi[2])*relativeZoom);
 		int yStart = (int)(dy+0.5f*(float)context.glH+std::min<float>(m_roi[1],m_roi[3])*relativeZoom);
 
-		context._win->displayText(title,xStart,yStart-5-titleHeight,false,defaultColor,titleFont);
+		context._win->displayText(title,xStart,yStart-5-titleHeight,ccGenericGLDisplay::ALIGN_DEFAULT,0,defaultColor,&titleFont);
 	}
 }
