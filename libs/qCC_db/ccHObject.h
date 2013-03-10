@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2241                                                              $
-//$LastChangedDate:: 2012-09-21 23:22:39 +0200 (ven., 21 sept. 2012)       $
-//**************************************************************************
-//
 
 #ifndef CC_HIERARCHY_OBJECT_HEADER
 #define CC_HIERARCHY_OBJECT_HEADER
@@ -82,7 +75,7 @@ public:
     //! Returns the number of children
     /** \return children number
     **/
-	inline unsigned getChildrenNumber() const { return m_children.size(); }
+	inline unsigned getChildrenNumber() const { return (unsigned)m_children.size(); }
 
     //! Returns the ith child
     /** \param childPos child position
@@ -182,6 +175,8 @@ public:
 	recursive_call0_ex(toggleColors,toggleColors_recursive);
 	recursive_call0_ex(toggleNormals,toggleNormals_recursive);
 	recursive_call0_ex(toggleSF,toggleSF_recursive);
+	recursive_call0_ex(toggleShowName,toggleShowName_recursive);
+	recursive_call0_ex(toggleMaterials,toggleMaterials_recursive);
 
     //! Applies the active OpenGL transformation to the entity (recursive)
     /** The input ccGLMatrix should be left to 0, unless you want to apply
@@ -274,6 +269,11 @@ protected:
 	**/
 	virtual bool fromFile_MeOnly(QFile& out, short dataVersion);
 
+	//! Draws the entity name in 3D
+	/** Names is displayed at the center of the bounding box by default.
+	**/
+	virtual void drawNameIn3D(CC_DRAW_CONTEXT& context);
+
     //! Object's parent
     ccHObject* m_parent;
 
@@ -292,12 +292,12 @@ protected:
 //! standard ccHObject container (for children, etc.)
 static void RemoveSiblings(const ccHObject::Container& origin, ccHObject::Container& dest)
 {
-	unsigned count = origin.size();
-	for (unsigned i=0;i<count;++i)
+	size_t count = origin.size();
+	for (size_t i=0;i<count;++i)
 	{
 		//we don't take objects that are siblings of others
 		bool isSiblingOfAnotherOne = false;
-		for (unsigned j=0;j<count;++j)
+		for (size_t j=0;j<count;++j)
 		{
 			if (i != j && origin[j]->isAncestorOf(origin[i]))
 			{
@@ -311,5 +311,4 @@ static void RemoveSiblings(const ccHObject::Container& origin, ccHObject::Contai
 	}
 }
 
-
-#endif
+#endif //CC_HIERARCHY_OBJECT_HEADER

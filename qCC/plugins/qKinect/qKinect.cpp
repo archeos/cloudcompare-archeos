@@ -14,18 +14,10 @@
 //#               COPYRIGHT: Daniel Girardeau-Montaut                      #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1773                                                              $
-//$LastChangedDate:: 2011-01-31 17:14:06 +0100 (lun., 31 janv. 2011)       $
-//**************************************************************************
-//
 
 #include <QtGui>
 
 #include "qKinect.h"
-//#include "ccHprDlg.h"
 
 //qCC_db
 #include <ccPointCloud.h>
@@ -40,6 +32,9 @@
 
 //Libfreenect
 #include <libfreenect.h>
+
+//System
+#include <string.h>
 
 qKinect::qKinect(QObject* parent/*=0*/)
 	: QObject(parent)

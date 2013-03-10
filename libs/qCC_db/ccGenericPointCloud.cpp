@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2225                                                              $
-//$LastChangedDate:: 2012-07-25 23:26:33 +0200 (mer., 25 juil. 2012)       $
-//**************************************************************************
-//
 
 #include "ccGenericPointCloud.h"
 
@@ -35,6 +28,7 @@
 ccGenericPointCloud::ccGenericPointCloud(QString name)
 	: ccHObject(name)
 	, m_visibilityArray(0)
+	, m_pointSize(0)
 {
     setVisible(true);
     lockVisibility(false);
@@ -90,7 +84,7 @@ CC_VISIBILITY_TYPE ccGenericPointCloud::testVisibility(const CCVector3& P)
         if (m_children[i]->isKindOf(CC_SENSOR))
         {
             nvt = static_cast<ccSensor*>(m_children[i])->checkVisibility(P);
-            vt = ccMin(vt,nvt);
+            vt = std::min(vt,nvt);
         }
         ++i;
     }
@@ -300,6 +294,10 @@ bool ccGenericPointCloud::toFile_MeOnly(QFile& out) const
 			return false;
 	}
 
+	//'point size' (dataVersion>=24)
+	if (out.write((const char*)&m_pointSize,1)<0)
+		return WriteError();
+
 	return true;
 }
 
@@ -331,6 +329,17 @@ bool ccGenericPointCloud::fromFile_MeOnly(QFile& in, short dataVersion)
 			unallocateVisibilityArray();
 			return false;
 		}
+	}
+
+	//'point size' (dataVersion>=24)
+	if (dataVersion >= 24)
+	{
+		if (in.read((char*)&m_pointSize,1)<0)
+			return WriteError();
+	}
+	else
+	{
+		m_pointSize = 0; //= follows default setting
 	}
 
 	return true;

@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2172                                                              $
-//$LastChangedDate:: 2012-06-24 18:33:24 +0200 (dim., 24 juin 2012)        $
-//**************************************************************************
-//
 
 #ifndef CC_NORMAL_VECTORS_HEADER
 #define CC_NORMAL_VECTORS_HEADER
@@ -31,8 +24,10 @@
 #include <DgmOctree.h>
 #include <GeometricalAnalysisTools.h>
 
+//Local
 #include "ccGenericPointCloud.h"
 
+//system
 #include <math.h>
 
 //! Compressed normals quantization level (number of directions/bits: 2^(2*N+3))
@@ -82,7 +77,7 @@ public:
         \param theNormsCodes array in which the normals indexes are stored
         \param method which kind of model to use for the computation (LS = plane, HF = quadratic Height Function, TRI = triangulation)
 		\param radius local neighbourhood radius (not necessary for TRI)
-        \param preferedOrientation specifies a prefered orientation for normals (-1: no prefered orientation, 0:X, 1:-X, 2:Y, 3:-Y, 4:Z, 5: -Z)
+        \param preferedOrientation specifies a prefered orientation for normals (-1: no prefered orientation, 0:X, 1:-X, 2:Y, 3:-Y, 4:Z, 5: -Z, 6:+Barycenter, 7:-Barycenter)
         \param progressCb progress bar
         \param _theOctree octree associated with theCloud.
     **/
@@ -177,4 +172,4 @@ protected:
 	static bool ComputeNormsAtLevelWithTri(const CCLib::DgmOctree::octreeCell& cell, void** additionalParameters);
 };
 
- #endif
+ #endif //CC_NORMAL_VECTORS_HEADER

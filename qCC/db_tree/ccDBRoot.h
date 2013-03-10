@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2257                                                              $
-//$LastChangedDate:: 2012-10-11 23:48:15 +0200 (jeu., 11 oct. 2012)        $
-//**************************************************************************
-//
 
 #ifndef CC_DB_ROOT_HEADER
 #define CC_DB_ROOT_HEADER
@@ -35,6 +28,9 @@
 #include <ccObject.h>
 #include <ccHObject.h>
 #include <ccDrawableObject.h>
+
+//System
+#include <string.h>
 
 class QStandardItemModel;
 class QAction;
@@ -126,6 +122,9 @@ public:
 	**/
     void selectEntity(ccHObject* obj);
 
+	//! Unselects a given entity
+    void unselectEntity(ccHObject* obj);
+
     //inherited from QAbstractItemModel
     virtual QVariant data(const QModelIndex &index, int role) const;
     virtual QModelIndex index(int row, int column, const QModelIndex &parentIndex = QModelIndex()) const;
@@ -162,6 +161,7 @@ protected slots:
 	void toggleSelectedEntitiesNormals();
 	void toggleSelectedEntitiesSF();
 	void toggleSelectedEntitiesMat();
+	void toggleSelectedEntities3DName();
 	void addEmptyGroup();
 
 signals:
@@ -179,7 +179,8 @@ protected:
 			2 - normal
 			3 - color
 			4 - SF
-			4 - materials/textures
+			5 - materials/textures
+			6 - 3D name
 	**/
 	void toggleSelectedEntitiesProperty(unsigned prop);
 
@@ -230,6 +231,8 @@ protected:
 	QAction* m_toggleSelectedEntitiesMat;
 	//! Context menu action: hide/show selected entities SF
 	QAction* m_toggleSelectedEntitiesSF;
+	//! Context menu action: hide/show selected entities 3D name
+	QAction* m_toggleSelectedEntities3DName;	
 	//! Context menu action: add empty group
 	QAction* m_addEmptyGroup;
 

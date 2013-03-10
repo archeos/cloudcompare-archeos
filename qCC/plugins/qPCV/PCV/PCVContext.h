@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author::                                                                $
-//$Rev::                                                                   $
-//$LastChangedDate::                                                       $
-//**************************************************************************
-//
 
 #ifndef PCV_CONTEXT_HEADER
 #define PCV_CONTEXT_HEADER
@@ -29,8 +22,7 @@
 #include <GenericCloud.h>
 #include <GenericMesh.h>
 
-//Qt
-#include <QGLPixelBuffer>
+class QGLPixelBuffer;
 
 //! PCV (Portion de Ciel Visible / Ambiant Illumination) OpenGL context
 /** Similar to Cignoni's ShadeVis
@@ -68,8 +60,8 @@ class PCVContext
 		**/
 		int GLAccumPixel(int* pixelsSeen);
 
-	private:
-
+	protected:
+	   
 		void glInit();
 		void drawEntity();
 		void associateToEntity(CCLib::GenericCloud* aCloud, CCLib::GenericMesh* aMesh=NULL);
@@ -93,8 +85,11 @@ class PCVContext
 		//! Pixel buffer height (pixels)
 		unsigned m_height;
 
+		//! Model view matrix size (OpenGL)
+		static const unsigned OPENGL_MATRIX_SIZE = 16;
+
 		//! Current model view matrix
-		float m_viewMat[16];
+		float m_viewMat[OPENGL_MATRIX_SIZE];
 
 		//! Depth buffer
 		float* m_snapZ;

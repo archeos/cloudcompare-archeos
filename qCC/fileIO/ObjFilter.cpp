@@ -14,15 +14,10 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2276                                                              $
-//$LastChangedDate:: 2012-10-18 14:58:26 +0200 (jeu., 18 oct. 2012)        $
-//**************************************************************************
-//
+
 #include "ObjFilter.h"
 #include "../ccCoordinatesShiftManager.h"
+#include "../ccConsole.h"
 
 //Qt
 #include <QApplication>
@@ -39,7 +34,8 @@
 #include <ccNormalVectors.h>
 #include <ccMaterialSet.h>
 
-#include "../ccConsole.h"
+//System
+#include <string.h>
 
 CC_FILE_ERROR ObjFilter::saveToFile(ccHObject* entity, const char* filename)
 {
@@ -216,9 +212,10 @@ struct facetElement
 	//! Updates tex coord index to a global index starting from 0!
 	bool updateTexCoordIndex(int maxIndex)
 	{
-		if (tcIndex == 0 || -tcIndex>maxIndex)
+		//if tcIndex == 0 (shit happens) then we return '-1' (which is not so bad)
+		if (/*tcIndex == 0 || */-tcIndex>maxIndex)
 			return false;
-		tcIndex = (tcIndex>0 ? tcIndex-1 : maxIndex+tcIndex);
+		tcIndex = (tcIndex>=0 ? tcIndex-1 : maxIndex+tcIndex);
 		return true;
 	}
 
@@ -535,8 +532,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 					if (error)
 						break;
 
-					unsigned vCount = currentFace.size();
-					if (vCount<3)
+					if (currentFace.size()<3)
 					{
 						ccConsole::Error("Malformed file: face on line %1 has less than 3 vertices!",lineCount);
 						error=true;
@@ -589,7 +585,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 							maxVertexIndex = it->vIndex;
 
 						//should we have a tex. coord index as second vertex element?
-						if (hasTexCoords)
+						if (hasTexCoords && currentMaterialDefined)
 						{
 							if (!it->updateTexCoordIndex(texCoordsRead))
 							{
@@ -636,7 +632,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 						break;
 
 					//Now, let's tesselate the whole polygon
-					//yeah, we do very ulgy tesselation here!
+					//FIXME: yeah, we do very ulgy tesselation here!
 					std::vector<facetElement>::const_iterator B = A+1;
 					std::vector<facetElement>::const_iterator C = B+1;
 					for (;C != currentFace.end();++B,++C)
@@ -671,9 +667,9 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 			{
 				if (materials) //otherwise we have failed to load MTL file!!!
 				{
+					QString mtlName = QString(currentLine+7).trimmed();
 					//DGM: in case there's space characters in the material name, we must read it again from the original line buffer
 					//QString mtlName = (tokens.size() > 1 && !tokens[1].isEmpty() ? tokens[1] : "");
-					QString mtlName = QString(currentLine+7).trimmed();
 					currentMaterial = (!mtlName.isEmpty() ? materials->findMaterial(mtlName) : -1);
 					currentMaterialDefined = true;
 				}
@@ -700,7 +696,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 						materials->link();
 					}
 
-					unsigned oldSize = materials->size();
+					size_t oldSize = materials->size();
 					QStringList errors;
 					if (ccMaterialSet::ParseMTL(mtlPath,mtlFilename,*materials,errors))
 					{
@@ -859,7 +855,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 			}
 			else
 			{
-				unsigned meshCount = meshes.size();
+				size_t meshCount = meshes.size();
 				ccConsole::Print("[ObjFilter::Load] %i mesh(es) loaded", meshCount);
 				if (meshCount == 1) //don't need to keep a group for a unique mesh!
 				{
@@ -870,7 +866,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 				else
 				{
 					ccMeshGroup* triGroup = new ccMeshGroup(vertices);
-					for (unsigned i=0;i<meshCount;++i)
+					for (size_t i=0;i<meshCount;++i)
 						triGroup->addChild(meshes[i]);
 					if (normals && normalsPerFacetGlobal)
 					{

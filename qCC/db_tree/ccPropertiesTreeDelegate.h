@@ -48,15 +48,15 @@ class QStandardItemModel;
 class QStandardItem;
 class QAbstractItemView;
 
-enum CC_PROPERTY_ROLE { OBJECT_NAME                     =   1,
+enum CC_PROPERTY_ROLE { OBJECT_NAME						=   1,
                         OBJECT_VISIBILITY               =   2,
-                        OBJECT_DISPLAY                  =   3,
-                        OBJECT_COLORS                   =   4,
-                        OBJECT_NORMALS                  =   5,
-                        OBJECT_SCALAR_FIELD             =   6,
+                        OBJECT_CURRENT_DISPLAY			=   3,
+                        OBJECT_COLORS_SHOWN				=   4,
+                        OBJECT_NORMALS_SHOWN			=   5,
+                        OBJECT_SCALAR_FIELD_SHOWN		=   6,
                         OBJECT_SCALAR_FIELD_POSITIVE	=   7,
                         OBJECT_NAN_IN_GREY              =   8,
-                        OBJECT_SCALAR_SCALE             =   9,
+                        OBJECT_SF_SHOW_SCALE			=   9,
                         OBJECT_OCTREE_LEVEL             =   10,
                         OBJECT_OCTREE_TYPE              =   11,
                         OBJECT_MESH_WIRE                =   12,
@@ -72,6 +72,8 @@ enum CC_PROPERTY_ROLE { OBJECT_NAME                     =   1,
 						OBJECT_LABEL_DISP_2D			=	22,
 						OBJECT_LABEL_DISP_3D			=	23,
                         OBJECT_PRIMITIVE_PRECISION      =   24,
+						OBJECT_CLOUD_POINT_SIZE			=	25,
+						OBJECT_NAME_IN_3D				=	26,
 };
 
 //! GUI properties list dialog element
@@ -121,6 +123,7 @@ protected slots:
     void redrawObjectSF();
     void objectDisplayChanged(const QString &newDisplayTitle);
     void sensorScaleChanged(double val);
+	void cloudPointSizeChanged(int size);
 
 protected:
 
@@ -140,6 +143,9 @@ protected:
 	void fillWithMaterialSet(ccMaterialSet*);
 	void fillWithShareable(CCShareable*);
 	template<int N, class ScalarType> void fillWithChunkedArray(ccChunkedArray<N,ScalarType>*);
+
+	//! Updates the current model (assuming object is the same)
+	void updateModel();
 
     ccHObject* m_currentObject;
     QStandardItemModel* m_model;

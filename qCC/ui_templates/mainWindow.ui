@@ -52,7 +52,6 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
-    <addaction name="separator"/>
     <addaction name="actionOpen"/>
     <addaction name="actionSave"/>
     <addaction name="separator"/>
@@ -132,7 +131,6 @@
      <addaction name="actionGaussianFilter"/>
      <addaction name="actionBilateralFilter"/>
      <addaction name="actionFilterByValue"/>
-     <addaction name="actionMultiplySF"/>
      <addaction name="actionConvertToRGB"/>
      <addaction name="actionRenameSF"/>
      <addaction name="separator"/>
@@ -222,9 +220,11 @@
       <string>Toggle (recursive)</string>
      </property>
      <addaction name="actionToggleVisibility"/>
-     <addaction name="actionToggleNormals"/>
      <addaction name="actionToggleColors"/>
+     <addaction name="actionToggleNormals"/>
      <addaction name="actionToggleSF"/>
+     <addaction name="actionToggleMaterials"/>
+     <addaction name="actionToggleShowName"/>
     </widget>
     <addaction name="menuColors"/>
     <addaction name="menuNormals"/>
@@ -329,6 +329,7 @@
     <addaction name="menuStatistics"/>
     <addaction name="menuSegmentation"/>
     <addaction name="menuOther"/>
+    <addaction name="actionPrimitiveFactory"/>
    </widget>
    <addaction name="menu_File"/>
    <addaction name="menuEdit"/>
@@ -548,6 +549,7 @@
    <addaction name="actionCloudMeshDist"/>
    <addaction name="actionStatisticalTest"/>
    <addaction name="actionLabelConnectedComponents"/>
+   <addaction name="actionPrimitiveFactory"/>
    <addaction name="separator"/>
    <addaction name="actionSegment"/>
    <addaction name="actionTranslateRotate"/>
@@ -1984,6 +1986,37 @@
   <action name="actionSubdivideMesh">
    <property name="text">
     <string>Subdivide</string>
+   </property>
+  </action>
+  <action name="actionToggleShowName">
+   <property name="text">
+    <string>3D name</string>
+   </property>
+   <property name="shortcut">
+    <string>D</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="actionPrimitiveFactory">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/Tree/images/miscGeomSymbol.png</normaloff>:/CC/Tree/images/miscGeomSymbol.png</iconset>
+   </property>
+   <property name="text">
+    <string>Primitive factory</string>
+   </property>
+  </action>
+  <action name="actionToggleMaterials">
+   <property name="text">
+    <string>Materials/textures</string>
+   </property>
+   <property name="shortcut">
+    <string>M</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
    </property>
   </action>
  </widget>

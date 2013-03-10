@@ -14,17 +14,11 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1733                                                              $
-//$LastChangedDate:: 2010-12-02 14:20:04 +0100 (jeu., 02 déc. 2010)       $
-//**************************************************************************
-//
+
+//Always first
+#include "ccIncludeGL.h"
 
 #include "ccGBLSensor.h"
-
-#include "ccIncludeGL.h"
 
 ccGBLSensor::ccGBLSensor(CCLib::CC_SENSOR_ROTATION_ORDER rotOrder) : CCLib::GroundBasedLidarSensor(rotOrder), ccSensor()
 {
@@ -47,14 +41,14 @@ double ccGBLSensor::getGraphicScale()
 
 void ccGBLSensor::updateGraphicRepresentation()
 {
-    glTrans.toIdentity();
+    m_glTrans.toIdentity();
 
     //rotation matrix
     if (rotation)
-        glTrans = ccGLMatrix(*rotation,CCVector3(),sensorCenter); //rotation center = sensor center
+        m_glTrans = ccGLMatrix(*rotation,CCVector3(),sensorCenter); //rotation center = sensor center
 
     //translation = sensor center
-    glTrans += sensorCenter;
+    m_glTrans += sensorCenter;
 }
 
 void ccGBLSensor::drawMeOnly(CC_DRAW_CONTEXT& context)
@@ -62,7 +56,7 @@ void ccGBLSensor::drawMeOnly(CC_DRAW_CONTEXT& context)
     //we draw here a little 3d representation of the sensor
     if (MACRO_Draw3D(context))
     {
-        bool pushName = MACRO_DrawNames(context);
+        bool pushName = MACRO_DrawEntityNames(context);
 
         if (pushName)
             glPushName(getUniqueID());

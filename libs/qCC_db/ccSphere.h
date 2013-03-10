@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1854                                                              $
-//$LastChangedDate:: 2011-05-13 23:56:42 +0200 (ven., 13 mai 2011)         $
-//**************************************************************************
-//
 
 #ifndef CC_SPHERE_PRIMITIVE_HEADER
 #define CC_SPHERE_PRIMITIVE_HEADER
@@ -65,6 +58,9 @@ public:
 	virtual bool hasDrawingPrecision() const { return true; }
 	virtual ccGenericPrimitive* clone() const;
 
+	//! Returns radius
+	PointCoordinateType getRadius() const { return m_radius; }
+
 protected:
     
     //inherited from ccGenericPrimitive
@@ -72,8 +68,11 @@ protected:
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion);
 	virtual bool buildUp();
 
+	//inherited from ccHObject
+	virtual void drawNameIn3D(CC_DRAW_CONTEXT& context);
+
 	//! Radius
 	PointCoordinateType m_radius;
 };
 
-#endif
+#endif //CC_SPHERE_PRIMITIVE_HEADER

@@ -1,6 +1,6 @@
 //##########################################################################
 //#                                                                        #
-//#                     CLOUDCOMPARE PLUGIN: qKinect                       #
+//#                            CLOUDCOMPARE                                #
 //#                                                                        #
 //#  This program is free software; you can redistribute it and/or modify  #
 //#  it under the terms of the GNU General Public License as published by  #
@@ -11,41 +11,47 @@
 //#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
 //#  GNU General Public License for more details.                          #
 //#                                                                        #
-//#               COPYRIGHT: Daniel Girardeau-Montaut                      #
+//#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
 //
 //*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1595                                                              $
-//$LastChangedDate:: 2010-07-02 18:04:17 +0200 (ven., 02 juil. 2010)       $
+//$Author::                                                                $
+//$Rev::                                                                   $
+//$LastChangedDate::                                                       $
 //**************************************************************************
 //
 
-#ifndef CC_KINECT_DLG_HEADER
-#define CC_KINECT_DLG_HEADER
+#ifndef CC_PRIMITIVE_FACTORY_DLG_HEADER
+#define CC_PRIMITIVE_FACTORY_DLG_HEADER
 
-#include "ui_kinectDlg.h"
+#include <ui_primitiveFactoryDlg.h>
 
-//! Dialog for qKinect plugin
-class ccKinectDlg : public QDialog, public Ui::KinectDialog
+//Qt
+#include <QDialog>
+
+class MainWindow;
+
+//! Primitive factory
+class ccPrimitiveFactoryDlg : public QDialog, public Ui::PrimitiveFactoryDlg
 {
+	Q_OBJECT
+
 public:
 
 	//! Default constructor
-    ccKinectDlg(QWidget* parent=0);
+	ccPrimitiveFactoryDlg(MainWindow* win);
 
-	//! Returns output clound name
-	QString getCloudName() const;
+protected slots:
 
-	//! Returns output clound name
-	bool grabRGBInfo();
+	//! Creates currently defined primitive
+	void createPrimitive();
 
-	//! Adds 'resolution mode' string
-	void addMode(const QString& mode);
+protected:
 
-	//! Returns frame averaging
-	unsigned char getFrameAveragingCount() const;
+	//! Associated main window
+	MainWindow* m_win;
+
 };
 
-#endif
+#endif //CC_PRIMITIVE_FACTORY_DLG_HEADER

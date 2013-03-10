@@ -62,6 +62,7 @@ class ccPointPropertiesDlg;
 class ccCameraParamEditDlg;
 class ccPointListPickingDlg;
 class ccPointPairRegistrationDlg;
+class ccPrimitiveFactoryDlg;
 class ccDrawableObject;
 class ccOverlayDialog;
 class QMdiSubWindow;
@@ -124,9 +125,10 @@ public:
 	//inherited from ccMainAppInterface
     virtual void addToDB(ccHObject* obj, bool autoExpandDBTree=true, const char* statusMessage=NULL, bool addToDisplay=true, bool updateZoom=true, ccGLWindow* winDest=0, bool* coordinatesTransEnabled = 0, double* coordinatesShift = 0, double* coordinatesScale = 0);
 	virtual void removeFromDB(ccHObject* obj, bool autoDelete=true);
+	virtual void setSelectedInDB(ccHObject* obj, bool selected);
     virtual void dispToConsole(QString message, ConsoleMessageLevel level=STD_CONSOLE_MESSAGE);
 	virtual void forceConsoleDisplay();
-	virtual ccHObject* dbRoot();
+	virtual ccHObject* dbRootObject();
 	virtual QMainWindow* getMainWindow() {return this;}
 	virtual const ccHObject::Container& getSelectedEntities() const { return m_selectedEntities; }
 
@@ -147,6 +149,18 @@ public:
     
 	//! Returns MDI area subwindow corresponding to a given 3D view
 	QMdiSubWindow* getMDISubWindow(ccGLWindow* win);
+
+	//! Removes object temporarily from DB tree
+	/** This method must be called before any modification to the db tree
+		WARNING: may change 'selectedEntities' container!
+	**/
+	void removeObjectTemporarilyFromDBTree(ccHObject* obj, ccHObject* &parent);
+
+	//! Adds back object to DB tree
+	/** This method should be called once modifications to the db tree are finished
+		(see removeObjectTemporarilyFromDBTree).
+	**/
+	void putObjectBackIntoDBTree(ccHObject* obj, ccHObject* parent);
 
 public slots:
 
@@ -223,6 +237,8 @@ protected slots:
     void toggleSelectedEntitiesNormals();
     void toggleSelectedEntitiesColors();
     void toggleSelectedEntitiesSF();
+    void toggleSelectedEntities3DName();
+	void toggleSelectedEntitiesMaterials();
 
     void doActionRenderToFile();
 
@@ -243,6 +259,7 @@ protected slots:
     void doComputeRoughness();
 	void doSphericalNeighbourhoodExtractionTest(); //DGM TODO: remove after test
 	void doComputePlaneOrientation();
+	void doShowPrimitiveFactory();
 
     void doActionComputeNormals();
     void doActionInvertNormals();
@@ -276,7 +293,6 @@ protected slots:
 	void doActionSubdivideMesh();
     void doActionComputeCPS();
     void doActionDeleteAllSF();
-    void doActionMultiplySF();
     void doActionKMeans();
     void doActionFrontPropagation();
     void doActionMultiply();
@@ -340,18 +356,6 @@ protected:
     **/
     static void RemoveSiblingsFromCCObjectList(ccHObject::Container& ccObjects);
 
-	//! Removes object temporarily from DB tree
-	/** This method must be called before any modification to the db tree
-		WARNING: may change 'selectedEntities' container!
-	**/
-	void removeObjectTemporarilyFromDBTree(ccHObject* obj, ccHObject* &parent);
-
-	//! Adds back object to DB tree
-	/** This method should be called once modifications to the db tree are finished
-		(see removeObjectTemporarilyFromDBTree).
-	**/
-	void putObjectBackIntoDBTree(ccHObject* obj, ccHObject* parent);
-
 	//! Returns a default first guess for algorithms kernel size
 	static PointCoordinateType GetDefaultCloudKernelSize(const ccHObject::Container& entities);
 
@@ -376,6 +380,17 @@ protected:
     **/
     void doActionClearProperty(int prop);
 
+	//! Toggles selected entities properties
+    /** - prop=0 : VISIBILITY
+		- prop=1 : COLOR
+        - prop=2 : NORMALS
+        - prop=3 : SCALAR FIELD
+        - prop=4 : MATERIAL/TEXTURE
+		- prop=5 : NAME (IN 3D)
+        \param prop property id
+    **/
+	void toggleSelectedEntitiesProp(int prop);
+
     //! Active SF action fork
     /** - action=0 : toggle SF color scale
         - action=1 : activate previous SF
@@ -397,13 +412,14 @@ protected:
     //! Connects all QT actions to slots
     void connectActions();
 
-    //Menu
+    //! Enables menu entires based on the current selection
     void enableUIItems(dbTreeSelectionInfo& selInfo);
 
 	//! Expands DB tree for selected items
 	void expandDBTreeWithSelection(ccHObject::Container& selection);
 
-    //DB & DB Tree
+
+	//DB & DB Tree
     ccDBRoot* m_ccRoot;
 
 	//! Currently selected entities;
@@ -461,6 +477,8 @@ protected:
     ccPointListPickingDlg* m_plpDlg;
     //! Point-pair registration
     ccPointPairRegistrationDlg* m_pprDlg;
+	//! Primitive factory dialog
+	ccPrimitiveFactoryDlg* m_pfDlg;
 
     /*** plugins ***/
     QString m_pluginsPath;

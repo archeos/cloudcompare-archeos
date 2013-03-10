@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2266                                                              $
-//$LastChangedDate:: 2012-10-15 00:07:12 +0200 (lun., 15 oct. 2012)        $
-//**************************************************************************
-//
 
 #include "ccHObject.h"
 
@@ -193,8 +186,7 @@ ccHObject* ccHObject::find(int uniqueID)
 
 unsigned ccHObject::filterChildren(Container& filteredChildren, bool recursive/*=false*/, CC_CLASS_ENUM filter /*= CC_OBJECT*/) const
 {
-	Container::const_iterator it = m_children.begin();
-	for (;it!=m_children.end();++it)
+	for (Container::const_iterator it = m_children.begin(); it!=m_children.end(); ++it)
 	{
 		if ((*it)->isKindOf(filter))
 			//warning: we have to handle unicity as a sibling may be in the same container as its parent!
@@ -204,7 +196,8 @@ unsigned ccHObject::filterChildren(Container& filteredChildren, bool recursive/*
 		if (recursive)
 			(*it)->filterChildren(filteredChildren, true, filter);
 	}
-	return filteredChildren.size();
+
+	return (unsigned)filteredChildren.size();
 }
 
 int ccHObject::getChildIndex(const ccHObject* aChild) const
@@ -292,7 +285,7 @@ ccBBox ccHObject::getBB(bool relative/*=true*/, bool withGLfeatures/*=false*/, c
 	//if (!isEnabled())
 	//    return box;
 
-	if (!display || currentDisplay==display)
+	if (!display || m_currentDisplay==display)
 		box = (withGLfeatures ? getDisplayBB() : getMyOwnBB());
 
 	Container::iterator it = m_children.begin();
@@ -303,9 +296,9 @@ ccBBox ccHObject::getBB(bool relative/*=true*/, bool withGLfeatures/*=false*/, c
 	}
 
 	//apply GL transformation afterwards!
-	if (!display || currentDisplay==display)
-		if (box.isValid() && !relative && glTransEnabled)
-			box *= glTrans;
+	if (!display || m_currentDisplay==display)
+		if (box.isValid() && !relative && m_glTransEnabled)
+			box *= m_glTrans;
 
 	return box;
 }
@@ -323,9 +316,31 @@ ccBBox ccHObject::getDisplayBB()
 
 CCVector3 ccHObject::getCenter()
 {
-	ccBBox box = getBB(true,false,currentDisplay);
+	ccBBox box = getBB(true,false,m_currentDisplay);
 
 	return box.getCenter();
+}
+
+void ccHObject::drawNameIn3D(CC_DRAW_CONTEXT& context)
+{
+	if (!context._win)
+		return;
+
+	//we display it in the 2D layer in fact!
+    ccBBox bBox = getBB(true,false,m_currentDisplay);
+	if (bBox.isValid())
+	{
+		const double* MM = context._win->getModelViewMatd(); //viewMat
+		const double* MP = context._win->getProjectionMatd(); //projMat
+		int VP[4];
+		context._win->getViewportArray(VP);
+
+		GLdouble xp,yp,zp;
+		CCVector3 C = bBox.getCenter();
+		gluProject(C.x,C.y,C.z,MM,MP,VP,&xp,&yp,&zp);
+
+		context._win->displayText(getName(),(int)xp,(int)yp,ccGenericGLDisplay::ALIGN_HMIDDLE | ccGenericGLDisplay::ALIGN_VMIDDLE,75);
+	}
 }
 
 void ccHObject::draw(CC_DRAW_CONTEXT& context)
@@ -333,28 +348,38 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 	if (!isEnabled())
 		return;
 
+	//are we currently drawing objects in 2D or 3D?
 	bool draw3D = MACRO_Draw3D(context);
-	bool drawInThisContext = (!visible && !selected ? false : currentDisplay == context._win);
+	
+	//the entity must be either visible and selected, and of course it should be displayed in this context
+	bool drawInThisContext = ((m_visible || m_selected) && m_currentDisplay == context._win);
 
-	//no need to display anything but clouds in "point picking mode"
-	drawInThisContext &= (!MACRO_DrawPointNames(context) || isKindOf(CC_POINT_CLOUD));
+	//no need to display anything but clouds and meshes in "element picking mode"
+	drawInThisContext &= (( !MACRO_DrawPointNames(context) || isKindOf(CC_POINT_CLOUD) ) || 
+		                  ( !MACRO_DrawTriangleNames(context) || isKindOf(CC_MESH) ));
 
 	//apply 3D 'temporary' transformation (for display only)
-	if (draw3D && glTransEnabled)
+	if (draw3D && m_glTransEnabled)
 	{
 		glMatrixMode(GL_MODELVIEW);
 		glPushMatrix();
-		glMultMatrixf(glTrans.data());
+		glMultMatrixf(m_glTrans.data());
 	}
 
 	//draw entity
-	if (visible && drawInThisContext)
+	if (m_visible && drawInThisContext)
 	{
-		if ((!selected || !MACRO_SkipSelected(context)) &&
-			(selected || !MACRO_SkipUnselected(context)))
+		if (( !m_selected || !MACRO_SkipSelected(context) ) &&
+			( m_selected || !MACRO_SkipUnselected(context) ))
 		{
+			//apply default color (in case of)
 			glColor3ubv(context.pointsDefaultCol);
+
 			drawMeOnly(context);
+
+			//draw name in 3D (we display it in the 2D foreground layer in fact!)
+			if (m_showNameIn3D && MACRO_Draw2D(context) && MACRO_Foreground(context) && !MACRO_DrawNames(context))
+				drawNameIn3D(context);
 		}
 	}
 
@@ -363,7 +388,7 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 		(*it)->draw(context);
 
 	//if the entity is currently selected
-	if (selected && draw3D && drawInThisContext)
+	if (m_selected && draw3D && drawInThisContext)
 	{
 		switch (m_selectionBehavior)
 		{
@@ -391,7 +416,7 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 		}
 	}
 
-	if (draw3D && glTransEnabled)
+	if (draw3D && m_glTransEnabled)
 		glPopMatrix();
 }
 
@@ -399,17 +424,17 @@ void ccHObject::applyGLTransformation_recursive(ccGLMatrix* trans/*=NULL*/)
 {
 	ccGLMatrix* _trans = NULL;
 
-	if (glTransEnabled)
+	if (m_glTransEnabled)
 	{
 		if (!trans)
 		{
 			//if no transformation is provided (by father)
 			//we initiate it with the current one
-			trans = _trans = new ccGLMatrix(glTrans);
+			trans = _trans = new ccGLMatrix(m_glTrans);
 		}
 		else
 		{
-			*trans *= glTrans;
+			*trans *= m_glTrans;
 		}
 	}
 
@@ -425,7 +450,7 @@ void ccHObject::applyGLTransformation_recursive(ccGLMatrix* trans/*=NULL*/)
 	if (_trans)
 		delete _trans;
 
-	if (glTransEnabled)
+	if (m_glTransEnabled)
 		razGLTransformation();
 }
 
@@ -650,35 +675,39 @@ bool ccHObject::toFile_MeOnly(QFile& out) const
 	/*** ccHObject takes in charge the ccDrawableObject properties (which is not a ccSerializableObject) ***/
 
 	//'visible' state (dataVersion>=20)
-	if (out.write((const char*)&visible,sizeof(bool))<0)
+	if (out.write((const char*)&m_visible,sizeof(bool))<0)
 		return WriteError();
 	//'lockedVisibility' state (dataVersion>=20)
-	if (out.write((const char*)&lockedVisibility,sizeof(bool))<0)
+	if (out.write((const char*)&m_lockedVisibility,sizeof(bool))<0)
 		return WriteError();
 	//'colorsDisplayed' state (dataVersion>=20)
-	if (out.write((const char*)&colorsDisplayed,sizeof(bool))<0)
+	if (out.write((const char*)&m_colorsDisplayed,sizeof(bool))<0)
 		return WriteError();
 	//'normalsDisplayed' state (dataVersion>=20)
-	if (out.write((const char*)&normalsDisplayed,sizeof(bool))<0)
+	if (out.write((const char*)&m_normalsDisplayed,sizeof(bool))<0)
 		return WriteError();
 	//'sfDisplayed' state (dataVersion>=20)
-	if (out.write((const char*)&sfDisplayed,sizeof(bool))<0)
+	if (out.write((const char*)&m_sfDisplayed,sizeof(bool))<0)
 		return WriteError();
 	//'colorIsOverriden' state (dataVersion>=20)
-	if (out.write((const char*)&colorIsOverriden,sizeof(bool))<0)
+	if (out.write((const char*)&m_colorIsOverriden,sizeof(bool))<0)
 		return WriteError();
-	if (colorIsOverriden)
+	if (m_colorIsOverriden)
 	{
 		//'tempColor' (dataVersion>=20)
-		if (out.write((const char*)tempColor,sizeof(colorType)*3)<0)
+		if (out.write((const char*)m_tempColor,sizeof(colorType)*3)<0)
 			return WriteError();
 	}
 	//'glTransEnabled' state (dataVersion>=20)
-	if (out.write((const char*)&glTransEnabled,sizeof(bool))<0)
+	if (out.write((const char*)&m_glTransEnabled,sizeof(bool))<0)
 		return WriteError();
-	if (glTransEnabled)
-		if (!glTrans.toFile(out))
+	if (m_glTransEnabled)
+		if (!m_glTrans.toFile(out))
 			return false;
+
+	//'showNameIn3D' state (dataVersion>=24)
+	if (out.write((const char*)&m_showNameIn3D,sizeof(bool))<0)
+		return WriteError();
 
 	return true;
 }
@@ -690,35 +719,46 @@ bool ccHObject::fromFile_MeOnly(QFile& in, short dataVersion)
 	/*** ccHObject takes in charge the ccDrawableObject properties (which is not a ccSerializableObject) ***/
 
 	//'visible' state (dataVersion>=20)
-	if (in.read((char*)&visible,sizeof(bool))<0)
+	if (in.read((char*)&m_visible,sizeof(bool))<0)
 		return ReadError();
 	//'lockedVisibility' state (dataVersion>=20)
-	if (in.read((char*)&lockedVisibility,sizeof(bool))<0)
+	if (in.read((char*)&m_lockedVisibility,sizeof(bool))<0)
 		return ReadError();
 	//'colorsDisplayed' state (dataVersion>=20)
-	if (in.read((char*)&colorsDisplayed,sizeof(bool))<0)
+	if (in.read((char*)&m_colorsDisplayed,sizeof(bool))<0)
 		return ReadError();
 	//'normalsDisplayed' state (dataVersion>=20)
-	if (in.read((char*)&normalsDisplayed,sizeof(bool))<0)
+	if (in.read((char*)&m_normalsDisplayed,sizeof(bool))<0)
 		return ReadError();
 	//'sfDisplayed' state (dataVersion>=20)
-	if (in.read((char*)&sfDisplayed,sizeof(bool))<0)
+	if (in.read((char*)&m_sfDisplayed,sizeof(bool))<0)
 		return ReadError();
 	//'colorIsOverriden' state (dataVersion>=20)
-	if (in.read((char*)&colorIsOverriden,sizeof(bool))<0)
+	if (in.read((char*)&m_colorIsOverriden,sizeof(bool))<0)
 		return ReadError();
-	if (colorIsOverriden)
+	if (m_colorIsOverriden)
 	{
 		//'tempColor' (dataVersion>=20)
-		if (in.read((char*)tempColor,sizeof(colorType)*3)<0)
+		if (in.read((char*)m_tempColor,sizeof(colorType)*3)<0)
 			return ReadError();
 	}
 	//'glTransEnabled' state (dataVersion>=20)
-	if (in.read((char*)&glTransEnabled,sizeof(bool))<0)
+	if (in.read((char*)&m_glTransEnabled,sizeof(bool))<0)
 		return ReadError();
-	if (glTransEnabled)
-		if (!glTrans.fromFile(in,dataVersion))
+	if (m_glTransEnabled)
+		if (!m_glTrans.fromFile(in,dataVersion))
 			return false;
+
+	//'showNameIn3D' state (dataVersion>=24)
+	if (dataVersion >= 24)
+	{
+		if (in.read((char*)&m_showNameIn3D,sizeof(bool))<0)
+			return WriteError();
+	}
+	else
+	{
+		m_showNameIn3D = false;
+	}
 
 	return true;
 }

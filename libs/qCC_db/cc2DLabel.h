@@ -1,3 +1,20 @@
+//##########################################################################
+//#                                                                        #
+//#                            CLOUDCOMPARE                                #
+//#                                                                        #
+//#  This program is free software; you can redistribute it and/or modify  #
+//#  it under the terms of the GNU General Public License as published by  #
+//#  the Free Software Foundation; version 2 of the License.               #
+//#                                                                        #
+//#  This program is distributed in the hope that it will be useful,       #
+//#  but WITHOUT ANY WARRANTY; without even the implied warranty of        #
+//#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
+//#  GNU General Public License for more details.                          #
+//#                                                                        #
+//#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
+//#                                                                        #
+//##########################################################################
+
 #ifndef CC_2D_LABEL_HEADER
 #define CC_2D_LABEL_HEADER
 
@@ -61,7 +78,7 @@ public:
 	void clear();
 
 	//! Returns current size
-	unsigned size() const { return m_points.size(); }
+	unsigned size() const { return (unsigned)m_points.size(); }
 
 	//! Whether to collapse label or not
 	void setCollapsed(bool state) { m_showFullBody = !state; }
@@ -112,9 +129,8 @@ protected:
     //inherited from ccHObject
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion);
-
-    //! Draws the entity only (not its children)
     virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
+
     //! Draws the entity only (not its children) - 2D version
     virtual void drawMeOnly2D(CC_DRAW_CONTEXT& context);
     //! Draws the entity only (not its children) - 3D version
@@ -151,4 +167,4 @@ protected:
 	bool m_dispIn2D;
 };
 
-#endif
+#endif //CC_2D_LABEL_HEADER

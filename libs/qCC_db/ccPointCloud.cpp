@@ -14,13 +14,7 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2265                                                              $
-//$LastChangedDate:: 2012-10-13 22:22:51 +0200 (sam., 13 oct. 2012)        $
-//**************************************************************************
-//
+
 #include "ccPointCloud.h"
 
 //CCLib
@@ -1423,7 +1417,7 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
     if (MACRO_Draw3D(context))
     {
         //standard case: list names pushing
-        bool pushName = MACRO_DrawNames(context);
+        bool pushName = MACRO_DrawEntityNames(context);
 		//special case: point names pushing (for picking)
         bool pushPointNames = MACRO_DrawPointNames(context);
 
@@ -1449,7 +1443,7 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 
         if (glParams.showColors && isColorOverriden())
         {
-            glColor3ubv(tempColor);
+            glColor3ubv(m_tempColor);
             glParams.showColors=false;
         }
 		else
@@ -1475,18 +1469,15 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
         const colorType* col = 0;
         const PointCoordinateType* N = 0;
         unsigned decimStep;
-        //unsigned decimedNumberOfPoints;
 
         // L.O.D.
 		unsigned numberOfPoints=size();
         if (numberOfPoints>MAX_LOD_POINTS_NUMBER && context.decimateCloudOnMove &&  MACRO_LODActivated(context))
         {
             decimStep = int(ceil(float(numberOfPoints) / float(MAX_LOD_POINTS_NUMBER)));
-            //decimedNumberOfPoints = int(floor(float(numberOfPoints) / float(decimStep)));
         }
         else
         {
-            //decimedNumberOfPoints = numberOfPoints;
             decimStep = 1;
         }
 
@@ -1495,6 +1486,11 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
         //standard case: list names pushing
         if (pushName)
             glPushName(getUniqueID());
+
+		//custom point size?
+		glPushAttrib(GL_POINT_BIT);
+		if (m_pointSize != 0)
+			glPointSize((GLfloat)m_pointSize);
 
 		if (!pushPointNames) //standard "full" display
 		{
@@ -1694,7 +1690,7 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 				/*** Fast way to display simple clouds ***/
 				//My old buggy ATI card wasn't supporting "glDrawArrays" with too many points...
 				//DGM: well, it's very old now, why bother?! And we use chunked arrays now
-				//if (false)
+				//if (ATI)
 				{
 					glEnableClientState(GL_VERTEX_ARRAY);
 					if (glParams.showColors)
@@ -1736,17 +1732,17 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 		}
 		else //special case: point names pushing (for picking) --> no need for colors, normals, etc.
 		{
+			glPushName(0);
             if (isVisibilityTableInstantiated())
             {
                 for (unsigned j=0;j<numberOfPoints;j+=decimStep)
                 {
                     if (m_visibilityArray->getValue(j)>0)
                     {
-                        glPushName(j);
+						glLoadName(j);
                         glBegin(GL_POINTS);
                         glVertex3fv(m_points->getValue(j));
                         glEnd();
-                        glPopName();
                     }
                 }
             }
@@ -1757,11 +1753,10 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 					col = getPointDistanceColor(j);
 					if (col)
 					{
-                        glPushName(j);
+						glLoadName(j);
                         glBegin(GL_POINTS);
                         glVertex3fv(m_points->getValue(j));
                         glEnd();
-                        glPopName();
 					}
 				}
 			}
@@ -1769,20 +1764,22 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 			{
 				for (unsigned j=0;j<numberOfPoints;j+=decimStep)
 				{
-					glPushName(j);
+					glLoadName(j);
 					glBegin(GL_POINTS);
 					glVertex3fv(m_points->getValue(j));
 					glEnd();
-					glPopName();
 				}
 			}
 
 			//glEnd();
+			glPopName();
 		}
 
         /*** END DISPLAY ***/
 
-        if (colorMaterial)
+		glPopAttrib(); //GL_POINT_BIT
+
+		if (colorMaterial)
             glDisable(GL_COLOR_MATERIAL);
 
         //we can now switch the light off

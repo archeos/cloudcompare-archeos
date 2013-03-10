@@ -14,19 +14,18 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author::                                                                $
-//$Rev::                                                                   $
-//$LastChangedDate::                                                       $
-//**************************************************************************
-//
 
 #include "PCV.h"
 #include "PCVContext.h"
 
 //CCLib
 #include <CCMiscTools.h>
+
+//Qt
+#include <QString>
+
+//System
+#include <string.h>
 
 using namespace CCLib;
 
@@ -41,7 +40,7 @@ int PCV::Launch(unsigned numberOfRays,
 {
 	//generates light directions
 	unsigned lightDirs = numberOfRays*(mode360 ? 1 : 2);
-	float *rays = CCMiscTools::sampleSphere(lightDirs);
+	float *rays = CCMiscTools::SampleSphere(lightDirs);
 	if (!rays) //an error occured?
 		return -2;
 
@@ -83,7 +82,7 @@ bool PCV::Launch(std::vector<CCVector3>& rays,
 	//vertices/points
 	unsigned numberOfPoints = vertices->size();
 	//rays
-	unsigned numberOfRays = rays.size();
+	unsigned numberOfRays = (unsigned)rays.size();
 
 	//for each vertex we keep count of the number of light directions for which it is "illuminated"
 	int* vertexAccum = new int[numberOfPoints];
@@ -93,7 +92,7 @@ bool PCV::Launch(std::vector<CCVector3>& rays,
 
 	/*** Main illumination loop ***/
 
-	CCLib::NormalizedProgress* nProgress;
+	CCLib::NormalizedProgress* nProgress = NULL;
 	if (progressCb)
 	{
 		nProgress = new CCLib::NormalizedProgress(progressCb,numberOfRays);

@@ -35,6 +35,8 @@
 //system
 #if defined(_WIN32) || defined(WIN32)
 #include "Windows.h"
+#else
+#include <unistd.h>
 #endif
 
 BaseFilter::BaseFilter(FilterDescription desc)
@@ -177,7 +179,7 @@ int BaseFilter::start()
 #if defined(_WIN32) || defined(WIN32)
 		::Sleep(500);
 #else
-        sleep(1.0);
+        usleep(1.0);
 #endif
 		progressCb->update(++progress);
 	}
@@ -284,10 +286,10 @@ ccPointCloud* BaseFilter::getSelectedEntityAsCCPointCloud()
 
 void BaseFilter::getAllEntitiesOfType(CC_CLASS_ENUM type, ccHObject::Container& entities)
 {
-	if (!m_app || !m_app->dbRoot())
+	if (!m_app || !m_app->dbRootObject())
 		return;
 
-	m_app->dbRoot()->filterChildren(entities,true,type);
+	m_app->dbRootObject()->filterChildren(entities,true,type);
 }
 
 int BaseFilter::hasSelectedScalarField(std::string field_name)

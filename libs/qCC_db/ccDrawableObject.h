@@ -14,16 +14,9 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2224                                                              $
-//$LastChangedDate:: 2012-07-25 19:13:23 +0200 (mer., 25 juil. 2012)       $
-//**************************************************************************
-//
 
-#ifndef CC_DRAWABLE_OBECJT_HEADER
-#define CC_DRAWABLE_OBECJT_HEADER
+#ifndef CC_DRAWABLE_OBJECT_HEADER
+#define CC_DRAWABLE_OBJECT_HEADER
 
 #include <ccIncludeGL.h>
 
@@ -72,7 +65,7 @@ struct vboStruct
 //! Display context
 struct glDrawContext
 {
-    unsigned short flags;       //drawing options (see below)
+    uint16_t flags;       //drawing options (see below)
     int glW;                    //GL screen width
     int glH;                    //GL screen height
     ccGenericGLDisplay* _win;   //GL window ref.
@@ -134,26 +127,28 @@ struct glDrawContext
 };
 typedef glDrawContext CC_DRAW_CONTEXT;
 
-// Drawing flags
-#define CC_DRAW_2D                              0x00000001
-#define CC_DRAW_3D                              0x00000002
-#define CC_DRAW_FOREGROUND                      0x00000004
-#define CC_LIGHT_ENABLED                        0x00000008
-#define CC_SKIP_UNSELECTED                      0x00000010
-#define CC_SKIP_SELECTED                        0x00000020
-#define CC_SKIP_ALL                             0x00000030
-#define CC_DRAW_NAMES                           0x00000040
-#define CC_DRAW_POINT_NAMES                     0x00000080
-#define CC_DRAW_TRI_NAMES						0x00000100
-#define CC_LOD_ACTIVATED                        0x00000200
-#define CC_VIRTUAL_TRANS_ENABLED                0x00000400
+// Drawing flags (type: short)
+#define CC_DRAW_2D                              0x0001
+#define CC_DRAW_3D                              0x0002
+#define CC_DRAW_FOREGROUND                      0x0004
+#define CC_LIGHT_ENABLED                        0x0008
+#define CC_SKIP_UNSELECTED                      0x0010
+#define CC_SKIP_SELECTED                        0x0020
+#define CC_SKIP_ALL                             0x0030		// = CC_SKIP_UNSELECTED | CC_SKIP_SELECTED
+#define CC_DRAW_ENTITY_NAMES                    0x0040
+#define CC_DRAW_POINT_NAMES                     0x0080
+#define CC_DRAW_TRI_NAMES						0x0100
+#define CC_DRAW_ANY_NAMES						0x01C0		// = CC_DRAW_ENTITY_NAMES | CC_DRAW_POINT_NAMES | CC_DRAW_TRI_NAMES
+#define CC_LOD_ACTIVATED                        0x0200
+#define CC_VIRTUAL_TRANS_ENABLED                0x0400
 
 // Drawing flags testing macros (see ccDrawableObject)
 #define MACRO_Draw2D(context) (context.flags & CC_DRAW_2D)
 #define MACRO_Draw3D(context) (context.flags & CC_DRAW_3D)
 #define MACRO_DrawPointNames(context) (context.flags & CC_DRAW_POINT_NAMES)
 #define MACRO_DrawTriangleNames(context) (context.flags & CC_DRAW_TRI_NAMES)
-#define MACRO_DrawNames(context) (context.flags & CC_DRAW_NAMES)
+#define MACRO_DrawEntityNames(context) (context.flags & CC_DRAW_ENTITY_NAMES)
+#define MACRO_DrawNames(context) (context.flags & CC_DRAW_ANY_NAMES)
 #define MACRO_SkipUnselected(context) (context.flags & CC_SKIP_UNSELECTED)
 #define MACRO_SkipSelected(context) (context.flags & CC_SKIP_SELECTED)
 #define MACRO_LightIsEnabled(context) (context.flags & CC_LIGHT_ENABLED)
@@ -236,7 +231,7 @@ public:
     virtual bool colorsShown() const;
     //! Sets colors visibility
     virtual void showColors(bool state);
-	//! Toggles colors
+	//! Toggles colors display state
 	virtual void toggleColors();
 
     //! Returns whether normals are enabled or not
@@ -245,7 +240,7 @@ public:
     virtual bool normalsShown() const;
     //! Sets normals visibility
     virtual void showNormals(bool state);
-	//! Toggles normals
+	//! Toggles normals display state
 	virtual void toggleNormals();
 
     /*** scalar fields ***/
@@ -262,11 +257,29 @@ public:
     //! Sets active scalarfield visibility
     virtual void showSF(bool state);
 
-	//! Toggles SF
+	//! Toggles SF display state
 	virtual void toggleSF();
 
 	//! Returns whether active scalar field is visible
     virtual bool sfShown() const;
+
+	/*** Mesh materials ***/
+
+	//! Toggles material display state
+	virtual void toggleMaterials() {}; //does nothing by default!
+
+    /*** Name display in 3D ***/
+
+	//! Sets whether name should be displayed in 3D
+	virtual void showNameIn3D(bool state);
+
+	//! Returns whether name is displayed in 3D or not
+	virtual bool nameShownIn3D() const;
+
+	//! Toggles name in 3D display state
+	virtual void toggleShowName();
+
+	/*** temporary color ***/
 
     //! Returns whether colors are currently overriden by a temporary (unique) color
     /** See ccDrawableObject::setTempColor.
@@ -276,7 +289,7 @@ public:
     //! Returns current temporary (unique) color
     virtual const colorType* getTempColor() const;
 
-    //! Sets current temporary (unique)
+	//! Sets current temporary (unique)
     /** \param col rgb color
 		\param autoActivate auto activates temporary color
     **/
@@ -284,6 +297,8 @@ public:
 
 	//! Set temporary color activation state
 	virtual void enableTempColor(bool state);
+
+	/*** associated display management ***/
 
     //! Unlinks entity from a GL display (only if it belongs to it of course)
     virtual void removeFromDisplay(const ccGenericGLDisplay* win);
@@ -309,7 +324,9 @@ public:
     **/
     virtual void refreshDisplay();
 
-    //! Associates entity with a GL transformation (rotation + translation)
+    /*** Transformation matrix management (for display only) ***/
+
+	//! Associates entity with a GL transformation (rotation + translation)
     /** WARNING: FOR DISPLAY PURPOSE ONLY (i.e. should only be temporary)
 		If the associated GL transformation is enabled (see
         ccDrawableObject::enableGLTransformation), it will
@@ -328,7 +345,7 @@ public:
     virtual void enableGLTransformation(bool state);
 
 	//! Returns whether a GL transformation is enabled or not
-	virtual bool isGLTransEnabled() const { return glTransEnabled; }
+	virtual bool isGLTransEnabled() const;
 
     //! Retuns associated GL transformation
     /** See ccDrawableObject::setGLTransformation.
@@ -361,39 +378,42 @@ protected:
     //! Specifies whether the object is visible or not
     /** Note: this does not influence the children visibility
     **/
-    bool visible;
+    bool m_visible;
 
     //! Specifies whether the object is selected or not
-    bool selected;
+    bool m_selected;
 
     //! Specifies whether the visibility can be changed by user or not
-    bool lockedVisibility;
+    bool m_lockedVisibility;
 
     /*** OpenGL display parameters ***/
 
     //! Specifies whether colors should be displayed
-    bool colorsDisplayed;
+    bool m_colorsDisplayed;
     //! Specifies whether normals should be displayed
-    bool normalsDisplayed;
+    bool m_normalsDisplayed;
     //! Specifies whether scalar field should be displayed
-    bool sfDisplayed;
+    bool m_sfDisplayed;
 
     //! Temporary (unique) color
-    colorType tempColor[3];
+    colorType m_tempColor[3];
     //! Temporary (unique) color activation state
-	bool colorIsOverriden;
+	bool m_colorIsOverriden;
 
     //! Current GL transformation
     /** See ccDrawableObject::setGLTransformation.
     **/
-    ccGLMatrix glTrans;
+    ccGLMatrix m_glTrans;
     //! Current GL transformation activation state
     /** See ccDrawableObject::setGLTransformation.
     **/
-    bool glTransEnabled;
+    bool m_glTransEnabled;
+
+	//! Whether name is displayed in 3D or not
+	bool m_showNameIn3D;
 
     //! Currently associated GL display
-    ccGenericGLDisplay* currentDisplay;
+    ccGenericGLDisplay* m_currentDisplay;
 };
 
-#endif
+#endif //CC_DRAWABLE_OBJECT_HEADER

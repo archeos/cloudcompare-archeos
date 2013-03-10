@@ -14,13 +14,6 @@
 //#               COPYRIGHT: Daniel Girardeau-Montaut                      #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1743                                                              $
-//$LastChangedDate:: 2010-12-03 16:51:30 +0100 (ven., 03 déc. 2010)       $
-//**************************************************************************
-//
 
 //Qt
 #include <QtGui>
@@ -42,7 +35,10 @@
 #include <algorithm>
 #if defined(_WIN32) || defined(WIN32)
 #include "Windows.h"
+#else
+#include <time.h>
 #endif
+
 
 qPoissonRecon::qPoissonRecon(QObject* parent/*=0*/)
 	: QObject(parent)
@@ -99,7 +95,7 @@ void qPoissonRecon::doAction()
 	const ccHObject::Container& selectedEntities = m_app->getSelectedEntities();
 
 	//we need one point cloud
-    unsigned selNum = selectedEntities.size();
+    size_t selNum = selectedEntities.size();
     if (selNum!=1)
 	{
 		m_app->dispToConsole("Select only one cloud!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
@@ -192,10 +188,11 @@ void qPoissonRecon::doAction()
 		unsigned progress = 0;
 		while (!future.isFinished())
 		{
-		    #if defined(_WIN32) || defined(WIN32)
+			#if defined(_WIN32) || defined(WIN32)
 			::Sleep(500);
 			#else
-			sleep(500);
+			struct timespec waiter = {0, 500000000L};
+			nanosleep(&waiter, NULL);
 			#endif
 
 			progressCb.update(++progress);

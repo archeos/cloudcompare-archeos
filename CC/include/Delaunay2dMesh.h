@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author::                                                                $
-//$Rev::                                                                   $
-//$LastChangedDate::                                                       $
-//**************************************************************************
-//
 
 #ifndef DELAUNAY2D_MESH_HEADER
 #define DELAUNAY2D_MESH_HEADER
@@ -75,14 +68,14 @@ public:
 
 protected:
 
-	//! The associated point cloud
-	GenericIndexedCloud* theAssociatedCloud;
+	//! Associated point cloud
+	GenericIndexedCloud* m_associatedCloud;
 
-	//! The triangle summits indexes
-	int *theTrianglesIndexes;
+	//! Triangle vertex indexes
+	int* m_triIndexes;
 
-	//! Iterator on the list of triangle summits indexes
-	int* globalIterator;
+	//! Iterator on the list of triangle vertex indexes
+	int* m_globalIterator;
 
 	//! End position of global iterator
 	int* globalIteratorEnd;
@@ -103,4 +96,4 @@ protected:
 
 }
 
-#endif
+#endif //DELAUNAY2D_MESH_HEADER
