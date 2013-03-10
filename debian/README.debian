@@ -2,6 +2,6 @@ CloudCompare for Debian
 -----------------------
 * Keep static qhull version of this package because version in repo is oldest
   (qhull 2012.1 vs qhull 2009.1)
-* liblas is statically linked because it rely on a versioned libtiff that can 
-  cause conflicts (e.g. with opencv).
+* CC is not compiled with liblas support because debian's version is too old:
+  1.2.1, CC requiered at least 1.6 (?)
 -- Romain Janvier <romain.janvier@hotmail.fr>, Sat, 9 Mar 2013 00:36:00 +0100
