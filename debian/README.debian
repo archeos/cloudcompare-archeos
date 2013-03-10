@@ -1,0 +1,5 @@
+CloudCompare for Debian
+-----------------------
+Keep static qhull version of this package because version in repo is oldest
+qhull 2012.1 vs qhull 2009.1 
+-- Romain Janvier <romain.janvier@hotmail.fr>, Sat, 9 Mar 2013 00:36:00 +0100
