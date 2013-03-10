@@ -1,10 +1,12 @@
 #!/usr/bin/make -f
 export DH_OPTIONS
 
-import-orig:
-	mkdir 
+export DH_VERBOSE=1
+NPROCS:=1
+export DEB_BUILD_OPTIONS=parallel=$(NPROCS)
+
 %:
-	dh $@ 
+	dh $@ --parallel
 	
 override_dh_auto_clean:
 	dh_auto_clean

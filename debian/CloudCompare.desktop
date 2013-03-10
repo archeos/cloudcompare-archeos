@@ -4,6 +4,6 @@ Type=Application
 Name=CloudCompare
 Comment=Meshing tool
 TryExec=qCC
-Exec=qCC %F
+Exec=CloudCompare %F
 Icon=cc_icon
 MimeType=model/mesh;
