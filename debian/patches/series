@@ -4,4 +4,4 @@
 04-Enable-Libblas-support.patch
 05-Change-CMakeLists-for-correct-hardening.patch
 06-Fix-local-decimal-separator.patch
-07-Add-plugins.patch
+07-path-to-cc-headers-in-plugins.patch
