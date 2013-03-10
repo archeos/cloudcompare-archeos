@@ -1,3 +1,9 @@
+cloudcompare (2.4+git8336b3-0archeos1.1) UNRELEASED; urgency=low
+
+  * New upstream version 2.4+git8336b3
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sun, 10 Mar 2013 11:31:38 +0100
+
 cloudcompare (2.4+gitfaa33637a8-0archeos1) theodoric; urgency=low
 
   * Imported Upstream version 2.4+gitfaa33637a8
