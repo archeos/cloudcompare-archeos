@@ -1,0 +1,41 @@
+FILE(REMOVE_RECURSE
+  "CMakeFiles/CC_DLL.dir/src/ChamferDistanceTransform.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/Delaunay2dMesh.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/ScalarFieldTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/ReferenceCloud.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/DgmOctreeReferenceCloud.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/CCShareable.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/MeshSamplingTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/AutoSegmentationTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/NormalDistribution.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/DebugProgressCallback.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/Neighbourhood.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/RegistrationTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/ErrorFunction.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/CCMiscTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/DgmOctree.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/CloudSamplingTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/WeibullDistribution.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/StatisticalTestingTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/KdTree.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/ManualSegmentationTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/SimpleMesh.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/DistanceComputationTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/FastMarchingForPropagation.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/Polyline.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/FastMarching.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/ChunkedPointCloud.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/PointProjectionTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/LocalModel.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/GeometricalAnalysisTools.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/ScalarField.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/GroundBasedLidarSensor.cpp.o"
+  "CMakeFiles/CC_DLL.dir/src/SimpleCloud.cpp.o"
+  "libCC_DLL.pdb"
+  "libCC_DLL.so"
+)
+
+# Per-language clean rules from dependency scanning.
+FOREACH(lang CXX)
+  INCLUDE(CMakeFiles/CC_DLL.dir/cmake_clean_${lang}.cmake OPTIONAL)
+ENDFOREACH(lang)
