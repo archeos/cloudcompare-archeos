@@ -1,4 +1,22 @@
-cloudcompare (2.4+git8336b3-0archeos1) theodoric; urgency=low
+cloudcompare (2.4+git20130310-0archeos1) theodoric; urgency=low
+
+  * New upstream version 2.4+git20130310
+    see upstream changes in the history.txt file
+  * Use date as version number instead of SHA-1
+  * Added Plugins (fix #8):
+    - qKinect (not tested yet)
+    - qBlut
+    - qEDL
+    - qPCV
+    - qPoissonRecon
+    - qSSAO
+  * Removed liblas support (it never worked on this package because
+    liblas in Debian repositories is too old). Other module depends on
+    libraries not yet packaged for Debian (close #6) 
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Mon, 11 Mar 2013 09:40:47 +0100
+
+cloudcompare (2.4+git8336b3-0archeos1) UNRELEASED; urgency=low
 
   * New upstream version 2.4+git8336b3
 

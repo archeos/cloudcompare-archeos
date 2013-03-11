@@ -11,7 +11,7 @@ Subject: Dynamic directory for shaders
 
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -31,7 +31,7 @@ endif()
+@@ -38,7 +38,7 @@ endif()
  # Load plugins
  add_subdirectory( plugins )
  
@@ -20,7 +20,7 @@ Subject: Dynamic directory for shaders
  include_directories( ${CC_FBO_SOURCE_DIR}/include )
  include_directories( ${CC_DLL_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_DLL_SOURCE_DIR} )
-@@ -111,7 +111,8 @@ target_link_LIBE57( ${PROJECT_NAME} )
+@@ -112,7 +112,8 @@ target_link_LIBE57( ${PROJECT_NAME} )
  set_default_cc_preproc( ${PROJECT_NAME} )
  
  # Add custom prepocessor definitions

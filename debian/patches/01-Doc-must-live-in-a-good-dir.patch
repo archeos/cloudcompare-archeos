@@ -9,7 +9,7 @@ Subject: 0002-doc-must-live-in-a-good-dir
 
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -141,7 +141,7 @@ endif()
+@@ -142,7 +142,7 @@ endif()
  
  
  # Auxiliary files
@@ -18,7 +18,7 @@ Subject: 0002-doc-must-live-in-a-good-dir
  
  if( WIN32 )
  	# Export Qt dlls & plugins
-@@ -153,9 +153,9 @@ if( WIN32 )
+@@ -154,9 +154,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files
@@ -31,13 +31,6 @@ Subject: 0002-doc-must-live-in-a-good-dir
  
  # in order to ensure that everything else is installed first, put the Mac bundling in its own subdirectory
  if( APPLE )
-@@ -168,4 +168,4 @@ if( APPLE )
-    set( MACOSX_BUNDLE_BUNDLE_VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}" )
- 
-    add_subdirectory( Mac )
--endif()
-\ No newline at end of file
-+endif()
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
 @@ -110,9 +110,9 @@ if( WIN32 )

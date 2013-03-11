@@ -75,8 +75,8 @@ Subject: Dynamic directory for shaders
      ccConsole::Print(QString("Plugins lookup dir.: %1").arg(m_pluginsPath));
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -1,13 +1,23 @@
- cmake_minimum_required(VERSION 2.8)
+@@ -8,13 +8,23 @@ set( VERSION_PATCH 0 )
+ 
  
  if ( UNIX )
 -	set( CloudCompare_dest_release bin ) #default destination: /usr/bin
@@ -100,7 +100,7 @@ Subject: Dynamic directory for shaders
  if( APPLE )
     set( MAC_APP_NAME ${PROJECT_NAME}.app )
     set( MAC_BUNDLE_MACOS_DIR ${CMAKE_INSTALL_PREFIX}/${CloudCompare_dest_release}/${MAC_APP_NAME}/Contents/MacOS )
-@@ -135,8 +145,8 @@ if( APPLE )
+@@ -136,8 +146,8 @@ if( APPLE )
     install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
     install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
  else()
@@ -117,7 +117,7 @@ Subject: Dynamic directory for shaders
     install( TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${MAC_BUNDLE_PLUGIN_DIR}/ccPlugins COMPONENT Runtime )
     set( CC_PLUGINS ${CC_PLUGINS} ${MAC_BUNDLE_PLUGIN_DIR}/ccPlugins/lib${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "cc plugin list" )
  else()
--   install_shared( ${PROJECT_NAME} ${qCC_dest_release}/plugins ${CloudCompare_dest_debug}/plugins )
+-   install_shared( ${PROJECT_NAME} ${CloudCompare_dest_release}/plugins ${CloudCompare_dest_debug}/plugins )
 +    install_shared( ${PROJECT_NAME} ${CloudCompare_plugins_dest_release} ${CloudCompare_dest_debug}/plugins )
  endif()
  
