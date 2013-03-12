@@ -127,4 +127,5 @@ pip-log.txt
 # quilt
 .pc/
 *.rej
+build/
 /build_64bits_msvc10/
