@@ -1,9 +1,0 @@
-/home/romain/build/trunk/build/CC/CMakeFiles/CC_DLL.dir
-/home/romain/build/trunk/build/libs/CCFbo/CMakeFiles/CC_FBO.dir
-/home/romain/build/trunk/build/qCC/CMakeFiles/CloudCompare.dir
-/home/romain/build/trunk/build/libs/Glew/CMakeFiles/GLEW.dir
-/home/romain/build/trunk/build/libs/qCC_db/CMakeFiles/QCC_DB_DLL.dir
-/home/romain/build/trunk/build/qCC/plugins/qHPR/CMakeFiles/QHPR_PLUGIN_DLL.dir
-/home/romain/build/trunk/build/ccViewer/CMakeFiles/ccViewer.dir
-/home/romain/build/trunk/build/qCC/plugins/qHPR/qhull/src2012.1/CMakeFiles/qhull.dir
-/home/romain/build/trunk/build/CC/triangle/CMakeFiles/triangle.dir
