@@ -11,8 +11,10 @@ cloudcompare (2.4+git20130310-0archeos1) theodoric; urgency=low
     - qPoissonRecon
     - qSSAO
   * Removed liblas support (it never worked on this package because
-    liblas in Debian repositories is too old). Other module depends on
-    libraries not yet packaged for Debian (close #6) 
+    liblas in Debian repositories is too old). Note that other CC module 
+    depends on libraries that are not yet packaged for Debian 
+    (so it close #6 for now).
+  * Dynamic libraries now live in lib/<packagename> (patch 06) 
 
  -- Romain Janvier <romain.janvier@hotmail.fr>  Mon, 11 Mar 2013 09:40:47 +0100
 
