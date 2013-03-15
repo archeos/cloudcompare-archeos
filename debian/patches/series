@@ -3,3 +3,4 @@
 03-Use-Debian-libGLEW.patch
 04-Change-CMakeLists-for-proper-hardening.patch
 05-Fix-local-decimal-separator.patch
+06-Use-package-directory-for-libs.patch

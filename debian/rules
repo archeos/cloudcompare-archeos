@@ -22,3 +22,6 @@ override_dh_auto_configure:
 	    -DLIBFREENECT_LIBRARY_FILE="-lfreenect" \
 		-DINSTALL_QSSAO_PLUGIN=ON \
 		-DINSTALL_QPCV_PLUGIN=ON
+
+override_dh_shlibdeps:
+	dh_shlibdeps -l/usr/lib/cloudcompare

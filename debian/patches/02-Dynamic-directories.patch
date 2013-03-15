@@ -1,6 +1,6 @@
 From: Romain Janvier <romain.janvier@hotmail.fr>
 Date: Mon, 14 Jan 2013 21:15:12 +0100
-Subject: Dynamic directory for shaders
+Subject: Dynamic directies
 
 ---
  qCC/CMakeLists.txt  |   11 +-

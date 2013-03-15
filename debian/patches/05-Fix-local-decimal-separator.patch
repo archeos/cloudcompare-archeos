@@ -1,9 +1,20 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Fri, 15 Mar 2013 09:47:39 +0100
+Subject: Fix local decimal separator
+
 Inspired by a patch from Teemu Ikonen <tpikonen@gmail.com>
 Debian maintener for Meshlab. The dot is now de default separator.
 It give consistency with Meshlab behavior.
+---
+ ccViewer/main.cpp |    1 +
+ qCC/main.cpp      |    1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/ccViewer/main.cpp b/ccViewer/main.cpp
+index da0d200..fa88bee 100644
 --- a/ccViewer/main.cpp
 +++ b/ccViewer/main.cpp
-@@ -46,6 +46,7 @@ class ccApplication : public QApplicatio
+@@ -46,6 +46,7 @@ class ccApplication : public QApplication
        {
           setOrganizationName("CCCorp");
           setApplicationName("CloudCompareViewer");
@@ -11,9 +22,11 @@ It give consistency with Meshlab behavior.
  #ifdef Q_OS_MAC
           mViewer = NULL;
           
+diff --git a/qCC/main.cpp b/qCC/main.cpp
+index ebcd747..705f30a 100644
 --- a/qCC/main.cpp
 +++ b/qCC/main.cpp
-@@ -57,6 +57,7 @@ class qccApplication : public QApplicati
+@@ -57,6 +57,7 @@ class qccApplication : public QApplication
        {
           setOrganizationName("CCCorp");
           setApplicationName("CloudCompare");

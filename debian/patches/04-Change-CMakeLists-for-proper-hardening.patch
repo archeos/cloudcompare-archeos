@@ -1,6 +1,16 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Fri, 15 Mar 2013 09:47:39 +0100
+Subject: Change CMakeLists for proper hardening
+
+---
+ CMakeLists.txt |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index f264e3c..1034939 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -6,8 +6,8 @@ project( CloudCompare )
+@@ -6,8 +6,8 @@ project( CloudCompareProjects )
  set( CMAKE_DEBUG_POSTFIX d )
  
  if( UNIX )

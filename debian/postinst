@@ -1,8 +1,0 @@
-#!/bin/sh
-set -e
-
-echo "Postinst script : running ldconfig"
-ldconfig
-
-#debhelper token
-#DEBHELPER#
