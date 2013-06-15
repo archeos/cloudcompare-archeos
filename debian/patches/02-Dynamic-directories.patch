@@ -101,7 +101,7 @@ Subject: Dynamic directies
 -   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CloudCompare_dest_release}/shaders/ColorRamp ${CloudCompare_dest_debug}/shaders/ColorRamp )
 +   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${CloudCompare_shaders_dest_release} ${CloudCompare_dest_debug}/shaders )
 +   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${CloudCompare_shaders_dest_release} ${CloudCompare_dest_debug}/shaders )
-+   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CloudCompare_shaders_dest_release}/shaders/ColorRamp ${CloudCompare_dest_debug}/shaders/ColorRamp )
++   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CloudCompare_shaders_dest_release}/ColorRamp ${CloudCompare_dest_debug}/shaders/ColorRamp )
  endif()
  
  # Auxiliary files
