@@ -50,25 +50,24 @@ void ChunkedPointCloud::clear()
 
 void ChunkedPointCloud::forEach(genericPointAction& anAction)
 {
-	unsigned i,n = size();
+	unsigned n = size();
 
-	//si un champ scalaire est actif
+	//if a SF is already activated
 	ScalarField* currentOutScalarFieldArray = getCurrentOutScalarField();
 	if (currentOutScalarFieldArray)
 	{
-		for (i=0;i<n;++i)
+		for (unsigned i=0;i<n;++i)
 			anAction(*(CCVector3*)m_points->getValue(i),(*currentOutScalarFieldArray)[i]);
 	}
-	//sinon
-	else
+	else //otherwise we use a fake SF (DGM FIXME: is it really interesting?!)
 	{
-		DistanceType dummyDist = 0.0;
-		for (i=0;i<n;++i)
+		ScalarType dummyDist = 0;
+		for (unsigned i=0;i<n;++i)
 			anAction(*(CCVector3*)m_points->getValue(i),dummyDist);
 	}
 }
 
-void ChunkedPointCloud::getBoundingBox(PointCoordinateType Mins[], PointCoordinateType Maxs[])
+void ChunkedPointCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
 {
 	if (!m_validBB)
 	{
@@ -76,8 +75,8 @@ void ChunkedPointCloud::getBoundingBox(PointCoordinateType Mins[], PointCoordina
 		m_validBB = true;
 	}
 
-	memcpy(Mins,m_points->getMin(),3*sizeof(PointCoordinateType));
-	memcpy(Maxs,m_points->getMax(),3*sizeof(PointCoordinateType));
+	memcpy(bbMin, m_points->getMin(), 3*sizeof(PointCoordinateType));
+	memcpy(bbMax, m_points->getMax(), 3*sizeof(PointCoordinateType));
 }
 
 void ChunkedPointCloud::invalidateBoundingBox()
@@ -87,23 +86,12 @@ void ChunkedPointCloud::invalidateBoundingBox()
 
 void ChunkedPointCloud::placeIteratorAtBegining()
 {
-	m_currentPointIndex=0;
+	m_currentPointIndex = 0;
 }
 
 const CCVector3* ChunkedPointCloud::getNextPoint()
 {
 	return (m_currentPointIndex < m_points->currentSize() ? point(m_currentPointIndex++) : 0);
-}
-
-const CCVector3* ChunkedPointCloud::getPointPersistentPtr(unsigned index)
-{
-	return point(index);
-}
-
-void ChunkedPointCloud::getPoint(unsigned index, CCVector3& P) const
-{
-	assert(index < size());
-	P=*point(index);
 }
 
 bool ChunkedPointCloud::resize(unsigned newNumberOfPoints)
@@ -115,16 +103,21 @@ bool ChunkedPointCloud::resize(unsigned newNumberOfPoints)
         return false;
 
 	//then the scalarfields
-	for (unsigned i=0;i<m_scalarFields.size();++i)
+	for (size_t i=0; i<m_scalarFields.size(); ++i)
 	{
-		//if something fails, we restore everything!
 		if (!m_scalarFields[i]->resize(newNumberOfPoints))
         {
-			for (unsigned j=0;j<i;++j)
+			//if something fails, we restore the previous size for already processed SFs!
+			for (size_t j=0; j<i; ++j)
+			{
                 m_scalarFields[j]->resize(oldNumberOfPoints);
-            m_points->resize(oldNumberOfPoints);
+				m_scalarFields[j]->computeMinAndMax();
+			}
+			//we can assume that newNumberOfPoints > oldNumberOfPoints, so it should always be ok
+			m_points->resize(oldNumberOfPoints);
 			return false;
         }
+		m_scalarFields[i]->computeMinAndMax();
 	}
 
 	return true;
@@ -154,19 +147,27 @@ void ChunkedPointCloud::addPoint(const CCVector3 &P)
 
 void ChunkedPointCloud::applyTransformation(PointProjectionTools::Transformation& trans)
 {
-	unsigned i,count=size();
+    unsigned count = size();
+
+	//always apply the scale before everything (applying before or after rotation does not changes anything)
+    if (fabs(trans.s - 1.0) > ZERO_TOLERANCE)
+    {
+        for (unsigned i=0; i<count; ++i)
+            *point(i) *= trans.s;
+        m_validBB = false; //invalidate bb
+    }
 
     if (trans.R.isValid())
     {
-		for (i=0;i<count;++i)
-			trans.R.apply(m_points->getValue(i));
+        for (unsigned i=0; i<count; ++i)
+            trans.R.apply(point(i)->u);
         m_validBB = false;
     }
 
-    if (trans.T.norm() > ZERO_TOLERANCE)
+    if (trans.T.norm() > ZERO_TOLERANCE) //T applied only if it makes sense
     {
-		for (i=0;i<count;++i)
-			*point(i) += trans.T;
+        for (unsigned i=0; i<count; ++i)
+            *point(i) += trans.T;
         m_validBB = false;
     }
 }
@@ -197,13 +198,13 @@ bool ChunkedPointCloud::enableScalarField()
 		//(and assign) a scalar field to the cloud, or that we are in a compatibility
 		//mode with old/basic behaviour: a unique SF for everything (input/output)
 
-        //we look for any default scalar field already existing
-		m_currentInScalarFieldIndex = getScalarFieldIndexByName("DefaultScalarField");
+        //we look for any already existing "default" scalar field 
+		m_currentInScalarFieldIndex = getScalarFieldIndexByName("Default");
 		if (m_currentInScalarFieldIndex < 0)
 		{
             //if not, we create it
-            m_currentInScalarFieldIndex = addScalarField("DefaultScalarField",true); //DGM: positive or not by default?!
-            if (m_currentInScalarFieldIndex<0) //Something went wrong
+            m_currentInScalarFieldIndex = addScalarField("Default");
+            if (m_currentInScalarFieldIndex < 0) //Something went wrong
                 return false;
 		}
 
@@ -218,29 +219,23 @@ bool ChunkedPointCloud::enableScalarField()
 	return currentInScalarFieldArray->resize(m_points->capacity());
 }
 
-void ChunkedPointCloud::setPointScalarValue(unsigned pointIndex, DistanceType value)
+void ChunkedPointCloud::setPointScalarValue(unsigned pointIndex, ScalarType value)
 {
 	assert(m_currentInScalarFieldIndex>=0 && m_currentInScalarFieldIndex<(int)m_scalarFields.size());
-    //slow version
-//    ScalarField* currentInScalarFieldArray = getCurrentInScalarField();
-//    if (currentInScalarFieldArray)
-//        currentInScalarFieldArray->setValue(pointIndex,&value);
+	//slow version
+	//ScalarField* currentInScalarFieldArray = getCurrentInScalarField();
+	//if (currentInScalarFieldArray)
+	//	currentInScalarFieldArray->setValue(pointIndex,value);
 
     //fast version
     m_scalarFields[m_currentInScalarFieldIndex]->setValue(pointIndex,value);
 }
 
-DistanceType ChunkedPointCloud::getPointScalarValue(unsigned pointIndex) const
+ScalarType ChunkedPointCloud::getPointScalarValue(unsigned pointIndex) const
 {
 	assert(m_currentOutScalarFieldIndex>=0 && m_currentOutScalarFieldIndex<(int)m_scalarFields.size());
-    //slow version
-//    ScalarField* currentOutScalarFieldArray = getCurrentOutScalarField();
-//    if (currentOutScalarFieldArray)
-//        return *currentOutScalarFieldArray->getValue(pointIndex);
-//    return BIG_VALUE;
 
-    //fast version
-    return m_scalarFields[m_currentOutScalarFieldIndex]->getValue(pointIndex);
+	return m_scalarFields[m_currentOutScalarFieldIndex]->getValue(pointIndex);
 }
 
 ScalarField* ChunkedPointCloud::getScalarField(int index) const
@@ -253,23 +248,24 @@ const char* ChunkedPointCloud::getScalarFieldName(int index) const
     return (index>=0 && index<(int)m_scalarFields.size() ? m_scalarFields[index]->getName() : 0);
 }
 
-int ChunkedPointCloud::addScalarField(const char* uniqueName, bool isStrictlyPositive)
+int ChunkedPointCloud::addScalarField(const char* uniqueName)
 {
     //we don't accept two SF with the same name!
     if (getScalarFieldIndexByName(uniqueName)>=0)
         return -1;
 
 	//create requested scalar field
-    ScalarField* sf = new ScalarField(uniqueName,isStrictlyPositive);
+    ScalarField* sf = new ScalarField(uniqueName);
 	if (!sf)
 		return -1;
 
-	//we don't want 'm_scalarFields' to grow by 50% each time! (default behavior of std::vector::push_back)
 	try
 	{
-		m_scalarFields.push_back(sf);
+		//we don't want 'm_scalarFields' to grow by 50% each time! (default behavior of std::vector::push_back)
+		m_scalarFields.resize(m_scalarFields.size()+1);
+		m_scalarFields.back() = sf;
 	}
-	catch (.../*const std::bad_alloc&*/) //out of memory
+	catch (std::bad_alloc) //out of memory
 	{
 		sf->release();
 		return -1;
@@ -282,17 +278,14 @@ int ChunkedPointCloud::addScalarField(const char* uniqueName, bool isStrictlyPos
 
 void ChunkedPointCloud::deleteScalarField(int index)
 {
-	if (index<0 || m_scalarFields.empty())
-        return;
-
     int sfCount = (int)m_scalarFields.size();
-    if (index>=sfCount) //sfCount>0
+    if (index<0 || index>=sfCount)
         return;
 
     //we update SF roles if they point to the deleted scalar field
-    if (index==m_currentInScalarFieldIndex)
+    if (index == m_currentInScalarFieldIndex)
         m_currentInScalarFieldIndex = -1;
-    if (index==m_currentOutScalarFieldIndex)
+    if (index == m_currentOutScalarFieldIndex)
         m_currentOutScalarFieldIndex = -1;
 
     //if the deleted SF is not the last one, we swap it with the last element
@@ -301,13 +294,13 @@ void ChunkedPointCloud::deleteScalarField(int index)
     {
         std::swap(m_scalarFields[index],m_scalarFields[lastIndex]);
         //don't forget to update SF roles also if they point to the last element
-        if (lastIndex==m_currentInScalarFieldIndex)
+        if (lastIndex == m_currentInScalarFieldIndex)
             m_currentInScalarFieldIndex = index;
-        if (lastIndex==m_currentOutScalarFieldIndex)
+        if (lastIndex == m_currentOutScalarFieldIndex)
             m_currentOutScalarFieldIndex = index;
     }
 
-    //so we can always delete the last element (and the vector stays consistent)
+    //we can always delete the last element (and the vector stays consistent)
 	m_scalarFields.back()->release();
     m_scalarFields.pop_back();
 }
@@ -325,12 +318,12 @@ void ChunkedPointCloud::deleteAllScalarFields()
 
 int ChunkedPointCloud::getScalarFieldIndexByName(const char* name) const
 {
-    int i,sfCount=(int)m_scalarFields.size();
-    for (i=0;i<sfCount;++i)
+    size_t sfCount = m_scalarFields.size();
+    for (size_t i=0; i<sfCount; ++i)
     {
         //we don't accept two SF with the same name!
         if (strcmp(m_scalarFields[i]->getName(),name)==0)
-            return i;
+            return (int)i;
     }
 
 	return -1;

@@ -52,6 +52,15 @@ set( QXT_SOURCES ../libs/qxt/qxtspanslider.cpp )
 file( GLOB header_list *.h db_tree/*.h fileIO/*.h  ${QXT_HEADERS} )
 file( GLOB source_list *.cpp db_tree/*.cpp fileIO/*.cpp fileIO/*.c ${QXT_SOURCES} )
 
+# 3DX support (3dConnexion devices)
+if ( ${OPTION_SUPPORT_3DCONNEXION_DEVICES} )
+	#include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/devices/3dConnexion )
+	file( GLOB 3DX_header_list devices/3dConnexion/*.h )
+	file( GLOB 3DX_source_list devices/3dConnexion/*.cpp )
+	list( APPEND header_list ${3DX_header_list} )
+	list( APPEND source_list ${3DX_source_list} )
+endif()	
+
 # PDMS support
 if( ${OPTION_SUPPORT_MAC_PDMS_FORMAT} )
 	file( GLOB PDMS_header_list fileIO/PDMS/*.h )
@@ -97,6 +106,8 @@ target_link_liblas( ${PROJECT_NAME} ${CloudCompare_dest_release} )
 target_link_XIOT( ${PROJECT_NAME} ${CloudCompare_dest_release} ${CloudCompare_dest_debug} )
 # E57 support
 target_link_LIBE57( ${PROJECT_NAME} )
+# 3dConnexion devices support
+target_link_3DXWARE( ${PROJECT_NAME} )
 
 # Default preprocessors
 set_default_cc_preproc( ${PROJECT_NAME} )
@@ -105,12 +116,6 @@ set_default_cc_preproc( ${PROJECT_NAME} )
 set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS USE_GLEW GLEW_STATIC )
 if( WIN32 )
 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_USE_AS_DLL QCC_DB_USE_AS_DLL )
-endif()
-
-# ULT files support
-OPTION( OPTION_ULT_SUPPORT "Check to support ULT files" OFF )
-if( ${OPTION_ULT_SUPPORT} )
-	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_ULT_SUPPORT )
 endif()
 
 # PDMS support
@@ -131,15 +136,16 @@ endif()
 # install program
 install_ext( TARGETS ${PROJECT_NAME} ${CloudCompare_dest_release} ${CloudCompare_dest_debug} )
 
-# Export 'bilateral' shader files to all install destinations
+# Export common shader files to all install destinations
 if( APPLE )
    install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
    install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
+   install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag DESTINATION ${MAC_BUNDLE_SHADERS_DIR}/ColorRamp )
 else()
    install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${CloudCompare_dest_release}/shaders ${CloudCompare_dest_debug}/shaders )
    install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${CloudCompare_dest_release}/shaders ${CloudCompare_dest_debug}/shaders )
+   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CloudCompare_dest_release}/shaders/ColorRamp ${CloudCompare_dest_debug}/shaders/ColorRamp )
 endif()
-
 
 # Auxiliary files
 set( auxFiles bin_other/history.txt bin_other/license.txt )

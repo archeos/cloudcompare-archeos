@@ -50,10 +50,13 @@ public:
 	virtual bool hasMaterials() const;
 	virtual bool interpolateNormals(unsigned triIndex, const CCVector3& P, CCVector3& N);
 	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, colorType rgb[]);
-	virtual bool getColorFromTexture(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture);
+	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture);
+	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, colorType rgb[], bool returnColorIfNoTexture);
+	virtual void getTriangleTexCoordinates(unsigned triIndex, float* &tx1, float* &tx2, float* &tx3) const;
 
 	//inherited methods (ccHObject)
     virtual void addChild(ccHObject* anObject, bool dependant = true);
+	virtual bool isDisplayed() const;
 
 	//inherited methods (ccDrawableObject)
     virtual void setVisible(bool state);
@@ -73,7 +76,7 @@ public:
 	virtual CCLib::TriangleSummitsIndexes* getNextTriangleIndexes();
 	virtual CCLib::TriangleSummitsIndexes* getTriangleIndexes(unsigned triangleIndex);
 	virtual void getTriangleSummits(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C);
-    virtual void getBoundingBox(PointCoordinateType Mins[], PointCoordinateType Maxs[]);
+    virtual void getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[]);
 	virtual void shiftTriangleIndexes(unsigned shift);
 	virtual void setAssociatedCloud(ccGenericPointCloud* cloud);
 

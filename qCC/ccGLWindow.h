@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2208                                                              $
-//$LastChangedDate:: 2012-07-17 12:26:31 +0200 (mar., 17 juil. 2012)       $
-//**************************************************************************
-//
 
 #ifndef CC_GL_WINDOW_HEADER
 #define CC_GL_WINDOW_HEADER
@@ -33,29 +26,30 @@
 #include <ccGLMatrix.h>
 #include <ccDrawableObject.h>
 #include <ccGenericGLDisplay.h>
+#include <ccGLUtils.h>
 
 //qCC
 #include "ccCommon.h"
-#include "ccGLUtils.h"
 
 //Qt
 #include <QFont>
 
-//! OpenGL picking buffer size (= max number of entity per 'OpenGL' selection)
+//system
+#include <set>
+#include <list>
+
+//! OpenGL picking buffer size (= max hits number per 'OpenGL' selection pass)
 #define CC_PICKING_BUFFER_SIZE 65536
 
 class ccHObject;
 class ccBBox;
 class ccCalibratedImage;
 class ccShader;
+class ccColorRampShader;
 class ccGlFilter;
 class ccFrameBufferObject;
-class cc2DLabel;
-class QGLPixelBuffer;
-
-#ifdef CC_USE_DB_ROOT_AS_SCENE_GRAPH
-class ccDBRoot;
-#endif
+class ccInteractor;
+class ccPolyline;
 
 //! OpenGL 3D view
 class ccGLWindow : public QGLWidget, public ccGenericGLDisplay
@@ -67,7 +61,8 @@ public:
 	//! Picking mode
 	enum PICKING_MODE { NO_PICKING,
 						ENTITY_PICKING,
-						LABELS_PICKING,
+						ENTITY_RECT_PICKING,
+						FAST_PICKING,
 						POINT_PICKING,
 						TRIANGLE_PICKING,
 						AUTO_POINT_PICKING,
@@ -96,6 +91,12 @@ public:
 						MANUAL_SEGMENTATION_MESSAGE,
 	};
 
+	//! Pivot symbol visibility
+	enum PivotVisibility {  PIVOT_HIDE,
+							PIVOT_SHOW_ON_MOVE,
+							PIVOT_ALWAYS_SHOW,
+	};
+
 	//! Default constructor
     ccGLWindow(QWidget *parent = 0, const QGLFormat& format=QGLFormat::defaultFormat(), QGLWidget* shareWidget = 0);
 	//! Default destructor
@@ -110,7 +111,6 @@ public:
     //inherited from ccGenericGLDisplay
     virtual void toBeRefreshed();
     virtual void refresh();
-    //virtual void redraw();
     virtual void invalidateViewport();
     virtual unsigned getTexture(const QImage& image);
     virtual void releaseTexture(unsigned texID);
@@ -134,37 +134,123 @@ public:
 									int displayMaxDelay_sec=2,
 									MessageType type=CUSTOM_MESSAGE);
 
-    virtual void setZoom(float value);
-    virtual void setPivotPoint(float x, float y, float z);
-    //virtual void setCameraPos(float x, float y, float z);
-
-    virtual void setSunLight(bool state);
+	//! Activates sun light
+	virtual void setSunLight(bool state);
+	//! Toggles sun light
     virtual void toggleSunLight();
+	//! Returns whether sun light is enabled or not
 	virtual bool sunLightEnabled() const {return m_sunLightEnabled;}
+	//! Activates custom light
     virtual void setCustomLight(bool state);
+	//! Toggles custom light
     virtual void toggleCustomLight();
+	//! Returns whether custom light is enabled or not
 	virtual bool customLightEnabled() const {return m_customLightEnabled;}
 
-    virtual void setPerspectiveState(bool state, bool objectCenteredPerspective);
-    virtual void togglePerspective(bool objectCentered);
-    virtual bool getPerspectiveState(bool& objectCentered) const;
+	//! Sets current zoom
+	/** Warning: has no effect in viewer-centered perspective mode
+	**/
+    virtual void setZoom(float value);
 
-    //external camera control
-    virtual void rotateViewMat(const ccGLMatrix& rotMat);
+	//! Updates current zoom
+	/** Warning: has no effect in viewer-centered perspective mode
+	**/
     virtual void updateZoom(float zoomFactor);
-	virtual void setScreenPan(float tx, float ty);
-    virtual void updateScreenPan(float dx, float dy); //dx and dy are added to actual screen pan!
+
+	//! Sets pivot visibility
+	virtual void setPivotVisibility(PivotVisibility vis);
+
+	//! Returns pivot visibility
+	virtual PivotVisibility getPivotVisibility() const;
+
+	//! Shows or hide the pivot symbol
+	/** Warnings:
+		- not to be mistaken with setPivotVisibility
+		- only taken into account if pivot visibility is set to PIVOT_SHOW_ON_MOVE
+	**/
+	virtual void showPivotSymbol(bool state);
+
+	//! Sets pivot point
+    virtual void setPivotPoint(const CCVector3& P);
+
+	//! Sets camera position
+    virtual void setCameraPos(const CCVector3& P);
+
+	//! Displaces camera
+	/** Values are given in objects world along the current camera
+		viewing directions (we use the right hand rule):
+		* X: horizontal axis (right)
+		* Y: vertical axis (up)
+		* Z: depth axis (pointing out of the screen)
+	**/
+	virtual void moveCamera(float dx, float dy, float dz);
+
+	//! Set perspective state/mode
+	/** Persepctive mode can be:
+		- object-centered (moving the mouse make the object rotate)
+		- viewer-centered (moving the mouse make the camera move)
+		\param state whether perspective mode is enabled or not
+		\param objectCenteredView whether view is object- or viewer-centered (forced to true in ortho. mode)
+	**/
+    virtual void setPerspectiveState(bool state, bool objectCenteredView);
+
+	//! Toggles perspective mode
+	/** If perspective is activated, the user must specify if it should be
+		object or viewer based (see setPerspectiveState)
+	**/
+    virtual void togglePerspective(bool objectCentered);
+	
+	//! Returns perspective mode
+    virtual bool getPerspectiveState(bool& objectCentered) const;
+	
+	//! Shortcut: returns whether object-based perspective mode is enabled
+    virtual bool objectPerspectiveEnabled() const;
+	//! Shortcut: returns whether viewer-based perspective mode is enabled
+    virtual bool viewerPerspectiveEnabled() const;
+
+	//! Center and zoom on a given bounding box
+	/** If no bounding box is defined, the current displayed 'scene graph'
+		bounding box is taken.
+	**/
     virtual void updateConstellationCenterAndZoom(const ccBBox* aBox = 0);
 
-    virtual const ccGLMatrix& getBaseModelViewMat();
-    virtual const void setBaseModelViewMat(ccGLMatrix& mat);
+    //! Rotates the base view matrix
+	/** Warning: 'base view' marix is either:
+		- the rotation around the object in object-centered mode
+		- the rotation around the camera center in viewer-centered mode
+		(see setPerspectiveState).
+	**/
+    virtual void rotateBaseViewMat(const ccGLMatrix& rotMat);
+
+	//! Returns the base view matrix
+	/** Warning: 'base view' marix is either:
+		- the rotation around the object in object-centered mode
+		- the rotation around the camera center in viewer-centered mode
+		(see setPerspectiveState).
+	**/
+    virtual const ccGLMatrix& getBaseViewMat();
+	
+	//! Sets the base view matrix
+	/** Warning: 'base view' marix is either:
+		- the rotation around the object in object-centered mode
+		- the rotation around the camera center in viewer-centered mode
+		(see setPerspectiveState).
+	**/
+    virtual const void setBaseViewMat(ccGLMatrix& mat);
+
+	//! Returns the current (OpenGL) view matrix as a double array
+	/** Warning: different from 'view' matrix returned by getBaseViewMat.
+	**/
     virtual const double* getModelViewMatd();
+	//! Returns the current (OpenGL) projection matrix as a double array
     virtual const double* getProjectionMatd();
+	//! Returns the current viewport (OpenGL int[4] array)
     virtual void getViewportArray(int vp[/*4*/]);
 
+	//! Sets camera to a predefined view (top, bottom, etc.)
     virtual void setView(CC_VIEW_ORIENTATION orientation, bool redraw=true);
 
-	//! Set interaction mode
+	//! Sets current interaction mode
 	virtual void setInteractionMode(INTERACTION_MODE mode);
 
 	//! Sets current picking mode
@@ -179,16 +265,18 @@ public:
     virtual void getContext(CC_DRAW_CONTEXT& context);
 
     //! Sets point size
-    /** \param size point size (between 1 and 10)
+    /** \param size point size (typically between 1 and 10)
     **/
     virtual void setPointSize(float size);
 
     //! Sets line width
-    /** \param width width (between 1 and 10)
+    /** \param width lines width (typically between 1 and 10)
     **/
     virtual void setLineWidth(float width);
 
+	//! Returns current font size
     virtual int getFontPointSize() const;
+	//! Sets current font size
     virtual void setFontPointSize(int pixelSize);
 
 	//! Returns window own DB (2D objects only)
@@ -201,13 +289,18 @@ public:
 	//! Sets viewport parameters (all at once)
 	virtual void setViewportParameters(const ccViewportParameters& params);
 
-    virtual void applyImageViewport(ccCalibratedImage* theImage);
+	//! Applies the same camera parameters as a given calibrated image
+    virtual void applyImageViewport(ccCalibratedImage* image);
+	
+	//! Sets current camera f.o.v. (field of view)
+	/** FOV is only used in perspective mode.
+	**/
     virtual void setFov(float fov);
 
+	//! Invalidate current visualization state
+	/** Forces view matrix update and 3D/FBO display.
+	**/
     virtual void invalidateVisualization();
-
-    //! Returns camera position (taking zoom into account if centered perspective is 'on')
-    virtual CCVector3 computeCameraPos() const;
 
     virtual bool renderToFile(const char* filename, float zoomFactor=1.0, bool dontScaleFeatures=false);
 
@@ -217,10 +310,19 @@ public:
     virtual bool areShadersEnabled() const;
     virtual bool areGLFiltersEnabled() const;
 
-    virtual float computeTotalZoom() const;
-
 	//! Enables "embedded icons"
 	virtual void enableEmbeddedIcons(bool state);
+
+	//! Returns the actual pixel size on screen (taking zoom or perspective parameters into account)
+	/** In perspective mode, this value is approximate.
+	**/
+	virtual float computeActualPixelSize() const;
+
+	//! Returns the zoom value equivalent to the current camera position (perspective only)
+	float computePerspectiveZoom() const;
+
+	//! Returns whether the ColorRamp shader is supported or not
+	bool hasColorRampShader() const { return m_colorRampShader != 0; }
 
 public slots:
     void zoomGlobal();
@@ -229,10 +331,15 @@ public slots:
 	//inherited from ccGenericGLDisplay
     virtual void redraw();
 
+	//called when recieving muse wheel is rotated
+	void onWheelEvent(float wheelDelta_deg);
+
 signals:
 
 	//! Signal emitted when an entity is selected in the 3D view
     void entitySelectionChanged(int uniqueID);
+	//! Signal emitted when multiple entities are selected in the 3D view
+	void entitiesSelectionChanged(std::set<int> entIDs);
 
     //! Signal emitted in point picking mode to declare picking of a given point
     /** \param cloudUniqueID cloud unique ID
@@ -242,20 +349,26 @@ signals:
     **/
     void pointPicked(int cloudUniqueID, unsigned pointIndex, int x, int y);
 
-	//! Signal emitted when the window base view matrix is changed
-    void viewMatRotated(const ccGLMatrix& rotMat);
+	/*** Camera link mode (interactive modifications of the view/camera are echoed to other windows) ***/
 
-	//! Signal emitted when the window base view matrix is changed
-    void baseViewMatChanged(const ccGLMatrix& newBaseViewMat);
+	//! Signal emitted when the window 'model view' matrix is interactively changed
+    void viewMatRotated(const ccGLMatrix& rotMat);
+	//! Signal emitted when the camera is interactively displaced
+    void cameraDisplaced(float ddx, float ddy);
+	//! Signal emitted when the mouse wheel is rotated
+    void mouseWheelRotated(float wheelDelta_deg);
+
+	//! Signal emitted when the perspective state changes (see setPerspectiveState)
+	void perspectiveStateChanged();
+
+	//! Signal emitted when the window 'base view' matrix is changed
+    void baseViewMatChanged(const ccGLMatrix& newViewMat);
 
 	//! Signal emitted when the pivot point is changed
 	void pivotPointChanged(const CCVector3&);
 
-	//! Signal emitted when the window view is zoomed
-    void zoomChanged(float zoomFactor);
-
-    //! Signal emitted when the window view is panned
-    void panChanged(float ddx, float ddy);
+	//! Signal emitted when the camera position is changed
+	void cameraPosChanged(const CCVector3&);
 
     //! Signal emitted when the selected object is translated by the user
     void translation(const CCVector3& t);
@@ -307,7 +420,7 @@ protected:
     void mousePressEvent(QMouseEvent *event);
     void mouseMoveEvent(QMouseEvent *event);
     void mouseReleaseEvent(QMouseEvent *event);
-    void wheelEvent(QWheelEvent* event);
+    void wheelEvent(QWheelEvent *event);
     void closeEvent(QCloseEvent *event);
 
     //inherited
@@ -320,7 +433,7 @@ protected:
 
     //Graphical features controls
     void drawCross();
-    void drawAxis();
+    void drawTrihedron();
     void drawGradientBackground();
     void drawScale(const colorType color[] = ccColor::white);
 
@@ -330,12 +443,15 @@ protected:
     void setStandardOrthoCenter();
     void setStandardOrthoCorner();
 
-    //Lights controls
+    //Lights controls (OpenGL scripts)
     void glEnableSunLight();
     void glDisableSunLight();
     void glEnableCustomLight();
     void glDisableCustomLight();
-    void displayCustomLight();
+    void drawCustomLight();
+
+	//! Draws pivot point symbol in 3D
+	void drawPivot();
 
 	//! Stops frame rate test
 	void stopFrameRateTest();
@@ -344,34 +460,33 @@ protected:
 	virtual void dragEnterEvent(QDragEnterEvent* event);
 	virtual void dropEvent(QDropEvent* event);
 
-    //! Returns viewing direction (according to base view matrix)
-    CCVector3 getBaseViewMatDir() const;
+    //! Returns current viewing direction
+	/** This is the direction normal to the screen
+		(pointing 'inside') in world base.
+	**/
+    CCVector3 getCurrentViewDir() const;
 
     //! Starts OpenGL picking process
-	/** \param cursorX cursor x position
-		\param cursorY cursor y position
-		\param mode picking mode
+	/** \param mode picking mode
+		\param centerX picking area center X position
+		\param centerY picking area center y position
+		\param width picking area width
+		\param height picking area height
+	`	\param[out] [optional] poiter to store sub item ID (if any - <1 otherwise)
 		\return item ID (if any) or <1 otherwise
 	**/
-    int startPicking(int cursorX, int cursorY, PICKING_MODE mode);
+    int startPicking(PICKING_MODE mode, int centerX, int centerY, int width=5, int height=5, int* subID=0);
 	
-	//! Processes hits in selection mode buffer (GL_SELECT)
-	/** \param hits number of hits returned by glRenderMode after 'names' rendering
-		\param[out] entID entity unique ID (or -1 if none found)
-		\param[out] subCompID entity sub-component ID (or -1 if none found)
-	**/
-    void processHits(GLint hits, int& entID, int& subCompID);
-
-	//! Updates currently active labels list (m_activeLabels)
-	/** The labels must be currently displayed in this context
+	//! Updates currently active items list (m_activeItems)
+	/** The items must be currently displayed in this context
 		AND at least one of them must be under the mouse cursor.
 	**/
-	void updateActiveLabelsList(int x, int y, bool extendToSelectedLabels=false);
+	void updateActiveItemsList(int x, int y, bool extendToSelectedLabels=false);
 
-	//! Currently active labels
-	/** Active labels can be moved with mouse, etc.
+	//! Currently active items
+	/** Active items can be moved with mouse, etc.
 	**/
-	std::vector<cc2DLabel*> m_activeLabels;
+	std::list<ccInteractor*> m_activeItems;
 
 	//! Inits FBO (frame buffer object)
     bool initFBO(int w, int h);
@@ -383,6 +498,25 @@ protected:
 	//! Releases active GL filter
     void removeGLFilter();
 
+	/***************************************************
+                    OpenGL Extensions
+	***************************************************/
+
+    //! Loads all available OpenGL extensions
+    static bool InitGLEW();
+
+    //! Checks for availability of a given OpenGL extension
+    static bool CheckExtension(const char *extName);
+
+    //! Shortcut: checks Shaders support
+    static bool CheckShadersAvailability();
+
+    //! Shortcut: checks FBO support
+    static bool CheckFBOAvailability();
+
+	//! Shortcut: checks VBO support
+    static bool CheckVBOAvailability();
+
 	//! GL names picking buffer
     GLuint m_pickingBuffer[CC_PICKING_BUFFER_SIZE];
 
@@ -392,13 +526,14 @@ protected:
 	//! Initialization state
     bool m_initialized;
 
+	//! Trihedron GL list
+	GLuint m_trihedronGLList;
+
+	//! Pivot center GL list
+	GLuint m_pivotGLList;
+
 	//! Viewport parameters (zoom, etc.)
 	ccViewportParameters m_params;
-
-    //! Default font size
-    int m_defaultFontPixelSize;
-	//! Pivot point backup
-	CCVector3 m_pivotPointBackup;
 
     //! Last mouse position
     QPoint m_lastMousePos;
@@ -493,6 +628,9 @@ protected:
 	//! Whether FBO should be updated (or simply displayed as a texture = faster!)
 	bool m_updateFBO;
 
+	// Color ramp shader
+	ccColorRampShader* m_colorRampShader;
+
     //! Active GL filter
     ccGlFilter* m_activeGLFilter;
 	//! Whether GL filters are enabled or not
@@ -504,14 +642,22 @@ protected:
     //! CC main DB
     ccHObject* m_globalDBRoot;
 
-	//! Associated VBO (vertex buffer object)
-	vboStruct m_vbo;
-
 	//! Default font
 	QFont m_font;
    
+	//! Pivot symbol visibility
+	PivotVisibility m_pivotVisibility;
+
+	//! Whether pivot symbol should be shown or not
+	bool m_pivotSymbolShown;
+
+	//! Rectangular picking polyline
+	ccPolyline* m_rectPickingPoly;
+
 private:
-   static QString  getShadersPath();
+
+	//! Returns shaders path
+	static QString getShadersPath();
 };
 
 #endif

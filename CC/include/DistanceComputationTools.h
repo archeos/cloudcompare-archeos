@@ -69,7 +69,7 @@ public:
 		/** Set to -1 to deactivate (default).
 			Not compatible with closest point set determination (see CPSet).
 		**/
-		DistanceType maxSearchDist;
+		ScalarType maxSearchDist;
 
 		//! Whether to use multi-thread or single thread mode
 		/** If maxSearchDist>=0, single thread mode is forced.
@@ -96,7 +96,7 @@ public:
 		/** For local models only (i.e. ignored if localModel = NO_MODEL).
 			Ignored if useSphericalSearchForLocalModel is true.
 		**/
-		DistanceType radiusForLocalModel;
+		ScalarType radiusForLocalModel;
 
 		//! Whether to use an approximation for local model computation
 		/** For local models only (i.e. ignored if localModel = NO_MODEL).
@@ -129,7 +129,7 @@ public:
 		Daniel Girardeau-Montaut's PhD manuscript (Chapter 2, section 2.3). It is the standard way to compare
 		directly two dense (and globally close) point clouds.
 		Warning: the current scalar field  of the compared cloud should be enabled and initialized either to
-		HIDDEN_VALUE (-1) or to an approximated distance (strictly bigger than the true distance!).
+		HIDDEN_VALUE or to an approximated distance (strictly bigger than the actual distance!).
 		\param comparedCloud the compared cloud (the distances will be computed on these points)
 		\param referenceCloud the reference cloud (the distances will be computed relatively to these points)
 		\param params distance computation parameters
@@ -164,7 +164,7 @@ public:
 	static int computePointCloud2MeshDistance(GenericIndexedCloudPersist* pointCloud,
                                                 GenericIndexedMesh* theMesh,
                                                 uchar octreeLevel,
-                                                DistanceType maxSearchDist=-1.0,
+                                                ScalarType maxSearchDist=-1.0,
                                                 bool useDistanceMap=false,
                                                 bool signedDistances=false,
                                                 bool flipNormals=false,
@@ -181,32 +181,14 @@ public:
 		\param signedDist whether to compute the signed or positive (SQUARED) distance
 		\return the distance between the point and the triangle
 	**/
-	static DistanceType computePoint2TriangleDistance(const CCVector3* P, const GenericTriangle* theTriangle, bool signedDist);
+	static ScalarType computePoint2TriangleDistance(const CCVector3* P, const GenericTriangle* theTriangle, bool signedDist);
 
 	//! Computes the distance between a point and a plane
     /** \param P a 3D point
-		\param aPlane a plane (an array of size 4, composed of [a,b,c,d] as in the plane equation ax+by+cz=d)
-		\return the distance between the point and the plane (or HIDDEN_VALUE if plane normal (a,b,c) is too small)
+		\param planeEquation plane equation: [a,b,c,d] as 'ax+by+cz=d'
+		\return the distance between the point and the plane (or NaN if plane normal (a,b,c) is too small)
 	**/
-	static DistanceType computePoint2PlaneDistance(const CCVector3* P, const PointCoordinateType* aPlane);
-
-	//! Computes the mean distance of a cloud
-	/** Returns the mean of the positive scalar values associated to each point
-		Warning: be sure to activate an OUTPUT scalar field on the input cloud
-		\param theCloud the point cloud
-		\param includeNegValues specifies whether negative values should be included in computation
-		\return the associated scalar field mean value
-	**/
-	static DistanceType computeMeanDist(GenericCloud* theCloud, bool includeNegValues = false);
-
-    //! Computes the mean square distance of a cloud
-	/** Returns the mean of the square of the positive scalar values associated to each point
-		Warning: be sure to activate an OUTPUT scalar field on the input cloud
-		\param theCloud the point cloud
-		\param includeNegValues specifies whether negative values should be included in computation
-		\return the associated scalar field mean value
-    **/
-	static DistanceType computeMeanSquareDist(GenericCloud* theCloud, bool includeNegValues = false);
+	static ScalarType computePoint2PlaneDistance(const CCVector3* P, const PointCoordinateType* planeEquation);
 
 	/*** OTHER METHODS ***/
 
@@ -216,38 +198,37 @@ public:
 		but more memory will be needed. Moreover, for interesting results, the cells size should be
 		not too small in order to avoid creating holes in the approximated surface (the propagation will
 		be stoped).
-		\param theCloud the point cloud
+		\param cloud the point cloud
 		\param seedPointIndex the index of the point from where to start the propagation
 		\param octreeLevel the octree at which to perform the Fast Marching propagation
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
 		\return true if the method succeeds
 	**/
-	static bool computeGeodesicDistances(GenericIndexedCloudPersist* theCloud, unsigned seedPointIndex, uchar octreeLevel, GenericProgressCallback* progressCb=0);
+	static bool computeGeodesicDistances(GenericIndexedCloudPersist* cloud, unsigned seedPointIndex, uchar octreeLevel, GenericProgressCallback* progressCb=0);
 
 	//! Computes the differences between two scalar fields associated to equivalent point clouds
 	/** The compared cloud should be smaller or equal to the reference cloud. Its points should be at the same
 		position in place as their equivalents in the other cloud. The algorithm perform a simple difference
 		between the scalar values associated to each couple of equivalent points. The result is stored in a
-		the active scalar field (input) of the comparedCloud. As it is a difference between values that can be
-		positive or not, this scalar field shouldn't be only positive. Moreover, the output scalar field should
+		the active scalar field (input) of the comparedCloud. Moreover, the output scalar field should
 		be different from the input scalar field !
 		Warning: be sure to activate an OUTPUT scalar field on both input clouds
 		\param comparedCloud the compared cloud
 		\param referenceCloud the reference cloud
-		\param comparedSFisPositive specifies if the compared cloud scalar field (output) is strictly positive or not
-		\param referenceSFisPositive specifies if the reference cloud scalar field (output) is strictly positive or not
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
 	**/
-	static int diff(GenericIndexedCloudPersist* comparedCloud, GenericIndexedCloudPersist* referenceCloud, bool comparedSFisPositive, bool referenceSFisPositive, GenericProgressCallback* progressCb=0);
+	static int diff(GenericIndexedCloudPersist* comparedCloud,
+					GenericIndexedCloudPersist* referenceCloud,
+					GenericProgressCallback* progressCb=0);
 
 	//! Computes the mean distance between a cloud and a plane
 	/** Sums the distances between each point of the cloud and the plane, then computes the mean value.
 		WARNING: this method uses the cloud global iterator
-		\param theCloud a point cloud
-		\param thePlaneEquation a plane equation (4 values: ax+by+cz=d)
-		\return the mean distance
+		\param cloud a point cloud
+		\param planeEquation plane equation: [a,b,c,d] as 'ax+by+cz=d'
+		\return the mean distance (or NaN if an error occured)
 	**/
-	static DistanceType computeCloud2PlaneDistance(GenericCloud* theCloud, const PointCoordinateType* thePlaneEquation);
+	static ScalarType computeCloud2PlaneDistance(GenericCloud* cloud, const PointCoordinateType* planeEquation);
 
 	//! Computes the Chamfer distances (approximated distances) between two point clouds
 	/** This methods uses a 3D grid to perfrom the Chamfer Distance propagation.
@@ -302,7 +283,7 @@ protected:
                                                                 uchar octreeLevel,
 																bool signedDistances,
 																bool flipTriangleNormals/*=false*/,
-                                                                DistanceType maxSearchDist=-1.0,
+                                                                ScalarType maxSearchDist=-1.0,
                                                                 GenericProgressCallback* progressCb=0);
 
 #ifdef ENABLE_CLOUD2MESH_DIST_MT

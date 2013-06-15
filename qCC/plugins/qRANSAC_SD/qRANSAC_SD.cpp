@@ -126,6 +126,7 @@ void qRansacSD::doAction()
 	bool hasNorms = pc->hasNormals();
     PointCoordinateType bbMin[3],bbMax[3];
     pc->getBoundingBox(bbMin,bbMax);
+	const double* originalShift = pc->getOriginalShift();
 
     //Convert CC point cloud to RANSAC_SD type
 	PointCloud cloud;
@@ -349,7 +350,7 @@ void qRansacSD::doAction()
         for (unsigned i=0;i<shapes.size();++i)
         {
             PrimitiveShape* shape = shapes[i].first;
-            unsigned shapePointsCount = shapes[i].second;
+            size_t shapePointsCount = shapes[i].second;
 
             std::string desc;
             shape->Description(&desc);
@@ -411,6 +412,8 @@ void qRansacSD::doAction()
 			pcShape->showColors(true);
 			pcShape->showNormals(saveNormals);
 			pcShape->setVisible(true);
+			if (originalShift)
+				pcShape->setOriginalShift(originalShift[0],originalShift[1],originalShift[2]);
 
 			//convert detected primitive into a CC primitive type
 			ccGenericPrimitive* prim = 0;

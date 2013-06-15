@@ -20,32 +20,6 @@
 //system
 #include <string.h>
 
-/***********************/
-/*      vboStruct      */
-/***********************/
-
-vboStruct::vboStruct()
-	: enabled(false)
-	, idVert(0)
-	, idInd(0)
-	, buffer(0)
-{
-}
-
-void vboStruct::clear()
-{
-	if (buffer)
-		delete[] buffer;
-}
-
-void vboStruct::init()
-{
-	if (buffer)
-		delete[] buffer;
-	//vertices & features table
-	buffer = new unsigned char[3*maxSize()*elemSize()];
-}
-
 /******************************/
 /*      ccDrawableObject      */
 /******************************/
@@ -284,14 +258,14 @@ void ccDrawableObject::getDrawingParameters(glDrawParams& params) const
 	if (isColorOverriden())
 	{
 		params.showColors=true;
-		params.showNorms=false;
+		params.showNorms=hasNormals() && normalsShown()/*false*/;
 		params.showSF=false;
 	}
 	else
 	{
-        params.showNorms = hasNormals() &&  normalsShown();
-        //colors are not displayed if scalar field is displayed
+        params.showNorms = hasNormals() && normalsShown();
         params.showSF = hasDisplayedScalarField() && sfShown();
+        //colors are not displayed if scalar field is displayed
         params.showColors = !params.showSF && hasColors() && colorsShown();
 	}
 }

@@ -101,9 +101,9 @@ public:
     unsigned filterChildren(Container& filteredChildren, bool recursive=false, CC_CLASS_ENUM filter = CC_OBJECT) const;
 
     //! Removes a specific child
-    void removeChild(const ccHObject* anObject);
+    void removeChild(const ccHObject* anObject, bool preventAutoDelete = false);
     //! Removes a specific child given its index
-    void removeChild(int pos);
+    void removeChild(int pos, bool preventAutoDelete = false);
     //! Removes all children
     void removeAllChildren();
     //! Returns child index
@@ -132,6 +132,12 @@ public:
     //Inherited from ccDrawableObject
     virtual ccBBox getBB(bool relative=true, bool withGLfeatures=false, const ccGenericGLDisplay* window=NULL);
     virtual void draw(CC_DRAW_CONTEXT& context);
+
+	//! Returns whether the object is actually displayed (visible) or not
+	virtual bool isDisplayed() const;
+
+	//! Returns whether the object and all its ancestors are enabled
+	virtual bool isBranchEnabled() const;
 
 	/*** RECURSIVE CALL SCRIPTS ***/
 	
@@ -290,7 +296,7 @@ protected:
 /*** Helpers ***/
 
 //! standard ccHObject container (for children, etc.)
-static void RemoveSiblings(const ccHObject::Container& origin, ccHObject::Container& dest)
+inline void RemoveSiblings(const ccHObject::Container& origin, ccHObject::Container& dest)
 {
 	size_t count = origin.size();
 	for (size_t i=0;i<count;++i)

@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2275                                                              $
-//$LastChangedDate:: 2012-10-17 23:30:43 +0200 (mer., 17 oct. 2012)        $
-//**************************************************************************
-//
 
 #ifndef CC_MAIN_WINDOW_HEADER
 #define CC_MAIN_WINDOW_HEADER
@@ -50,12 +43,14 @@
 
 class QMdiArea;
 class QSignalMapper;
+class QToolButton;
 class QAction;
 class ccGLWindow;
 class ccHObject;
 class ccComparisonDlg;
 class ccGraphicalSegmentationTool;
 class ccGraphicalTransformationTool;
+class ccClippingBoxTool;
 class ccPluginInterface;
 class ccStdPluginInterface;
 class ccPointPropertiesDlg;
@@ -66,8 +61,7 @@ class ccPrimitiveFactoryDlg;
 class ccDrawableObject;
 class ccOverlayDialog;
 class QMdiSubWindow;
-
-//class MainWindow 
+class Mouse3DInput;
 
 //! Main window
 class MainWindow : public QMainWindow, public ccMainAppInterface, public Ui::MainWindow
@@ -202,12 +196,20 @@ protected slots:
     virtual void setBackView();
     virtual void setLeftView();
     virtual void setRightView();
+	virtual void setIsoView1();
+	virtual void setIsoView2();
     virtual void toggleActiveWindowCenteredPerspective();
     virtual void toggleActiveWindowCustomLight();
     virtual void toggleActiveWindowSunLight();
     virtual void toggleActiveWindowViewerBasedPerspective();
     virtual void zoomOnSelectedEntities();
-	
+	virtual void setPivotAlwaysOn();
+	virtual void setPivotRotationOnly();
+	virtual void setPivotOff();
+	virtual void setOrthoView();
+	virtual void setCenteredPerspectiveView();
+	virtual void setViewerPerspectiveView();
+
 	// For rotation center picking
 	virtual void doPickRotationCenter();
 	virtual void cancelPickRotationCenter();
@@ -229,11 +231,14 @@ protected slots:
     void toggleFullScreen(bool state);
     void update3DViewsMenu();
     void updateMenus();
+	void on3DViewActivated(QMdiSubWindow*);
     void updateUIWithSelection();
-    void updateWindowZoomChange(float zoomFactor);
-    void updateWindowPanChange(float ddx, float ddy);
-    void updateWindowOnViewMatRotation(const ccGLMatrix& rotMat);
-    void toggleSelectedEntitiesVisibility();
+
+	void echoMouseWheelRotate(float);
+    void echoCameraDisplaced(float ddx, float ddy);
+    void echoBaseViewMatRotation(const ccGLMatrix& rotMat);
+
+	void toggleSelectedEntitiesVisibility();
     void toggleSelectedEntitiesNormals();
     void toggleSelectedEntitiesColors();
     void toggleSelectedEntitiesSF();
@@ -252,6 +257,7 @@ protected slots:
     void doActionSFBilateralFilter();
     void doActionSFConvertToRGB();
 	void doActionRenameSF();
+	void doActionOpenColorScalesManager();
 
 	void doComputeDensity();
     void doComputeCurvature();
@@ -272,6 +278,7 @@ protected slots:
     void doActionSubsample(); //Aurelien BEY le 4/12/2008
     void doActionStatisticalTest();
     void doActionSamplePoints();
+    void doActionConvertTextureToColor();
     void doActionLabelConnectedComponents();
     void doActionComputeStatParams();
     void doActionFilterByValue();
@@ -281,6 +288,7 @@ protected slots:
     void doActionEnhanceMeshSF();
 	void doActionAddConstantSF();
     void doActionScalarFieldArithmetic();
+    void doActionScalarFieldFromColor();
     void doActionClearColor();
     void doActionResolveNormalsDirection();
     void doActionClearNormals();
@@ -296,6 +304,7 @@ protected slots:
     void doActionKMeans();
     void doActionFrontPropagation();
     void doActionMultiply();
+	void doActionEditGlobalShift();
     void doActionSynchronize();
     void doActionUnroll();
     void doActionProjectSensor();
@@ -313,6 +322,10 @@ protected slots:
 	void doActionSaveViewportAsCamera();
 
     void doEnableGLFilter();
+
+	//Clipping box
+	void activateClippingBoxMode();
+	void deactivateClippingBoxMode(bool);
 
     //Graphical transformation
     void activateTranslateRotateMode();
@@ -348,6 +361,14 @@ protected slots:
 	void doActionToggleActiveSFColorScale();
 	void doActionShowActiveSFPrevious();
 	void doActionShowActiveSFNext();
+
+	//3D mouse
+	void on3DMouseMove(std::vector<float>&);
+	void on3DMouseKeyUp(int);
+	void on3DMouseKeyDown(int);
+
+	//! Setups 3D mouse (if any)
+	void setup3DMouse(bool);
 
 protected:
 
@@ -417,7 +438,21 @@ protected:
 
 	//! Expands DB tree for selected items
 	void expandDBTreeWithSelection(ccHObject::Container& selection);
+	
+	//! Releases any connected 3D mouse (if any)
+	void release3DMouse();
 
+	//! Trys to enable (or disable) a 3D mouse device
+	/** \param state whether to enable or disable the device
+		\param silent whether to issue an error message in case of failure
+	**/
+	void enable3DMouse(bool state, bool silent);
+
+	//! Updates the view mode pop-menu based for a given window (or an absence of!)
+	virtual void updateViewModePopUpMenu(ccGLWindow* win);
+
+	//! Updates the pivot visibility pop-menu based for a given window (or an absence of!)
+	virtual void updatePivotVisibilityPopUpMenu(ccGLWindow* win);
 
 	//DB & DB Tree
     ccDBRoot* m_ccRoot;
@@ -427,6 +462,15 @@ protected:
 
     //! UI frozen state (see freezeUI)
     bool m_uiFrozen;
+
+	//! 3D mouse handler
+	Mouse3DInput* m_3dMouseInput;
+
+	//! View mode pop-up menu button
+	QToolButton* m_viewModePopupButton;
+
+	//! Pivot visibility pop-up menu button
+	QToolButton* m_pivotVisibilityPopupButton;
 
     /******************************/
     /***        MDI AREA        ***/
@@ -469,6 +513,8 @@ protected:
     ccGraphicalSegmentationTool* m_gsTool;
     //! Graphical transformation dialog
     ccGraphicalTransformationTool* m_transTool;
+	//! Clipping box dialog
+	ccClippingBoxTool* m_clipTool;
     //! Cloud comparison dialog
     ccComparisonDlg* m_compDlg;
     //! Point properties mode dialog

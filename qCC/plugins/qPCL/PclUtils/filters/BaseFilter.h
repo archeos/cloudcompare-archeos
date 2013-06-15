@@ -26,6 +26,8 @@
 //qCC_db
 #include <ccHObject.h>
 
+#include <ccPluginInterface.h>
+
 
 class ccPointCloud;
 class QAction;
@@ -39,22 +41,20 @@ public:
 	QString m_entry_name;
 	QString m_status_tip;
 	QIcon m_icon;
-	bool m_has_dialog;
+
 
 	FilterDescription()
 		: m_filter_name("PCLFilter")
 		, m_entry_name("filter")
 		, m_status_tip("Compute something with PCL")
 		, m_icon(QIcon(QString::fromUtf8(":/toolbar/PclUtils/icons/pcl.png")) )
-		, m_has_dialog(false)
 	{}
 
-	FilterDescription(QString filterName, QString entryName, QString statusTip, QString icon, bool hasDialog)
+    FilterDescription(QString filterName, QString entryName, QString statusTip, QString icon)
 		: m_filter_name(filterName)
 		, m_entry_name(entryName)
 		, m_status_tip(statusTip)
 		, m_icon(QIcon(icon))
-		, m_has_dialog(hasDialog)
 	{}
 
 
@@ -72,7 +72,7 @@ public:
 	/** \brief Default constructor
 	* \param[in] desc a FilterDescription structure containing filter infos
 	*/
-    BaseFilter(FilterDescription desc = FilterDescription());
+    BaseFilter(FilterDescription desc = FilterDescription(), ccPluginInterface * parent_plugin = 0);
 
 	/** \brief Get the action associated with the button
 	* used in menu and toolbar creation
@@ -93,8 +93,6 @@ public:
 	**/
 	QString getStatusTip() const;
 
-	//! Returns whether the filter has a dialog
-	bool hasDialog() const;
 
 	//! Returns the name of the filter
 	QString getFilterName() const;
@@ -106,6 +104,9 @@ public:
 
 	//! Returns the icon associated with the button
 	QIcon getIcon() const;
+
+    //! set wether we want to show a progressbar while coputing
+    void setShowProgressBar(bool status) {m_show_progress = status;}
 
 	//! Returns a vector of strings representing the names of the availabe scalar fields
 	/** For the first selected entity.
@@ -119,6 +120,9 @@ public:
 
     //! Returns all the objects in db tree of type "type"
     void getAllEntitiesOfType(CC_CLASS_ENUM type, ccHObject::Container& entities);
+
+    //! get all entities that are slected and that also are cc_point_cloud
+    void getSelectedEntitiesThatAreCCPointCloud(ccHObject::Container & entities);
 
 	//! Returns 1 if the first selected entity has RGB info
 	int hasSelectedRGB();
@@ -145,6 +149,9 @@ public:
 
 	//! Sets associated CC application interface (to access DB)
 	void setMainAppInterface(ccMainAppInterface* app) { m_app = app; }
+
+    //! get the associated parent plugin interface
+    ccPluginInterface * getParentPlugin() const {return m_parent_plugin;}
 
 protected slots:
 
@@ -184,13 +191,21 @@ protected:
 	**/
 	virtual int checkSelected();
 
-	//! Opens the dialog window
+    //! Opens the input dialog window. Where the user can supply parameters for the computation
 	/** Automatically called by performAction.
 		Does nothing by default. Must be overridden if a dialog
 		must be displayed.
 		\return 1 if dialog has been successfully executed, 0 if canceled, negative error code otherwise
 	**/
-	virtual int openDialog() { return 1; }
+    virtual int openInputDialog() { return 1; }
+
+    //! Opens the output dialog window. To be used when the computations have output to be shown in a dedicated dialog (as plots, histograms, etc)
+    /** Automatically called by performAction.
+        Does nothing by default. Must be overridden if a output dialog
+        must be displayed.
+        \return 1 if dialog has been successfully executed, 0 if canceled, negative error code otherwise
+    **/
+    virtual int openOutputDialog() { return 1; }
 
 	//! Collects parameters from the filter dialog (if openDialog is successful)
 	/** Automatically called by performAction.
@@ -259,6 +274,12 @@ protected:
 
 	//! Associated application interface
 	ccMainAppInterface* m_app;
+
+    //! associated parent plugin of the filter
+    ccPluginInterface * m_parent_plugin;
+
+    //! Do we want to show a progress bar when the filter works?
+    bool m_show_progress;
 
 };
 

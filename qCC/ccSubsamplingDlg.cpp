@@ -103,14 +103,6 @@ CCLib::ReferenceCloud* ccSubsamplingDlg::getSampledCloud(CCLib::GenericProgressC
 		break;
 	case RANDOM:
 		sampledCloud = CCLib::CloudSamplingTools::subsampleCloudRandomly(m_pointCloud, (unsigned)(samplingValue->value()), progressCb);
-		//DGM: WTF?
-		/*if(sampledCloud == NULL)
-		{
-		sampledCloud = new CCLib::ReferenceCloud(m_pointCloud);
-		sampledCloud->reserve(m_pointCloud->size());
-		sampledCloud->addPointIndex(0,m_pointCloud->size());
-		}
-		//*/
 		break;
 	}
 
@@ -179,13 +171,13 @@ void ccSubsamplingDlg::changeSamplingMethod(int index)
 
     oldSliderPos = slider->sliderPosition();
 
-    //Reste à changer les textes d'aide
+    //Reste a changer les textes d'aide
     switch(index)
     {
         case OCTREE:
             samplingValue->setDecimals(0);
             samplingValue->setMinimum(1);
-            samplingValue->setMaximum(CCLib::DgmOctree::MAX_OCTREE_LEVEL);
+            samplingValue->setMaximum((double)CCLib::DgmOctree::MAX_OCTREE_LEVEL);
             samplingValue->setSingleStep(1);
             break;
         case SPACE:

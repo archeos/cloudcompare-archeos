@@ -14,22 +14,17 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1802                                                              $
-//$LastChangedDate:: 2011-02-15 23:32:56 +0100 (mar., 15 févr. 2011)      $
-//**************************************************************************
-//
 
 #ifndef CC_DISPLAY_OPTIONS_DIALOG_HEADER
 #define CC_DISPLAY_OPTIONS_DIALOG_HEADER
 
+//Local
+#include "ccGuiParameters.h"
+
+//Qt
 #include <QColor>
 
 #include <ui_displayOptionsDlg.h>
-
-#include "ccGuiParameters.h"
 
 //! Dialog to setup display settings
 class ccDisplayOptionsDlg : public QDialog, public Ui::DisplayOptionsDlg
@@ -44,12 +39,12 @@ public:
     //! Sets a button background color
     /** Support Windows XP style particularity.
     **/
-    static void SetButtonColor(QAbstractButton* button, QColor &col);
+    static void SetButtonColor(QAbstractButton* button, const QColor &col);
 
     //! Sets a button text color
     /** Support Windows XP style particularity.
     **/
-    static void SetButtonTextColor(QAbstractButton* button, QColor &col);
+    static void SetButtonTextColor(QAbstractButton* button, const QColor &col);
 
 signals:
     void aspectHasChanged();
@@ -71,9 +66,9 @@ protected slots:
     void changeMeshDecimation();
     void changeCloudDecimation();
     void changeCrossDisplayed();
-	void changeColorScaleAlwaysZero();
-	void changeColorScaleAlwaysSym();
-	void changeColorScaleSquareSize(int);
+	void changeColorScaleShowHistogram();
+	void changeColorScaleUseShader();
+	void changeColorScaleRampWidth(int);
 	
 	void changeDefaultFontSize(int);
 	void changeNumberPrecision(int);

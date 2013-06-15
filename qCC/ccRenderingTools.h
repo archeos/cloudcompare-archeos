@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1874                                                              $
-//$LastChangedDate:: 2011-08-28 23:39:04 +0200 (dim., 28 août 2011)       $
-//**************************************************************************
-//
 
 #ifndef CC_RENDERING_TOOLS_HEADER
 #define CC_RENDERING_TOOLS_HEADER
@@ -45,26 +38,6 @@ public:
     **/
 	static void DrawColorRamp(const CC_DRAW_CONTEXT& context);
 
-protected:
-
-    //! Graphical scale atomical element
-    struct ScaleElement
-    {
-        //! Starting value
-        DistanceType value;
-        //! Specifies whether the value should be displayed
-        bool textDisplayed;
-		//! Specifies whether the cube is condensed or not
-		bool condensed;
-
-		//! Default constructor
-        ScaleElement(DistanceType val, bool dispText = true, bool isCondensed = false)
-			: value(val)
-			, textDisplayed(dispText)
-			, condensed(isCondensed)
-        {
-        }
-    };
 };
 
-#endif
+#endif //CC_RENDERING_TOOLS_HEADER

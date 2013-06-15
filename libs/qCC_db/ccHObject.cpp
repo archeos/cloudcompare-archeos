@@ -343,6 +343,22 @@ void ccHObject::drawNameIn3D(CC_DRAW_CONTEXT& context)
 	}
 }
 
+bool ccHObject::isDisplayed() const
+{
+	return isBranchEnabled() && isVisible() && (getDisplay() != 0);
+}
+
+bool ccHObject::isBranchEnabled() const
+{
+	if (!isEnabled())
+		return false;
+	
+	if (m_parent)
+		return m_parent->isBranchEnabled();
+
+	return true;
+}
+
 void ccHObject::draw(CC_DRAW_CONTEXT& context)
 {
 	if (!isEnabled())
@@ -387,8 +403,8 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 	for (Container::iterator it = m_children.begin(); it!=m_children.end(); ++it)
 		(*it)->draw(context);
 
-	//if the entity is currently selected
-	if (m_selected && draw3D && drawInThisContext)
+	//if the entity is currently selected, we draw its bounding-box
+	if (m_selected && draw3D && drawInThisContext && !MACRO_DrawNames(context))
 	{
 		switch (m_selectionBehavior)
 		{
@@ -495,23 +511,24 @@ void ccHObject::applyGLTransformation_recursive(ccGLMatrix* trans/*=NULL*/)
 //		(*it)->prepareDisplayForRefresh_recursive();
 //}
 
-void ccHObject::removeChild(const ccHObject* anObject)
+void ccHObject::removeChild(const ccHObject* anObject, bool preventAutoDelete/*=false*/)
 {
 	assert(anObject);
 
 	int pos = getChildIndex(anObject);
 
 	if (pos>=0)
-		removeChild(pos);
+		removeChild(pos,preventAutoDelete);
 }
 
-void ccHObject::removeChild(int pos)
+void ccHObject::removeChild(int pos, bool preventAutoDelete/*=false*/)
 {
 	assert(pos>=0 && unsigned(pos)<m_children.size());
 
 	ccHObject* child = m_children[pos];
-	if (child->getFlagState(CC_FATHER_DEPENDANT))
+	if (child->getFlagState(CC_FATHER_DEPENDANT) && !preventAutoDelete)
 	{
+		//delete object
 		if (child->isShareable())
 			dynamic_cast<CCShareable*>(child)->release();
 		else
@@ -651,6 +668,10 @@ bool ccHObject::fromFile(QFile& in, short dataVersion)
 				delete child;
 				return false;
 			}
+		}
+		else
+		{
+			return CorruptError();
 		}
 	}
 

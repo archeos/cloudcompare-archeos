@@ -31,9 +31,9 @@
 #include <ccGenericMesh.h>
 #include <ccProgressDialog.h>
 
-//qCC
-#include <ccCommon.h>
-#include <ccDBRoot.h>
+#ifndef CC_PCV_FIELD_LABEL_NAME
+#define CC_PCV_FIELD_LABEL_NAME "Illuminance (PCV)"
+#endif
 
 qPCV::qPCV(QObject* parent/*=0*/)
 	: QObject(parent)
@@ -61,6 +61,13 @@ void qPCV::getActions(QActionGroup& group)
 
 	group.addAction(m_action);
 }
+
+//persistent settings during a single session
+static bool s_firstLaunch				= true;
+static int s_raysSpinBoxValue			= 256;
+static int s_resSpinBoxValue			= 1024;
+static bool s_mode180CheckBoxState		= true;
+static bool s_closedMeshCheckBoxState	= false;
 
 void qPCV::doAction()
 {
@@ -103,6 +110,15 @@ void qPCV::doAction()
     ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
 
 	ccPcvDlg dlg(m_app->getMainWindow());
+
+	//restore previous dialog state
+	if (!s_firstLaunch)
+	{
+		dlg.raysSpinBox->setValue(s_raysSpinBoxValue);
+		dlg.mode180CheckBox->setChecked(s_mode180CheckBoxState);
+		dlg.resSpinBox->setValue(s_resSpinBoxValue);
+		dlg.closedMeshCheckBox->setChecked(s_closedMeshCheckBoxState);
+	}
     
 	//for meshes only
 	if (!mesh)
@@ -136,10 +152,20 @@ void qPCV::doAction()
 	if (!dlg.exec())
         return;
 
-    //on récupère le champ PCV s'il existe déjà, et on le créé sinon
+	//save dialog state
+	{
+		s_firstLaunch				= false;
+		s_raysSpinBoxValue			= dlg.raysSpinBox->value();
+		s_mode180CheckBoxState		= dlg.mode180CheckBox->isChecked();
+		s_resSpinBoxValue			= dlg.resSpinBox->value();
+		s_closedMeshCheckBoxState	= dlg.closedMeshCheckBox->isChecked();
+	}
+    
+    //we get the PCV field if it already exists
     int sfIdx = pc->getScalarFieldIndexByName(CC_PCV_FIELD_LABEL_NAME);
     if (sfIdx<0)
-        sfIdx=pc->addScalarField(CC_PCV_FIELD_LABEL_NAME,true);
+		//otherwise we creat it
+        sfIdx=pc->addScalarField(CC_PCV_FIELD_LABEL_NAME);
     if (sfIdx<0)
 	{
 		m_app->dispToConsole("Couldn't allocate a new scalar field for computing PCV field ! Try to free some memory ...",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
@@ -189,7 +215,7 @@ void qPCV::doAction()
         pc->setCurrentDisplayedScalarField(sfIdx);
         ccScalarField* sf = static_cast<ccScalarField*>(pc->getScalarField(sfIdx));
         if (sf)
-            sf->setColorRamp(GREY);
+			sf->setColorScale(ccColorScalesManager::GetDefaultScale(ccColorScalesManager::GREY));
         ent->showSF(true);
         ent->showNormals(false);
         ent->prepareDisplayForRefresh_recursive();

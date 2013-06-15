@@ -14,23 +14,16 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2101                                                              $
-//$LastChangedDate:: 2012-05-03 18:19:18 +0200 (jeu., 03 mai 2012)         $
-//**************************************************************************
-//
 
 #include "ccGraphicalTransformationTool.h"
 
-#include <Matrix.h>
-
-#include <ccHObject.h>
 #include "ccGLWindow.h"
 #include "ccConsole.h"
 #include "mainwindow.h"
-#include "ccGLUtils.h"
+
+//qCC_db
+#include <ccHObject.h>
+#include <ccGLUtils.h>
 
 ccGraphicalTransformationTool::ccGraphicalTransformationTool(QWidget* parent)
 	: ccOverlayDialog(parent)
@@ -92,8 +85,8 @@ bool ccGraphicalTransformationTool::addEntity(ccHObject* entity)
 	//eventually, we must check that there is no "parent + sibling" in the selection!
 	//otherwise, the sibling will be rotated twice!
 	assert(m_toTransform);
-	unsigned i,n=m_toTransform->getChildrenNumber();
-	for (i=0; i<n; ++i)
+	unsigned n = m_toTransform->getChildrenNumber();
+	for (unsigned i=0; i<n;)
 	{
 		ccHObject* previous = m_toTransform->getChild(i);
 		if (previous->isAncestorOf(entity))
@@ -104,7 +97,13 @@ bool ccGraphicalTransformationTool::addEntity(ccHObject* entity)
 		//if the inverse is true, then we get rid of the current element!
 		else if (entity->isAncestorOf(previous))
 		{
-			m_toTransform->removeChild(previous);
+			m_toTransform->removeChild(previous,true);
+			--n;
+		}
+		else
+		{
+			//proceed
+			++i;
 		}
 	}
 
@@ -200,59 +199,13 @@ void ccGraphicalTransformationTool::glRotate(const ccGLMatrix& rotMat)
 		m_rotation = rotMat * m_rotation;
 		break;
 	case 1: //X
-		{
-			//we use a specific Euler angles convention here
-			const float* mat = rotMat.data();
-			if (mat[8] >= 1.0)
-			{
-				//simpler/faster to ignore this (very) specific case!
-				return;
-			}
-			float phi = -asin(mat[8]);
-			float cos_phi = cos(phi);
-			float theta = atan2(mat[9]/cos_phi,mat[10]/cos_phi);
-
-			ccGLMatrix newRotMat;
-			newRotMat.toIdentity();
-			newRotMat.data()[5]=newRotMat.data()[10]=cos(theta);
-			newRotMat.data()[6]=newRotMat.data()[9]=sin(theta);
-			newRotMat.data()[9]*=-1.0;
-			m_rotation = newRotMat * m_rotation;
-
-		}
+		m_rotation = rotMat.xRotation() * m_rotation;
 		break;
 	case 2: //Y
-		{
-			//we use a specific Euler angles convetion here
-			const float* mat = rotMat.data();
-			if (mat[6] >= 1.0)
-			{
-				//simpler/faster to ignore this (very) specific case!
-				return;
-			}
-			float theta = asin(mat[6]);
-			float cos_theta = cos(theta);
-			float phi = atan2(-mat[2]/cos_theta,mat[10]/cos_theta);
-
-			ccGLMatrix newRotMat;
-			newRotMat.toIdentity();
-			newRotMat.data()[0]=newRotMat.data()[10]=cos(phi);
-			newRotMat.data()[2]=newRotMat.data()[8]=sin(phi);
-			newRotMat.data()[2]*=-1.0;
-			m_rotation = newRotMat * m_rotation;
-		}
+		m_rotation = rotMat.yRotation() * m_rotation;
 		break;
 	case 3: //Z
-		{
-			//we can use the standard Euler angles convention here
-			float phi,theta,psi;
-			CCVector3 T;
-			rotMat.getParameters(phi,theta,psi,T);
-			assert(T.norm2()==0);
-			ccGLMatrix newRotMat;
-			newRotMat.initFromParameters(phi,0,0,T);
-			m_rotation = newRotMat * m_rotation;
-		}
+		m_rotation = rotMat.zRotation() * m_rotation;
 		break;
 	}
 
@@ -289,13 +242,15 @@ void ccGraphicalTransformationTool::apply()
 {
 	assert(m_toTransform);
 
-	//we recompute global GL transformation matrix
-	ccGLMatrix finalTrans = m_rotation;
-	finalTrans += (m_rotationCenter+m_translation-m_rotation*m_rotationCenter);
-	//output resulting transformation matrix
-	ccConsole::Print("[GraphicalTransformationTool] Applied transformation:");
-	const float* mat = finalTrans.data();
-	ccConsole::Print("%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f",mat[0],mat[4],mat[8],mat[12],mat[1],mat[5],mat[9],mat[13],mat[2],mat[6],mat[10],mat[14],mat[3],mat[7],mat[11],mat[15]);
+	{
+		//we recompute global GL transformation matrix and display it in console
+		ccGLMatrix finalTrans = m_rotation;
+		finalTrans += (m_rotationCenter+m_translation-m_rotation*m_rotationCenter);
+		//output resulting transformation matrix
+		ccConsole::Print("[GraphicalTransformationTool] Applied transformation:");
+		const float* mat = finalTrans.data();
+		ccConsole::Print("%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f",mat[0],mat[4],mat[8],mat[12],mat[1],mat[5],mat[9],mat[13],mat[2],mat[6],mat[10],mat[14],mat[3],mat[7],mat[11],mat[15]);
+	}
 
 	for (unsigned i=0; i<m_toTransform->getChildrenNumber();++i)
 	{

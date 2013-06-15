@@ -27,7 +27,7 @@
 
 ccGenericPointCloud::ccGenericPointCloud(QString name)
 	: ccHObject(name)
-	, m_visibilityArray(0)
+	, m_pointsVisibility(0)
 	, m_pointSize(0)
 {
     setVisible(true);
@@ -49,47 +49,53 @@ void ccGenericPointCloud::clear()
 
 bool ccGenericPointCloud::razVisibilityArray()
 {
-	if (!m_visibilityArray)
+	if (!m_pointsVisibility)
 	{
-		m_visibilityArray = new VisibilityTableType();
-		m_visibilityArray->link();
+		m_pointsVisibility = new VisibilityTableType();
+		m_pointsVisibility->link();
 	}
 
-	if (!m_visibilityArray->resize(size()))
+	if (!m_pointsVisibility->resize(size()))
 	{
 		unallocateVisibilityArray();
         return false;
 	}
 
-	m_visibilityArray->fill(1); //by default, all points are visible
+	m_pointsVisibility->fill(POINT_VISIBLE); //by default, all points are visible
 
 	return true;
 }
 
 void ccGenericPointCloud::unallocateVisibilityArray()
 {
-	if (m_visibilityArray)
-		m_visibilityArray->release();
-	m_visibilityArray=0;
+	if (m_pointsVisibility)
+		m_pointsVisibility->release();
+	m_pointsVisibility=0;
 }
 
-CC_VISIBILITY_TYPE ccGenericPointCloud::testVisibility(const CCVector3& P)
+bool ccGenericPointCloud::isVisibilityTableInstantiated() const
 {
-    unsigned i=0,childNum=getChildrenNumber();
+    return m_pointsVisibility && m_pointsVisibility->isAllocated();
+}
 
-    CC_VISIBILITY_TYPE nvt, vt = ALL;
+uchar ccGenericPointCloud::testVisibility(const CCVector3& P)
+{
+    uchar bestVisibility = 255; //impossible value
 
-    while (i<childNum && vt==VIEWED)
-    {
-        if (m_children[i]->isKindOf(CC_SENSOR))
+	for (ccHObject::Container::iterator it = m_children.begin(); it != m_children.end(); ++it)
+	{
+        if ((*it)->isKindOf(CC_SENSOR))
         {
-            nvt = static_cast<ccSensor*>(m_children[i])->checkVisibility(P);
-            vt = std::min(vt,nvt);
+            uchar visibility = static_cast<ccSensor*>(*it)->checkVisibility(P);
+
+			if (visibility == POINT_VISIBLE)
+				return POINT_VISIBLE; //shortcut
+            
+			bestVisibility = std::min<uchar>(visibility,bestVisibility);
         }
-        ++i;
     }
 
-	return (vt==ALL ? VIEWED : vt);
+	return (bestVisibility == 255 ? POINT_VISIBLE : bestVisibility);
 }
 
 void ccGenericPointCloud::deleteOctree()
@@ -131,23 +137,45 @@ ccOctree* ccGenericPointCloud::computeOctree(CCLib::GenericProgressCallback* pro
 
 ccGenericPointCloud::VisibilityTableType* ccGenericPointCloud::getTheVisibilityArray()
 {
-    return m_visibilityArray;
+    return m_pointsVisibility;
 }
 
-CCLib::ReferenceCloud* ccGenericPointCloud::getTheVisiblePoints()
+CCLib::ReferenceCloud* ccGenericPointCloud::getTheVisiblePoints() const
 {
-    if (!m_visibilityArray || m_visibilityArray->currentSize()<size())
+	unsigned count = size();
+	assert(count == m_pointsVisibility->currentSize());
+
+    if (!m_pointsVisibility || m_pointsVisibility->currentSize() != count)
         return 0;
 
-	unsigned i,count = size();
-	assert(count == m_visibilityArray->currentSize());
+	//count the number of points to copy
+	unsigned pointCount = 0;
+	{
+		for (unsigned i=0; i<count; ++i)
+			if (m_pointsVisibility->getValue(i) == POINT_VISIBLE)
+				++pointCount;
+	}
+
+	if (pointCount == 0)
+	{
+		ccLog::Error("[ccGenericPointCloud::getTheVisiblePoints] No point in selection!");
+		return 0;
+	}
 
     //we create an entity with the 'visible' vertices only
-    CCLib::ReferenceCloud* rc = new CCLib::ReferenceCloud(this);
-
-    for (i=0;i<count;++i)
-        if (m_visibilityArray->getValue(i) > 0)
-            rc->addPointIndex(i);
+    CCLib::ReferenceCloud* rc = new CCLib::ReferenceCloud(const_cast<ccGenericPointCloud*>(this));
+	if (rc->reserve(pointCount))
+	{
+		for (unsigned i=0; i<count; ++i)
+			if (m_pointsVisibility->getValue(i) == POINT_VISIBLE)
+				rc->addPointIndex(i); //can't fail (see above)
+	}
+	else
+	{
+		delete rc;
+		rc=0;
+		ccLog::Error("[ccGenericPointCloud::getTheVisiblePoints] Not enough memory!");
+	}
 
     return rc;
 }
@@ -164,12 +192,7 @@ ccBBox ccGenericPointCloud::getMyOwnBB()
     return emptyBox;
 }
 
-bool ccGenericPointCloud::isVisibilityTableInstantiated() const
-{
-    return m_visibilityArray && m_visibilityArray->isAllocated();
-}
-
-ccPlane* ccGenericPointCloud::fitPlane(double* rms /*= 0*/)
+ccPlane* ccGenericPointCloud::fitPlane(double* rms/*= 0*/)
 {
 	//number of points
 	unsigned count = size();
@@ -187,7 +210,7 @@ ccPlane* ccGenericPointCloud::fitPlane(double* rms /*= 0*/)
 		//ccConsole::Warning(QString("[ccPointCloud::fitPlane] Failed to compute plane/normal for cloud '%1'").arg(getName()));
 		return 0;
 	}
-	eig.sortEigenValuesAndVectors();
+	eig.sortEigenValuesAndVectors(); //from the biggest to the smallest eigen value
 
 	//plane equation
 	PointCoordinateType theLSQPlane[4];
@@ -212,25 +235,27 @@ ccPlane* ccGenericPointCloud::fitPlane(double* rms /*= 0*/)
 	//least-square fitting RMS
 	if (rms)
 	{
-		placeIteratorAtBegining();
-		*rms = 0.0;
+		double sum2 = 0.0;
+		unsigned realCount = 0;
 		for (unsigned k=0;k<count;++k)
 		{
-			double d = (double)CCLib::DistanceComputationTools::computePoint2PlaneDistance(getNextPoint(),theLSQPlane);
-			*rms += d*d;
+			double d = (double)CCLib::DistanceComputationTools::computePoint2PlaneDistance(getPoint(k),theLSQPlane);
+			if (ccScalarField::ValidValue(d)) //not NaN
+			{
+				sum2 += d*d;
+				++realCount;
+			}
 		}
-		*rms = sqrt(*rms)/(double)count;
+		*rms = (realCount != 0 ? sqrt(sum2)/(double)realCount : -1.0);
 	}
 
-	//we has a plane primitive to the cloud
+	//we add a plane primitive to the cloud
 	eig.getEigenValueAndVector(0,vec); //main direction
-	CCVector3 X(vec[0],vec[1],vec[2]); //plane normal
-	//eig.getEigenValueAndVector(1,vec); //intermediate direction
-	//CCVector3 Y(vec[0],vec[1],vec[2]); //plane normal
+	CCVector3 X(vec[0],vec[1],vec[2]);
 	CCVector3 Y = N * X;
 
 	//we eventually check for plane extents
-	PointCoordinateType minX=0.0,maxX=0.0,minY=0.0,maxY=0.0;
+	PointCoordinateType minX=0,maxX=0,minY=0,maxY=0;
 	placeIteratorAtBegining();
 	for (unsigned k=0;k<count;++k)
 	{
@@ -289,8 +314,8 @@ bool ccGenericPointCloud::toFile_MeOnly(QFile& out) const
 		return WriteError();
 	if (hasVisibilityArray)
 	{
-		assert(m_visibilityArray);
-		if (!ccSerializationHelper::GenericArrayToFile(*m_visibilityArray,out))
+		assert(m_pointsVisibility);
+		if (!ccSerializationHelper::GenericArrayToFile(*m_pointsVisibility,out))
 			return false;
 	}
 
@@ -319,12 +344,12 @@ bool ccGenericPointCloud::fromFile_MeOnly(QFile& in, short dataVersion)
 		return ReadError();
 	if (hasVisibilityArray)
 	{
-		if (!m_visibilityArray)
+		if (!m_pointsVisibility)
 		{
-			m_visibilityArray = new VisibilityTableType();
-			m_visibilityArray->link();
+			m_pointsVisibility = new VisibilityTableType();
+			m_pointsVisibility->link();
 		}
-		if (!ccSerializationHelper::GenericArrayFromFile(*m_visibilityArray,in,dataVersion))
+		if (!ccSerializationHelper::GenericArrayFromFile(*m_pointsVisibility,in,dataVersion))
 		{
 			unallocateVisibilityArray();
 			return false;

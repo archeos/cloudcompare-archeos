@@ -31,6 +31,7 @@
 
 //System
 #include <string.h>
+#include <set>
 
 class QStandardItemModel;
 class QAction;
@@ -141,17 +142,26 @@ public:
 public slots:
     void changeSelection(const QItemSelection & selected, const QItemSelection & deselected);
     void reflectObjectPropChange(ccHObject* obj);
-    void selectEntity(int uniqueID); //shortcut
     void redrawCCObject(ccHObject* anObject);
     void redrawCCObjectAndChildren(ccHObject* anObject);
     void updateCCObject(ccHObject* anObject);
     void deleteSelectedEntities();
+
+	//! Shortcut to selectEntity(ccHObject*)
+	void selectEntity(int uniqueID);
+
+	//! Selects multiple entities at once
+	/** If ctrl is pressed by the user at the same time,
+		previous selection will be simply updated accordingly.
+	**/
+    void selectEntities(std::set<int> entIDs);
 
 protected slots:
 	void showContextMenu(const QPoint&);
 
 	void expandBranch();
 	void collapseBranch();
+	void gatherRecursiveInformation();
 	void sortSiblingsAZ();
 	void sortSiblingsZA();
 	void sortSiblingsType();
@@ -190,7 +200,7 @@ protected:
 	//! Sorts selected entities siblings
 	void sortSelectedEntitiesSiblings(SortRules rule);
 
-	//! Expands or collapses hover item
+	//! Expands or collapses hovered item
 	void expandOrCollapseHoveredBranch(bool expand);
 
 	//! Associated DB root
@@ -211,6 +221,8 @@ protected:
 	QAction* m_expandBranch;
 	//! Context menu action: collapse tree branch
 	QAction* m_collapseBranch;
+	//! Context menu action: gather (recursive) information on selected entities
+	QAction* m_gatherInformation;
 	//! Context menu action: sort siblings in alphabetical order
 	QAction* m_sortSiblingsAZ;
 	//! Context menu action: sort siblings in reverse alphabetical order

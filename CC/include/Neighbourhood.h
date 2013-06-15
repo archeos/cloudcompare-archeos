@@ -77,7 +77,7 @@ class Neighbourhood
 		GenericIndexedCloudPersist* associatedCloud() const {return m_associatedCloud;}
 
 		//inherited from ReferenceCloud
-		/*virtual void addPointIndex(unsigned globalIndex);
+		/*virtual bool addPointIndex(unsigned globalIndex);
 		virtual bool addPointIndex(unsigned firstIndex, unsigned lastIndex);
 		virtual void setPointIndex(unsigned localIndex, unsigned globalIndex);
         virtual bool resize(unsigned n);
@@ -100,18 +100,18 @@ class Neighbourhood
 		**/
 		bool projectPointsOnPlane(const PointCoordinateType* thePlaneEquation, 
 									CC2DPointsConainer &the2DPoints, 
-									DistanceType &error, 
+									ScalarType &error, 
 									bool distanceNeeded=false);
 
 		//! Computes point set curvature with height function
-		/** \return curvature value (warning: unsigned value!) or HIDDEN_VALUE if computation failed.
+		/** \return curvature value (warning: unsigned value!) or NAN_VALUE if computation failed.
 		**/
-		DistanceType computeCurvature(unsigned neighbourIndex, CC_CURVATURE_TYPE cType);
+		ScalarType computeCurvature(unsigned neighbourIndex, CC_CURVATURE_TYPE cType);
 
 		//! Computes point set curvature with 3D Quadric (WORK IN PROGRESS)
-		/** \return curvature value (warning: signed value!) or BIG_VALUE if computation failed.
+		/** \return curvature (signed) value or NAN_VALUE if computation failed.
         **/
-		DistanceType computeCurvature2(unsigned neighbourIndex, CC_CURVATURE_TYPE cType);
+		ScalarType computeCurvature2(unsigned neighbourIndex, CC_CURVATURE_TYPE cType);
 
 		/**** GETTERS ****/
 
@@ -200,7 +200,7 @@ class Neighbourhood
 		//! Computes the gravity center
 		void computeGravityCenter();
 		//! Computes the least-square best fitting plane
-		bool computeLeastSquareBestFittingPlan();
+		bool computeLeastSquareBestFittingPlane();
 		//! Computes best fitting height function
 		bool computeHeightFunction();
 		//! Computes best fitting 3D quadric function

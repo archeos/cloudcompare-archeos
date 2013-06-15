@@ -14,16 +14,12 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2172                                                              $
-//$LastChangedDate:: 2012-06-24 18:33:24 +0200 (dim., 24 juin 2012)        $
-//**************************************************************************
-//
 
 #ifndef GUI_PARAMETERS_HEADER
 #define GUI_PARAMETERS_HEADER
+
+//Qt
+#include <QString>
 
 /***************************************************
 				GUI parameters
@@ -78,14 +74,14 @@ public:
 		//! Picked points size
 		unsigned pickedPointsSize;
 
-		//! Color scale option: always show '0'
-		bool colorScaleAlwaysShowZero;
-		//! Color scale option: always symmetrical
-		/** This only applies to signed scalar fields.
-		**/
-		bool colorScaleAlwaysSymmetrical;
-		//! Color scale square size
-		unsigned colorScaleSquareSize;
+		//! Color scale option: show histogram next to color ramp
+		bool colorScaleShowHistogram;
+		//! Whether to use shader for color scale display (if available) or not
+		bool colorScaleUseShader;
+		//! Whether shader for color scale display is available or not
+		bool colorScaleShaderSupported;
+		//! Color scale ramp width (for display)
+		unsigned colorScaleRampWidth;
 		
 		//! Default displayed font size
 		unsigned defaultFontSize;
@@ -107,7 +103,12 @@ public:
         void fromPersistentSettings();
 
         //! Saves to persistent DB
-        void toPersistentSettings();
+        void toPersistentSettings() const;
+
+		//! Returns whether a given parameter is already defined in persistent settings or not
+		/** \param paramName the corresponding attribute name
+		**/
+		bool isInPersistentSettings(QString paramName) const;
     };
 
 	//! Returns the stored values of each parameter.

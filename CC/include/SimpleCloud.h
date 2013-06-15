@@ -50,13 +50,13 @@ public:
 	//**** inherited form GenericCloud ****//
 	virtual unsigned size() const;
 	virtual void forEach(genericPointAction& anAction);
-	virtual void getBoundingBox(PointCoordinateType Mins[], PointCoordinateType Maxs[]);
+	virtual void getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[]);
 	virtual void placeIteratorAtBegining();
 	virtual const CCVector3* getNextPoint();
 	virtual bool enableScalarField();
 	virtual bool isScalarFieldEnabled() const;
-	virtual void setPointScalarValue(unsigned pointIndex, DistanceType value);
-	virtual DistanceType getPointScalarValue(unsigned pointIndex) const;
+	virtual void setPointScalarValue(unsigned pointIndex, ScalarType value);
+	virtual ScalarType getPointScalarValue(unsigned pointIndex) const;
 
 	//**** inherited form GenericIndexedCloud ****//
 	inline virtual const CCVector3* getPoint(unsigned index) {return getPointPersistentPtr(index);}
@@ -92,9 +92,10 @@ public:
 
 	//! Applies a rigid transformation to the cloud
 	/** WARNING: THIS METHOD IS NOT COMPATIBLE WITH PARALLEL STRATEGIES
-	\param trans transformation (rotation matrix + translation vector)
+		\param trans transformation (scale * rotation matrix + translation vector)
 	**/
-	virtual void applyTransformation(PointProjectionTools::Transformation& trans);
+    virtual void applyTransformation(PointProjectionTools::Transformation& trans);
+
 
 	//! Returns associated scalar field (if any)
 	ScalarField* getScalarField() { return m_scalarField; } 

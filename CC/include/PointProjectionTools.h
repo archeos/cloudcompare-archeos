@@ -20,6 +20,8 @@
 
 #include "CCToolbox.h"
 #include "Matrix.h"
+//#include "RegistrationTools.h" //to use
+
 
 //! Triangulation types
 enum CC_TRIANGULATION_TYPES {GENERIC							=		1,		/**< Default triangulation (Delaunay 2D in XY plane) **/
@@ -48,8 +50,8 @@ class PointProjectionTools : public CCToolbox
 {
 public:
 
-	//! A geometrical transformation (rotation + translation)
-	/** P' = R.P + T
+    //! A scaled geometrical transformation (scale + rotation + translation)
+    /** P' = s.R.P + T
 	**/
 	struct Transformation
 	{
@@ -57,10 +59,15 @@ public:
 		CCLib::SquareMatrix R;
 		//! Translation
 		CCVector3 T;
+        //! Scale
+        PointCoordinateType s;
+
+		//! Default constructor
+        Transformation() : s((PointCoordinateType)1.0) {}
 	};
 
 	//! Develops a cylinder-shaped point cloud around its main axis
-	/** Generates a "developpée" of a cylinder-shaped point cloud.
+	/** Generates a "developpee" of a cylinder-shaped point cloud.
 		WARNING: this method uses the cloud global iterator
 		\param theCloud the point cloud to be developed
 		\param radius the cylinder radius
@@ -72,7 +79,7 @@ public:
 	static SimpleCloud* developCloudOnCylinder(GenericCloud* theCloud, PointCoordinateType radius, unsigned char dim=2, CCVector3* center=0, GenericProgressCallback* progressCb=0);
 
 	//! Develops a cone-shaped point cloud around its main axis
-	/** Generates a "developpée" of a cone-shaped point cloud.
+	/** Generates a "developpee" of a cone-shaped point cloud.
 		WARNING: this method uses the cloud global iterator
 		\param theCloud the point cloud to be developed
 		\param dim the dimension along which the cone axis is aligned (X=0, Y=1, Z=2)

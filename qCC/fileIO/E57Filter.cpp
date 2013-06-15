@@ -14,13 +14,7 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author::                                                                $
-//$Rev::                                                                   $
-//$LastChangedDate::                                                       $
-//**************************************************************************
-//
+
 #include "E57Filter.h"
 
 #ifdef CC_E57_SUPPORT
@@ -52,6 +46,9 @@
 
 typedef double colorFieldType;
 //typedef boost::uint16_t colorFieldType;
+
+const char CC_E57_INTENSITY_FIELD_NAME[] = "Intensity";
+const char CC_E57_RETURN_INDEX_FIELD_NAME[] = "Return index";
 
 //Array chunks for reading/writing out information from E57 files
 struct TempArrays
@@ -230,21 +227,21 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	int minReturnIndex = 0;
 	int maxReturnIndex = 0;
 	{
-		int returnIndexSFIndex = cloud->getScalarFieldIndexByName(CC_SCAN_RETURN_INDEX_FIELD_NAME);
+		int returnIndexSFIndex = cloud->getScalarFieldIndexByName(CC_E57_RETURN_INDEX_FIELD_NAME);
 		if (returnIndexSFIndex>=0)
 		{
 			ccScalarField* sf = static_cast<ccScalarField*>(cloud->getScalarField(returnIndexSFIndex));
 			assert(sf);
 
-			if (sf->isPositive())
+			assert(sf->getMin() >= 0);
 			{
 				//get min and max index
-				DistanceType minIndex = sf->getMin();
-				DistanceType maxIndex = sf->getMax();
+				ScalarType minIndex = sf->getMin();
+				ScalarType maxIndex = sf->getMax();
 
-				DistanceType intMin,intMax;
-				DistanceType fracMin = modf(minIndex,&intMin);
-				DistanceType fracMax = modf(maxIndex,&intMax);
+				ScalarType intMin,intMax;
+				ScalarType fracMin = modf(minIndex,&intMin);
+				ScalarType fracMax = modf(maxIndex,&intMax);
 
 				if (fracMin == 0 && fracMax == 0 && (int)(intMax-intMin)<256)
 				{
@@ -276,7 +273,7 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	ccScalarField* intensitySF = 0;
 	bool hasInvalidIntensities = false;
 	{
-		int intensitySFIndex = cloud->getScalarFieldIndexByName(CC_SCAN_INTENSITY_FIELD_NAME);
+		int intensitySFIndex = cloud->getScalarFieldIndexByName(CC_E57_INTENSITY_FIELD_NAME);
 		if (intensitySFIndex<0)
 		{
 			intensitySFIndex = cloud->getCurrentDisplayedScalarFieldIndex();
@@ -294,11 +291,10 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 			scanNode.set("intensityLimits", intbox);
 
 			//look for 'invalid' scalar values
-			bool positiveSF = intensitySF->isPositive();
 			for (unsigned i=0;i<intensitySF->currentSize();++i)
 			{
-				DistanceType d = intensitySF->getValue(i);
-				if ((positiveSF && d<0) || (!positiveSF && d==BIG_VALUE))
+				ScalarType d = intensitySF->getValue(i);
+				if (!ccScalarField::ValidValue(d))
 				{
 					hasInvalidIntensities = true;
 					break;
@@ -412,7 +408,7 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	//Intensity field
 	if (intensitySF)
 	{
-		proto.set("intensity", e57::FloatNode(imf, intensitySF->getMin(), sizeof(DistanceType)==8 ? e57::E57_DOUBLE : e57::E57_SINGLE, intensitySF->getMin(), intensitySF->getMax()));
+		proto.set("intensity", e57::FloatNode(imf, intensitySF->getMin(), sizeof(ScalarType)==8 ? e57::E57_DOUBLE : e57::E57_SINGLE, intensitySF->getMin(), intensitySF->getMax()));
 		arrays.intData = new double[nSize];
 		dbufs.push_back(e57::SourceDestBuffer(imf, "intensity",  arrays.intData,  nSize, true, true));
 
@@ -486,10 +482,10 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 			if(intensitySF)
 			{
 				assert(arrays.intData);
-				DistanceType sfVal = intensitySF->getValue(indexShift+i);
+				ScalarType sfVal = intensitySF->getValue(indexShift+i);
 				arrays.intData[i]=(double)sfVal;
 				if (arrays.isInvalidIntData)
-					arrays.isInvalidIntData[i] = ((intensitySF->isPositive() && sfVal<0) || (!intensitySF->isPositive() && sfVal==BIG_VALUE) ? 1 : 0);
+					arrays.isInvalidIntData[i] = ccScalarField::ValidValue(sfVal) ? 0 : 1;
 			}
 
 			if (hasNormals)
@@ -1306,8 +1302,8 @@ bool GetPoseInformation(e57::StructureNode& node, ccGLMatrix& poseMat)
 	return validPoseMat;
 }
 
-static DistanceType s_maxIntensity = 0;
-static DistanceType s_minIntensity = 0;
+static ScalarType s_maxIntensity = 0;
+static ScalarType s_minIntensity = 0;
 
 //for coordinate shif handling
 static bool s_alwaysDisplayLoadDialog = true;
@@ -1503,14 +1499,12 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 	//intensity
 	//double intRange = 0;
 	//double intOffset = 0;
-	//DistanceType invalidSFValue = 0;
+	//ScalarType invalidSFValue = 0;
 
 	ccScalarField* intensitySF = 0;
-	bool intensitySFIsPositive = false;
 	if(header.pointFields.intensityField)
 	{
-		intensitySFIsPositive = (header.intensityLimits.intensityMinimum >= 0);
-		intensitySF = new ccScalarField(CC_SCAN_INTENSITY_FIELD_NAME,intensitySFIsPositive);
+		intensitySF = new ccScalarField(CC_E57_INTENSITY_FIELD_NAME);
 		if (!intensitySF->resize(pointCount))
 		{
 			ccLog::Error("[E57] Not enough memory!");
@@ -1525,12 +1519,6 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 		//intRange = header.intensityLimits.intensityMaximum - header.intensityLimits.intensityMinimum;
 		//intOffset = header.intensityLimits.intensityMinimum;
 
-		//strictly positive?
-		//if (header.intensityLimits.intensityMinimum<0)
-		//	invalidSFValue = BIG_VALUE;
-		//else
-		//	invalidSFValue = HIDDEN_VALUE;
-		
 		if (header.pointFields.isIntensityInvalidField)
 		{
 			arrays.isInvalidIntData = new boost::int8_t[nSize];
@@ -1591,7 +1579,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 	if (header.pointFields.returnIndexField && header.pointFields.returnMaximum>0)
 	{
 		//we store the point return index as a scalar field
-		returnIndexSF = new ccScalarField(CC_SCAN_RETURN_INDEX_FIELD_NAME,true);
+		returnIndexSF = new ccScalarField(CC_E57_RETURN_INDEX_FIELD_NAME);
 		if (!returnIndexSF->resize(pointCount))
 		{
 			ccLog::Error("[E57] Not enough memory!");
@@ -1697,8 +1685,8 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 				assert(intensitySF);
 				if (!header.pointFields.isIntensityInvalidField || arrays.isInvalidIntData[i] != 0)
 				{
-					//DistanceType intensity = (DistanceType)((arrays.intData[i] - intOffset)/intRange); //Normalize intensity to 0 - 1.
-					DistanceType intensity = (DistanceType)arrays.intData[i];
+					//ScalarType intensity = (ScalarType)((arrays.intData[i] - intOffset)/intRange); //Normalize intensity to 0 - 1.
+					ScalarType intensity = (ScalarType)arrays.intData[i];
 					intensitySF->setValue(realCount,intensity);
 
 					//track max intensity (for proper visualization)
@@ -1716,8 +1704,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 				}
 				else
 				{
-					//cloud->setPointScalarValue(realCount,invalidSFValue);
-					intensitySF->setValue(realCount,intensitySFIsPositive ? HIDDEN_VALUE : BIG_VALUE);
+					intensitySF->flagValueAsInvalid(realCount);
 				}
 			}
 
@@ -1738,7 +1725,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 			if (arrays.scanIndexData)
 			{
 				assert(returnIndexSF);
-				returnIndexSF->setValue(realCount,(DistanceType)arrays.scanIndexData[i]);
+				returnIndexSF->setValue(realCount,(ScalarType)arrays.scanIndexData[i]);
 			}
 
 			realCount++;
@@ -1773,12 +1760,10 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 	}
 
 	//Scalar fields
-	if(intensitySF)
+	if (intensitySF)
 	{
-		//intensitySF->setPositive(header.intensityLimits.intensityMinimum>=0.0);
 		intensitySF->computeMinAndMax();
-		intensitySF->setBoundaries(0,1);
-		intensitySF->setColorRamp(GREY);
+		intensitySF->setColorScale(ccColorScalesManager::GetDefaultScale(ccColorScalesManager::ABS_NORM_GREY));
 		cloud->setCurrentDisplayedScalarField(cloud->getScalarFieldIndexByName(intensitySF->getName()));
 		cloud->showSF(true);
 	}
@@ -2153,8 +2138,8 @@ CC_FILE_ERROR E57Filter::loadFile(const char* filename, ccHObject& container, bo
 				ccScalarField* sf = pc->getCurrentDisplayedScalarField();
 				if (sf)
 				{
-					sf->setMinSaturation(s_minIntensity);
-					sf->setMaxSaturation(s_maxIntensity);
+					sf->setSaturationStart(s_minIntensity);
+					sf->setSaturationStop(s_maxIntensity);
 				}
 			}
 		}

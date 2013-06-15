@@ -29,7 +29,7 @@ SimpleCloud::SimpleCloud()
 	, globalIterator(0)
 	, m_validBB(false)
 {
-	m_scalarField = new ScalarField("Distances",true);
+	m_scalarField = new ScalarField("Default");
 	m_scalarField->link();
 	m_points = new PointsContainer();
 	m_points->link();
@@ -77,13 +77,13 @@ void SimpleCloud::forEach(genericPointAction& anAction)
 	}
 	else //otherwise (we provide a fake zero distance)
 	{
-		DistanceType d=0;
+		ScalarType d=0;
 		for (i=0;i<n;++i)
 			anAction(*(CCVector3*)m_points->getValue(i),d);
 	}
 }
 
-void SimpleCloud::getBoundingBox(PointCoordinateType Mins[], PointCoordinateType Maxs[])
+void SimpleCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
 {
 	if (!m_validBB)
 	{
@@ -91,8 +91,8 @@ void SimpleCloud::getBoundingBox(PointCoordinateType Mins[], PointCoordinateType
 		m_validBB=true;
 	}
 
-	memcpy(Mins,m_points->getMin(),sizeof(PointCoordinateType)*3);
-	memcpy(Maxs,m_points->getMax(),sizeof(PointCoordinateType)*3);
+	memcpy(bbMin, m_points->getMin(), sizeof(PointCoordinateType)*3);
+	memcpy(bbMax, m_points->getMax(), sizeof(PointCoordinateType)*3);
 }
 
 bool SimpleCloud::reserve(unsigned n)
@@ -145,13 +145,13 @@ void SimpleCloud::getPoint(unsigned index, CCVector3& P) const
 	P = *(CCVector3*)m_points->getValue(index);
 }
 
-void SimpleCloud::setPointScalarValue(unsigned pointIndex, DistanceType value)
+void SimpleCloud::setPointScalarValue(unsigned pointIndex, ScalarType value)
 {
 	assert(pointIndex<m_scalarField->currentSize());
 	m_scalarField->setValue(pointIndex,value);
 }
 
-DistanceType SimpleCloud::getPointScalarValue(unsigned pointIndex)  const
+ScalarType SimpleCloud::getPointScalarValue(unsigned pointIndex)  const
 {
 	assert(pointIndex<m_scalarField->currentSize());
 	return m_scalarField->getValue(pointIndex);
@@ -169,19 +169,26 @@ bool SimpleCloud::isScalarFieldEnabled() const
 
 void SimpleCloud::applyTransformation(PointProjectionTools::Transformation& trans)
 {
-	unsigned i,count=m_points->currentSize();
+    unsigned count = m_points->currentSize();
+    
+	if (fabs(trans.s - 1.0) > ZERO_TOLERANCE)
+    {
+        for (unsigned i=0; i<count; ++i)
+            *(CCVector3*)m_points->getValue(i) *= trans.s;
+        m_validBB = false;
+    }
 
     if (trans.R.isValid())
     {
-		for (i=0;i<count;++i)
-			trans.R.apply(m_points->getValue(i));
+        for (unsigned i=0; i<count; ++i)
+            trans.R.apply(m_points->getValue(i));
         m_validBB = false;
     }
 
     if (trans.T.norm() > ZERO_TOLERANCE)
     {
-		for (i=0;i<count;++i)
-			*(CCVector3*)m_points->getValue(i) += trans.T;
+        for (unsigned i=0; i<count; ++i)
+            *(CCVector3*)m_points->getValue(i) += trans.T;
         m_validBB = false;
     }
 }

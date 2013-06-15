@@ -14,15 +14,9 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2224                                                              $
-//$LastChangedDate:: 2012-07-25 19:13:23 +0200 (mer., 25 juil. 2012)       $
-//**************************************************************************
-//
-#ifndef CC_ASCII_OPEN_DIALOG
-#define CC_ASCII_OPEN_DIALOG
+
+#ifndef CC_ASCII_OPEN_DIALOG_HEADER
+#define CC_ASCII_OPEN_DIALOG_HEADER
 
 #include <algorithm>
 
@@ -41,12 +35,11 @@ enum CC_ASCII_OPEN_DLG_TYPES { ASCII_OPEN_DLG_None              = 0,
                                 ASCII_OPEN_DLG_B                = 9,
                                 ASCII_OPEN_DLG_Grey             = 10,
                                 ASCII_OPEN_DLG_Scalar           = 11,
-                                ASCII_OPEN_DLG_Positive_Scalar  = 12,
-								ASCII_OPEN_DLG_RGB32i			= 13, //RGBA as a single 32 bits integer (PCL style)
-								ASCII_OPEN_DLG_RGB32f			= 14, //RGBA as a single 32 bits float (PCL style)
+								ASCII_OPEN_DLG_RGB32i			= 12, //RGBA as a single 32 bits integer (PCL style)
+								ASCII_OPEN_DLG_RGB32f			= 13, //RGBA as a single 32 bits float (PCL style)
 };
 
-const unsigned ASCII_OPEN_DLG_TYPES_NUMBER = 15;
+const unsigned ASCII_OPEN_DLG_TYPES_NUMBER = 14;
 const char ASCII_OPEN_DLG_TYPES_NAMES[ASCII_OPEN_DLG_TYPES_NUMBER][24] = {"Ignore",
                                                                             "coord. X",
                                                                             "coord. Y",
@@ -59,7 +52,6 @@ const char ASCII_OPEN_DLG_TYPES_NAMES[ASCII_OPEN_DLG_TYPES_NUMBER][24] = {"Ignor
                                                                             "Blue",
                                                                             "Grey",
                                                                             "Scalar",
-                                                                            "Scalar>0",
                                                                             "RGBAi",
                                                                             "RGBAf",
                                                                             };
@@ -118,6 +110,9 @@ public:
 	//! Returns columns count per line
 	unsigned getColumnsCount() const {return m_columnsCount;}
 
+	//! Returns the max number of points per cloud
+	unsigned getMaxCloudSize() const;
+
 	//! Checks the "opening" sequence as set by the user
 	/** \return validity (+ error message if not)
 	**/
@@ -145,5 +140,4 @@ protected:
 
 };
 
-#endif
-
+#endif //CC_ASCII_OPEN_DIALOG_HEADER

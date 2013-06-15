@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1595                                                              $
-//$LastChangedDate:: 2010-07-02 18:04:17 +0200 (ven., 02 juil. 2010)       $
-//**************************************************************************
-//
 
 #include "ccUnrollDlg.h"
 
@@ -78,6 +71,7 @@ void ccUnrollDlg::shapeTypeChanged(int index)
         labelAngle->setHidden(true);
         doubleSpinBoxAngle->setHidden(true);
         groupBoxAxisPosition->setTitle("Axis position");
+		radiusLabel->setText("Radius");
         checkBoxAuto->setHidden(false);
         axisAutoStateChanged(checkBoxAuto->checkState());
     }
@@ -85,6 +79,7 @@ void ccUnrollDlg::shapeTypeChanged(int index)
     {
         labelAngle->setHidden(false);
         doubleSpinBoxAngle->setHidden(false);
+		radiusLabel->setText("Projection radius");
         groupBoxAxisPosition->setTitle("Cone apex");
         checkBoxAuto->setHidden(true);
         axisAutoStateChanged(Qt::Unchecked);

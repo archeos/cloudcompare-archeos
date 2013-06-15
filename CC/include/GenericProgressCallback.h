@@ -93,19 +93,20 @@ class NormalizedProgress
 {
 public:
 	//! Default constructor
-	/** \param progress_cb associated GenericProgressCallback
+	/** \param callback associated GenericProgressCallback
 		\param totalSteps total number of steps
 		\param totalPercentage equivalent percentage
 	**/
-	NormalizedProgress(GenericProgressCallback* progress_cb, unsigned totalSteps, unsigned totalPercentage=100)
-		: percent(0.0)
-		, percentAdd(1.0)
+	NormalizedProgress(GenericProgressCallback* callback, unsigned totalSteps, unsigned totalPercentage=100)
+		: percent(0.0f)
 		, step(1)
+      , percentAdd(1.0f)
 		, counter(0)
-		, gp(progress_cb)
+		, progressCallback(callback)
 	{
-		assert(progress_cb);
-		scale(totalSteps, totalPercentage==100 && totalSteps<500 ? totalSteps : totalPercentage);
+		assert(progressCallback);
+
+		scale(totalSteps, totalPercentage);
 	}
 
 	//! Scales inner parameters so that 'totalSteps' calls of the 'oneStep' method correspond to 'totalPercentage' percents
@@ -113,21 +114,32 @@ public:
 	{
 		if (totalSteps*totalPercentage==0)
 		{
-			assert(false);
+			step = 1;
+			percentAdd = 0.0f;
 			return;
 		}
 
-        if (totalSteps>totalPercentage)
-            step = unsigned(ceil((float)totalSteps/(float)totalPercentage));
+        if (totalSteps >= 2*totalPercentage)
+		{
+            step = static_cast<unsigned>(ceil(static_cast<float>(totalSteps) / static_cast<float>(totalPercentage)));
+			assert(step!=0 && step<totalSteps);
+            percentAdd = static_cast<float>(totalPercentage) / static_cast<float>(totalSteps/step);
+		}
         else
-            percentAdd = (float)totalPercentage/(float)totalSteps;
+		{
+			step = 1;
+            percentAdd = static_cast<float>(totalPercentage) / static_cast<float>(totalSteps);
+		}
 
 		if (updateCurrentProgress)
 		{
 			percent = (float)counter*(float)totalPercentage/(float)totalSteps;
-			gp->update(percent);
+			progressCallback->update(percent);
 		}
-		counter = 0;
+		else
+		{
+			counter = 0;
+		}
 	}
 
 	//! Resets progress state
@@ -135,7 +147,7 @@ public:
 	{
 		percent = 0.0;
 		counter = 0;
-		gp->update(0.0);
+		progressCallback->update(0.0);
 	}
 
 	//! Increments total progress value
@@ -144,10 +156,10 @@ public:
 		if (((++counter) % step)==0)
 		{
 			percent += percentAdd;
-			gp->update(percent);
+			progressCallback->update(percent);
 		}
 
-		return !gp->isCancelRequested();
+		return !progressCallback->isCancelRequested();
 	}
 
 protected:
@@ -155,17 +167,17 @@ protected:
 	//! Total progress value (in percent)
 	float percent;
 
-	//! Progress (percent) added to total progress value for each call to 'oneStep'
-	float percentAdd;
-
-	//! Number of necessary calls to 'oneStep' to increase total progress value
+	//! Number of necessary calls to 'oneStep' to actually call progress callback
     unsigned step;
 
-	//! Number of calls to 'oneStep'
+	//! Percentage added to total progress value at each step
+	float percentAdd;
+
+	//! Current number of calls to 'oneStep'
 	unsigned counter;
 
 	//! associated GenericProgressCallback
-	GenericProgressCallback* gp;
+	GenericProgressCallback* progressCallback;
 
 };
 

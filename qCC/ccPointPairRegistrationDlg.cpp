@@ -10,6 +10,9 @@
 #include <cc2DLabel.h>
 #include <ccPointCloud.h>
 
+//CCLib
+#include <RegistrationTools.h>
+
 //Qt
 #include <QMdiSubWindow>
 
@@ -488,7 +491,7 @@ void ccPointPairRegistrationDlg::showReferenceCloud(bool state)
 	}
 }
 
-bool ccPointPairRegistrationDlg::callHornRegistration(CCLib::HornRegistrationTools::ScaledTransformation& trans, double& rms)
+bool ccPointPairRegistrationDlg::callHornRegistration(CCLib::PointProjectionTools::Transformation& trans, double& rms)
 {
 	assert(m_aligned.cloud);
 	if (!m_aligned.cloud)
@@ -500,7 +503,6 @@ bool ccPointPairRegistrationDlg::callHornRegistration(CCLib::HornRegistrationToo
 		ccLog::Error("Need at least 3 points for each cloud (and the same number of points in both clouds)!");
 		return false;
 	}
-	unsigned count = m_refPoints.size();
 
 	//fixed scale?
 	bool fixedScale = fixedScalecheckBox->isChecked();
@@ -519,7 +521,7 @@ bool ccPointPairRegistrationDlg::callHornRegistration(CCLib::HornRegistrationToo
 
 void ccPointPairRegistrationDlg::align()
 {
-	CCLib::HornRegistrationTools::ScaledTransformation trans;
+	CCLib::PointProjectionTools::Transformation trans;
 	double rms;
 	if (callHornRegistration(trans,rms))
 	{
@@ -575,7 +577,7 @@ void ccPointPairRegistrationDlg::reset()
 
 void ccPointPairRegistrationDlg::apply()
 {
-	CCLib::HornRegistrationTools::ScaledTransformation trans;
+	CCLib::PointProjectionTools::Transformation trans;
 	double rms;
 	if (callHornRegistration(trans,rms))
 	{

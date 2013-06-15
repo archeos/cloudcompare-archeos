@@ -27,7 +27,10 @@
 #include <ccMainAppInterface.h>
 
 MLSSmoothingUpsampling::MLSSmoothingUpsampling()
-	: BaseFilter(FilterDescription("MLS smoothing", "Smooth using MLS, optionally upsample", "Smooth the cloud using Moving Least Sqares algorithm, estimate normals and optionally upsample", ":/toolbar/PclUtils/icons/mls_smoothing.png", true))
+    : BaseFilter(FilterDescription("MLS smoothing",
+                                   "Smooth using MLS, optionally upsample",
+                                   "Smooth the cloud using Moving Least Sqares algorithm, estimate normals and optionally upsample",
+                                   ":/toolbar/PclUtils/icons/mls_smoothing.png"))
 	, m_dialog(0)
 {
 	m_parameters = new MLSParameters;
@@ -103,6 +106,8 @@ int MLSSmoothingUpsampling::compute()
 #ifdef LP_PCL_PATCH_ENABLED
 	//copy the original scalar fields here
 	copyScalarFields(cloud, new_cloud, mapping_indices, true);
+	//copy the original colors here
+	copyRGBColors(cloud, new_cloud, mapping_indices, true);
 #endif
 
     //disable original cloud
@@ -115,7 +120,7 @@ int MLSSmoothingUpsampling::compute()
 	return 1;
 }
 
-int MLSSmoothingUpsampling::openDialog()
+int MLSSmoothingUpsampling::openInputDialog()
 {
 	if (!m_dialog)
 		m_dialog = new MLSDialog();
@@ -146,5 +151,8 @@ void MLSSmoothingUpsampling::getParametersFromDialog()
 
 template int smooth_mls<pcl::PointXYZ, pcl::PointNormal>(const pcl::PointCloud<pcl::PointXYZ>::Ptr &incloud,
 	const MLSParameters &params,
-	pcl::PointCloud<pcl::PointNormal>::Ptr &outcloud,
-	pcl::PointIndicesPtr &used_ids);
+	pcl::PointCloud<pcl::PointNormal>::Ptr &outcloud
+#ifdef LP_PCL_PATCH_ENABLED
+  ,	pcl::PointIndicesPtr &used_ids
+#endif
+  );

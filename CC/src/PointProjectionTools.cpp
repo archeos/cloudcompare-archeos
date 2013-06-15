@@ -100,7 +100,7 @@ SimpleCloud* PointProjectionTools::developCloudOnCylinder(GenericCloud* theCloud
 	return newList;
 }
 
-//déroule la liste sur un cone dont le centre est "center" et d'angle alpha en degrés
+//deroule la liste sur un cone dont le centre est "center" et d'angle alpha en degres
 SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uchar dim, PointCoordinateType baseRadius, float alpha, const CCVector3& center, GenericProgressCallback* progressCb)
 {
 	if (!theCloud)
@@ -114,8 +114,6 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 
 	uchar dim1 = (dim>0 ? dim-1 : 2);
 	uchar dim2 = (dim<2 ? dim+1 : 0);
-
-	//Console::print("[ModelList::developList] developpement sur un cone (zTop=%f,alpha=%f)\n",center[2],alpha);
 
 	float tan_alpha = tan(alpha*(float)(CC_DEG_TO_RAD));
 	//float cos_alpha = cos(alpha*CC_DEG_TO_RAD);
@@ -151,7 +149,7 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 		//projection sur le cone
 		z2 = (P.u[dim]+u*tan_alpha)*q;
 		x2 = z2*tan_alpha;
-		//ordonnée
+		//ordonnee
 		//#define ORTHO_CONIC_PROJECTION
 		#ifdef ORTHO_CONIC_PROJECTION
 		lat = sqrt(x2*x2+z2*z2)*cos_alpha;
@@ -163,7 +161,7 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 		dX = u-x2;
 		dZ = P.u[dim]-z2;
 		alt = sqrt(dX*dX+dZ*dZ);
-		//on regarde de quel côté de la surface du cone le resultat tombe par p.v.
+		//on regarde de quel cote de la surface du cone le resultat tombe par p.v.
 		if (x2*P.u[dim] - z2*u<0.0)
 			alt=-alt;
 
@@ -187,43 +185,60 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 
 SimpleCloud* PointProjectionTools::applyTransformation(GenericCloud* theCloud, Transformation& trans, GenericProgressCallback* progressCb)
 {
-	assert(theCloud);
+    assert(theCloud);
 
-	unsigned n = theCloud->size();
+    unsigned count = theCloud->size();
 
-	SimpleCloud* transformedCloud = new SimpleCloud();
-	if (!transformedCloud->reserve(n))
-		return 0; //not enough memory
+    SimpleCloud* transformedCloud = new SimpleCloud();
+    if (!transformedCloud->reserve(count))
+        return 0; //not enough memory
 
-	NormalizedProgress* nprogress = 0;
-	if (progressCb)
+    NormalizedProgress* nprogress = 0;
+    if (progressCb)
+    {
+        progressCb->reset();
+        progressCb->setMethodTitle("ApplyTransformation");
+        nprogress = new NormalizedProgress(progressCb,count);
+        char buffer[256];
+        sprintf(buffer,"Number of points = %i",count);
+        progressCb->setInfo(buffer);
+        progressCb->start();
+    }
+
+    theCloud->placeIteratorAtBegining();
+    const CCVector3* P;
+
+	if (trans.R.isValid())
 	{
-		progressCb->reset();
-		progressCb->setMethodTitle("ApplyTransformation");
-		nprogress = new NormalizedProgress(progressCb,n);
-		char buffer[256];
-		sprintf(buffer,"Number of points = %i",n);
-		progressCb->setInfo(buffer);
-		progressCb->start();
+		while ((P = theCloud->getNextPoint()))
+		{
+			//P' = s*R.P+T
+			CCVector3 newP = trans.s * (trans.R * (*P)) + trans.T;
+
+			transformedCloud->addPoint(newP);
+
+			if (nprogress && !nprogress->oneStep())
+				break;
+		}
+	}
+	else
+	{
+		while ((P = theCloud->getNextPoint()))
+		{
+			//P' = s*P+T
+			CCVector3 newP = trans.s * (*P) + trans.T;
+
+			transformedCloud->addPoint(newP);
+
+			if (nprogress && !nprogress->oneStep())
+				break;
+		}
 	}
 
-	theCloud->placeIteratorAtBegining();
-	const CCVector3* P;
-	while ((P = theCloud->getNextPoint()))
-	{
-	    //P' = R*P+T
-        CCVector3 newP = (trans.R.isValid() ? trans.R * (*P) : (*P)) + trans.T;
-
-		transformedCloud->addPoint(newP);
-
-		if (nprogress && !nprogress->oneStep())
-			break;
-	}
-
-	if (progressCb)
+    if (progressCb)
         progressCb->stop();
 
-	return transformedCloud;
+    return transformedCloud;
 }
 
 GenericIndexedMesh* PointProjectionTools::computeTriangulation(GenericIndexedCloudPersist* theCloud, CC_TRIANGULATION_TYPES type)
@@ -237,11 +252,11 @@ GenericIndexedMesh* PointProjectionTools::computeTriangulation(GenericIndexedClo
 	{
 	case GENERIC:
 		{
-			unsigned i,n=theCloud->size();
+			unsigned count = theCloud->size();
 			CC2DPointsConainer the2DPoints;
 			try
 			{
-				the2DPoints.resize(n);
+				the2DPoints.resize(count);
 			}
 			catch (.../*const std::bad_alloc&*/) //out of memory
 			{
@@ -250,7 +265,7 @@ GenericIndexedMesh* PointProjectionTools::computeTriangulation(GenericIndexedClo
 
 			theCloud->placeIteratorAtBegining();
 			CCVector3 P;
-			for (i=0;i<n;++i)
+			for (unsigned i=0;i<count;++i)
 			{
 				theCloud->getPoint(i,P);
 				the2DPoints[i].x = P.x;

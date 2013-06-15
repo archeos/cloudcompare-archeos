@@ -38,11 +38,13 @@
 #include <unistd.h>
 #endif
 
-BaseFilter::BaseFilter(FilterDescription desc)
+BaseFilter::BaseFilter(FilterDescription desc, ccPluginInterface * parent_plugin)
 	: m_action(0)
-	, m_desc(desc)
+    , m_desc(desc)
+    , m_show_progress(true)
 {
 	initAction();
+    m_parent_plugin = parent_plugin;
 }
 
 void BaseFilter::initAction()
@@ -86,7 +88,7 @@ int BaseFilter::performAction()
     }
 
     //if dialog is needed open the dialog
-	int dialog_result = openDialog();
+    int dialog_result = openInputDialog();
 	if (dialog_result < 1)
 	{
 		if (dialog_result<0)
@@ -114,6 +116,18 @@ int BaseFilter::performAction()
         throwError(start_status);
         return start_status;
     }
+
+    //if we have an output dialog is time to show it
+    int out_dialog_result = openOutputDialog();
+    if (out_dialog_result < 1)
+    {
+        if (out_dialog_result<0)
+        throwError(out_dialog_result);
+        else
+            out_dialog_result = 1; //the operation is canceled by the user, no need to throw an error!
+        return out_dialog_result; //maybe some filter could ask the user if he wants to ac
+    }
+
 
 	return 1;
 }
@@ -149,58 +163,81 @@ static void doCompute()
 
 int BaseFilter::start()
 {   
-	//old version
-    //int is_ok = compute();
 
-	//Version with a separate thread (and a progress callback)
-	ccProgressDialog* progressCb = new ccProgressDialog();
-	progressCb->setCancelButton(0);
-	progressCb->setRange(0,0);
-	progressCb->setInfo("Operation in progress");
-	progressCb->setMethodTitle(qPrintable(getFilterName()));
-	progressCb->start();
-	QApplication::processEvents();
-
-	if (s_computing)
-	{
-		throwError(-32);
-		return -1;
-	}
-
-	s_computeStatus = -1;
-	s_filter = this;
-	s_computing = true;
-	unsigned progress = 0;
-
-	QFuture<void> future = QtConcurrent::run(doCompute);
-	while (!future.isFinished())
-	{
-#if defined(_WIN32) || defined(WIN32)
-		::Sleep(500);
-#else
-        usleep(1.0);
-#endif
-		progressCb->update(++progress);
-	}
-	int is_ok = s_computeStatus;
-	s_filter = 0;
-	s_computing = false;
-
-	progressCb->stop();
-	QApplication::processEvents();
-
-    if (is_ok < 0)
+    if (m_show_progress)
     {
-        throwError(is_ok);
-        return -1;
+        ccProgressDialog* progressCb = new ccProgressDialog();
+        progressCb->setCancelButton(0);
+        progressCb->setRange(0,0);
+        progressCb->setInfo("Operation in progress");
+        progressCb->setMethodTitle(qPrintable(getFilterName()));
+        progressCb->start();
+        QApplication::processEvents();
+
+        if (s_computing)
+        {
+            throwError(-32);
+            return -1;
+        }
+
+        s_computeStatus = -1;
+        s_filter = this;
+        s_computing = true;
+        unsigned progress = 0;
+
+        QFuture<void> future = QtConcurrent::run(doCompute);
+        while (!future.isFinished())
+        {
+#if defined(_WIN32) || defined(WIN32)
+            ::Sleep(500);
+#else
+            usleep(1.0);
+#endif
+            progressCb->update(++progress);
+        }
+        int is_ok = s_computeStatus;
+        s_filter = 0;
+        s_computing = false;
+
+        progressCb->stop();
+        QApplication::processEvents();
+        if (is_ok < 0)
+        {
+            throwError(is_ok);
+            return -1;
+        }
+
+
+    }
+    else
+    {
+        s_computeStatus = -1;
+        s_filter = this;
+        s_computing = true;
+
+        QFuture<void> future = QtConcurrent::run(doCompute);
+        while (!future.isFinished())
+        {
+#if defined(_WIN32) || defined(WIN32)
+            ::Sleep(500);
+#else
+            usleep(1.0);
+#endif
+        }
+        int is_ok = s_computeStatus;
+        s_filter = 0;
+        s_computing = false;
+
+        if (is_ok < 0)
+        {
+            throwError(is_ok);
+            return -1;
+        }
     }
 
-	return 1;
-}
 
-bool BaseFilter::hasDialog() const
-{
-	return m_desc.m_has_dialog;
+
+	return 1;
 }
 
 QString BaseFilter::getFilterName() const
@@ -290,6 +327,21 @@ void BaseFilter::getAllEntitiesOfType(CC_CLASS_ENUM type, ccHObject::Container& 
 
 	m_app->dbRootObject()->filterChildren(entities,true,type);
 }
+
+
+void BaseFilter::getSelectedEntitiesThatAreCCPointCloud(ccHObject::Container & entities)
+{
+    ccHObject::Container selected = m_selected;
+    for (int i = 0 ; i < selected.size(); ++i)
+    {
+        ccHObject * this_obj = selected.at(i);
+        if (this_obj->isA(CC_POINT_CLOUD))
+        {
+            entities.push_back(this_obj);
+        }
+    }
+}
+
 
 int BaseFilter::hasSelectedScalarField(std::string field_name)
 {

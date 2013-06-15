@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2251                                                              $
-//$LastChangedDate:: 2012-10-08 23:56:41 +0200 (lun., 08 oct. 2012)        $
-//**************************************************************************
-//
 
 #ifndef CC_ITEM_DELEGATE_HEADER
 #define CC_ITEM_DELEGATE_HEADER
@@ -29,7 +22,7 @@
 #include <ccChunkedArray.h>
 
 //Qt
-#include  <QItemDelegate>
+#include <QStyledItemDelegate>
 
 class ccHObject;
 class ccGenericPointCloud;
@@ -48,40 +41,43 @@ class QStandardItemModel;
 class QStandardItem;
 class QAbstractItemView;
 
-enum CC_PROPERTY_ROLE { OBJECT_NAME						=   1,
-                        OBJECT_VISIBILITY               =   2,
-                        OBJECT_CURRENT_DISPLAY			=   3,
-                        OBJECT_COLORS_SHOWN				=   4,
-                        OBJECT_NORMALS_SHOWN			=   5,
-                        OBJECT_SCALAR_FIELD_SHOWN		=   6,
-                        OBJECT_SCALAR_FIELD_POSITIVE	=   7,
-                        OBJECT_NAN_IN_GREY              =   8,
-                        OBJECT_SF_SHOW_SCALE			=   9,
-                        OBJECT_OCTREE_LEVEL             =   10,
-                        OBJECT_OCTREE_TYPE              =   11,
-                        OBJECT_MESH_WIRE                =   12,
-                        OBJECT_CURRENT_SCALAR_FIELD     =   13,
-                        OBJECT_CURRENT_COLOR_RAMP       =   14,
-                        OBJECT_IMAGE_ALPHA              =   15,
-                        OBJECT_APPLY_IMAGE_VIEWPORT     =   16,
-                        OBJECT_CLOUD_SF_EDITOR          =   17,
-                        OBJECT_SENSOR_DISPLAY_SCALE     =   18,
-                        OBJECT_COLOR_RAMP_STEPS         =   19,
-						OBJECT_MATERIALS				=	20,
-						OBJECT_APPLY_LABEL_VIEWPORT		=	21,
-						OBJECT_LABEL_DISP_2D			=	22,
-						OBJECT_LABEL_DISP_3D			=	23,
-                        OBJECT_PRIMITIVE_PRECISION      =   24,
-						OBJECT_CLOUD_POINT_SIZE			=	25,
-						OBJECT_NAME_IN_3D				=	26,
-};
-
 //! GUI properties list dialog element
-class ccPropertiesTreeDelegate : public QItemDelegate
+class ccPropertiesTreeDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 
 public:
+
+	//! Delegate items roles
+	enum CC_PROPERTY_ROLE { OBJECT_NO_PROPERTY		= 0	,
+							OBJECT_NAME					,
+							OBJECT_VISIBILITY           ,
+							OBJECT_CURRENT_DISPLAY		,
+							OBJECT_COLORS_SHOWN			,
+							OBJECT_NORMALS_SHOWN		,
+							OBJECT_SCALAR_FIELD_SHOWN	,
+							//OBJECT_XXXX				,
+							//OBJECT_XXXX				,
+							OBJECT_SF_SHOW_SCALE		,
+							OBJECT_OCTREE_LEVEL         ,
+							OBJECT_OCTREE_TYPE          ,
+							OBJECT_MESH_WIRE            ,
+							OBJECT_MESH_STIPPLING		,
+							OBJECT_CURRENT_SCALAR_FIELD ,
+							OBJECT_CURRENT_COLOR_RAMP   ,
+							OBJECT_IMAGE_ALPHA          ,
+							OBJECT_APPLY_IMAGE_VIEWPORT ,
+							OBJECT_CLOUD_SF_EDITOR      ,
+							OBJECT_SENSOR_DISPLAY_SCALE ,
+							OBJECT_COLOR_RAMP_STEPS     ,
+							OBJECT_MATERIALS			,
+							OBJECT_APPLY_LABEL_VIEWPORT	,
+							OBJECT_LABEL_DISP_2D		,
+							OBJECT_LABEL_DISP_3D		,
+							OBJECT_PRIMITIVE_PRECISION  ,
+							OBJECT_CLOUD_POINT_SIZE		,
+							OBJECT_NAME_IN_3D			,
+	};
 
     //! Default constructor
     ccPropertiesTreeDelegate(QStandardItemModel* _model, QAbstractItemView* _view, QObject *parent = 0);
@@ -89,7 +85,7 @@ public:
     //! Default destructor
     virtual ~ccPropertiesTreeDelegate();
 
-    //inherited from QItemDelegate
+    //inherited from QStyledItemDelegate
     virtual QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index ) const;
     virtual QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const;
 	//virtual bool editorEvent(QEvent* event, QAbstractItemModel* model, const QStyleOptionViewItem& option, const QModelIndex& index);
@@ -111,23 +107,24 @@ signals:
 protected slots:
     void updateItem(QStandardItem* item);
     void scalarFieldChanged(int pos);
-	void scalarFieldTypeChanged(bool positive);
-    void colorRampChanged(int pos);
+    void colorScaleChanged(int pos);
+    void colorRampStepsChanged(int val);
+    void spawnColorRampEditor();
     void octreeDisplayTypeChanged(int pos);
     void octreeDisplayedLevelChanged(int val);
 	void primitivePrecisionChanged(int val);
-    void colorRampStepsChanged(int val);
     void imageAlphaChanged(int val);
     void applyImageViewport();
 	void applyLabelViewport();
-    void redrawObjectSF();
+    void updateDisplay();
     void objectDisplayChanged(const QString &newDisplayTitle);
     void sensorScaleChanged(double val);
 	void cloudPointSizeChanged(int size);
 
 protected:
 
-    void addSeparator(const char* title);
+    void addSeparator(QString title);
+	void appendRow(QStandardItem* leftItem, QStandardItem* rightItem, bool openPersistentEditor = false);
 
     void fillWithHObject(ccHObject*);
     void fillWithPointCloud(ccGenericPointCloud*);
@@ -142,7 +139,7 @@ protected:
     void fillWithGBLSensor(ccGBLSensor*);
 	void fillWithMaterialSet(ccMaterialSet*);
 	void fillWithShareable(CCShareable*);
-	template<int N, class ScalarType> void fillWithChunkedArray(ccChunkedArray<N,ScalarType>*);
+	template<int N, class ElementType> void fillWithChunkedArray(ccChunkedArray<N,ElementType>*);
 
 	//! Updates the current model (assuming object is the same)
 	void updateModel();
