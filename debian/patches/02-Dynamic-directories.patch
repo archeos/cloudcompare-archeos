@@ -21,6 +21,15 @@ Subject: Dynamic directies
  //qCC_db
  #include <ccHObject.h>
  #include <ccBBox.h>
+@@ -313,7 +316,7 @@ void ccGLWindow::initializeGL()
+ 			else
+ 			{
+ 				ccColorRampShader* colorRampShader = new ccColorRampShader();
+-				QString shadersPath = ccGLWindow::getShadersPath();
++				QString shadersPath = ShaderInstallDir;
+ 				if (!colorRampShader->loadProgram(0,qPrintable(shadersPath+QString("/ColorRamp/color_ramp.frag"))))
+ 				{
+ 					ccConsole::Warning("[3D View %i] Failed to load color ramp shader!",m_uniqueID);
 @@ -3011,7 +3014,7 @@ bool ccGLWindow::renderToFile(const char
  
  			if (m_activeGLFilter && !filter)
