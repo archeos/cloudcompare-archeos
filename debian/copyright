@@ -38,6 +38,7 @@ License: GPL-2.0+
 
 Files: libs/CCFbo/*
 Copyright: EDF R&D / TELECOM ParisTech
+License: GPL-2.0+
 Author: Christian Boucheny (EDF R&D / INRIA)
 Comment: Modification, Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
 
