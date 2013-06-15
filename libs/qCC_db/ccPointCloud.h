@@ -38,7 +38,11 @@ class ccScalarField;
 ***************************************************/
 
 //! Max number of points per cloud (point cloud will be chunked above this limit)
+#if defined(_W64) || defined(__x86_64__) || defined(__ppc64__)
+const unsigned CC_MAX_NUMBER_OF_POINTS_PER_CLOUD = 2000000000; //we must keep it below MAX_INT to avoid probable issues ;)
+#else
 const unsigned CC_MAX_NUMBER_OF_POINTS_PER_CLOUD = 128000000;
+#endif
 
 //! Max number of displayed point (per entity) in "low detail" display
 const unsigned MAX_LOD_POINTS_NUMBER = 10000000;
@@ -78,17 +82,7 @@ public:
 		\param selection a ReferenceCloud (pointing to source)
 		\param source a ccPointCloud (reference)
     **/
-	ccPointCloud(CCLib::ReferenceCloud* selection, ccPointCloud* source);
-
-    //! Creates a new point cloud object from a ReferenceCloud
-	/** The real cloud must be explicitly known (and of type ccGenericPointCloud here).
-        It must be passed as a second argument. It will allow the importation of
-		points but also other properties such as colors, normals, etc. However, only
-		the active scalar field can be imported
-		\param selection a ReferenceCloud (pointing to source)
-		\param source a ccGenericPointCloud (reference)
-    **/
-	ccPointCloud(CCLib::ReferenceCloud* selection, ccGenericPointCloud* source);
+	ccPointCloud(const CCLib::ReferenceCloud* selection, const ccPointCloud* source);
 
     //! Creates a new point cloud object from a GenericIndexedCloud
 	/** "GenericIndexedCloud" is an extension of GenericCloud (from CCLib)
@@ -236,14 +230,14 @@ public:
 	**/
 	virtual void setCurrentDisplayedScalarField(int index);
 
-	virtual void deleteScalarField(int index); //redefinition
-	virtual void deleteAllScalarFields();  //redefinition
+	//inherited from ChunkedPointCloud
+	virtual void deleteScalarField(int index);
+	virtual void deleteAllScalarFields();
 
-	void setColorWithDistances(bool mixWithExistingColor);
-	bool areNanScalarValuesInGrey() const;
-	void setGreyForNanScalarValues(bool state);
-    void showSFColorsScale(bool state);
+	//! Returns whether color scale should be displayed or not
     bool sfColorScaleShown() const;
+	//! Sets whether color scale should be displayed or not
+	void showSFColorsScale(bool state);
 
 
 	/***************************************************
@@ -265,12 +259,11 @@ public:
     virtual bool hasDisplayedScalarField() const;
 
     //inherited from ccGenericPointCloud
-	virtual bool isDisplayedSFPositive();
-	virtual const colorType* getPointDistanceColor(unsigned pointIndex) const;
-	virtual const colorType* getDistanceColor(DistanceType d) const;
-	virtual DistanceType getPointDisplayedDistance(unsigned pointIndex) const;
+	virtual const colorType* getPointScalarValueColor(unsigned pointIndex) const;
+	virtual const colorType* geScalarValueColor(ScalarType d) const;
+	virtual ScalarType getPointDisplayedDistance(unsigned pointIndex) const;
 	virtual const colorType* getPointColor(unsigned pointIndex) const;
-	virtual const normsType getPointNormalIndex(unsigned pointIndex) const;
+	virtual const normsType& getPointNormalIndex(unsigned pointIndex) const;
 	virtual const PointCoordinateType* getPointNormal(unsigned pointIndex) const;
 	/** WARNING: if removeSelectedPoints is true, any attached octree will be deleted.
 	**/
@@ -352,41 +345,39 @@ public:
         \param r red component
         \param g green component
         \param b blue component
+		\return success
     **/
-	void colorize(float r, float g, float b);
+	bool colorize(float r, float g, float b);
 
 	//! Assigns color to points proportionnaly to their 'height'
-	/** Height is the coordinate along the specified dimension
-        (heightDim). Color array is automatically allocated if
-        necessary. The default color ramp is used.
+	/** Height is defined wrt to the specified dimension (heightDim).
+		Color array is automatically allocated if necessary.
         \param heightDim ramp dimension (0->X, 1->Y, 2->Z)
+		\param colorScale color scale to use
+		\return success
     **/
-	void colorizeWithDefaultRamp(unsigned char heightDim);
+	bool setRGBColorByHeight(unsigned char heightDim, ccColorScale::Shared colorScale);
 
-	//! Assigns color to points proportionnaly to their 'height'
-	/** Height is the coordinate along the specified dimension
-        (heightDim: 0->X, 1->Y, 2->Z). Color array is automatically
-        allocated if necessary. Linear color ramp is specified
-        by starting and ending color.
-        \param heightDim ramp dimension (0->X, 1->Y, 2->Z)
-        \param minColor ramp starting RGB color (size: 3)
-        \param maxColor ramp ending RGB color (size: 3)
-    **/
-	void colorizeByHeight(unsigned char heightDim, const colorType* minColor, const colorType* maxColor);
-
+	//! Sets RGB colors with current scalar field (values & parameters)
+	/** \return success
+	**/
+	bool setRGBColorWithCurrentScalarField(bool mixWithExistingColor = false);
+	
 	//! Set a unique color for the whole cloud (shortcut)
 	/** Color array is automatically allocated if necessary.
         \param r red component
         \param g green component
         \param b blue component
+		\return success
     **/
-	void setRGBColor(colorType r, colorType g, colorType b);
+	bool setRGBColor(colorType r, colorType g, colorType b);
 
 	//! Set a unique color for the whole cloud
 	/** Color array is automatically allocated if necessary.
         \param col RGB color (size: 3)
+		\return success
 	**/
-	void setRGBColor(const colorType* col);
+	bool setRGBColor(const colorType* col);
 
     //! Inverts normals (if any)
 	void invertNormals();
@@ -410,14 +401,14 @@ public:
         \param maxVal maximum value (above, points are excluded)
         \return resulting cloud (remaining points)
     **/
-    ccPointCloud* filterPointsByScalarValue(DistanceType minVal, DistanceType maxVal);
+    ccPointCloud* filterPointsByScalarValue(ScalarType minVal, ScalarType maxVal);
 
     //! Hides points whose scalar values falls into an interval
     /** Values are taken from the current OUTPUT scalar field.
         \param minVal minimum value (below, points are hidden)
         \param maxVal maximum value (above, points are hidden)
     **/
-    void hidePointsByScalarValue(DistanceType minVal, DistanceType maxVal);
+    void hidePointsByScalarValue(ScalarType minVal, ScalarType maxVal);
 
 	//! Unrolls the cloud and its normals on a cylinder
 	/** This method is redundant with the "developCloudOnCylinder" method of CCLib,
@@ -427,24 +418,24 @@ public:
 		\param dim dimension along which the cylinder axis is aligned (X=0, Y=1, Z=2)
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism
 	**/
-	void unrollOnCylinder(double radius, CCVector3* center=0, int dim=2, CCLib::GenericProgressCallback* progressCb=NULL);
+	void unrollOnCylinder(double radius, CCVector3* center=0, unsigned char dim=2, CCLib::GenericProgressCallback* progressCb=NULL);
 
 	//! Unrolls the cloud and its normals on a cone
 	/** This method is redundant with the "developCloudOnCone" method of CCLib,
 		appart that it can also handle the cloud normals.
 		\param baseRadius unrolling cone base radius
-		\param alpha cone angle (between 0 and 180 degrees)
+		\param alpha_deg cone angle (between 0 and 180 degrees)
 		\param apex cone apex
 		\param dim dimension along which the cone axis is aligned (X=0, Y=1, Z=2)
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism
 	**/
-	void unrollOnCone(double baseRadius, double alpha, const CCVector3& apex, int dim=2, CCLib::GenericProgressCallback* progressCb=NULL);
+	void unrollOnCone(double baseRadius, double alpha_deg, const CCVector3& apex, unsigned char dim=2, CCLib::GenericProgressCallback* progressCb=NULL);
 
 	//! Adds associated SF color ramp info to current GL context
 	virtual void addColorRampInfo(CC_DRAW_CONTEXT& context);
 
     //inherited from ChunkedPointCloud
-	virtual int addScalarField(const char* uniqueName, bool positive);
+	virtual int addScalarField(const char* uniqueName);
 
 	//! Adds an existing scalar field to this cloud
 	/** Warning: the cloud takes ownership of it!
@@ -479,8 +470,6 @@ protected:
 	//! Normals (compressed)
 	NormsIndexesTableType* m_normals;
 
-    //! Specifies whether filtered out scalar values should be displayed (in gey) or not displayed at all
-    bool m_greyForNanScalarValues;
 	//! Specifies whether current scalar field color scale should be displayed or not
     bool m_sfColorScaleDisplayed;
 

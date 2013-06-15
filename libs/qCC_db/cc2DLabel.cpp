@@ -76,10 +76,14 @@ void cc2DLabel::setPosition(float x, float y)
 	m_screenPos[1]=y;
 }
 
-void cc2DLabel::move(float dx, float dy)
+bool cc2DLabel::move2D(int x, int y, int dx, int dy, int screenWidth, int screenHeight)
 {
-	m_screenPos[0]+=dx;
-	m_screenPos[1]+=dy;
+	assert(screenHeight > 0 && screenWidth > 0);
+	
+	m_screenPos[0] += (float)dx/(float)screenWidth;
+	m_screenPos[1] += (float)dy/(float)screenHeight;
+
+	return true;
 }
 
 void cc2DLabel::clear()
@@ -108,7 +112,7 @@ bool cc2DLabel::addPoint(ccGenericPointCloud* cloud, unsigned pointIndex)
 		break;
 	case 2:
 		if (m_points[0].cloud == cloud)
-			setName("Vector #pt_0_idx - #pt_0_idx");
+			setName("Vector #pt_0_idx - #pt_1_idx");
 		else
 			setName("Vector #pt_0_idx(@pt_0_cloud_id) - #pt_1_idx@(@pt_1_cloud_id)");
 		break;
@@ -273,7 +277,7 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			//scalar field
 			if (cloud->hasDisplayedScalarField())
 			{
-				DistanceType D = cloud->getPointScalarValue(pointIndex);
+				ScalarType D = cloud->getPointScalarValue(pointIndex);
 				QString sfStr = QString("Scalar: %1").arg(D,0,'f',precision);
 				body << sfStr;
 			}
@@ -338,9 +342,15 @@ QStringList cc2DLabel::getLabelContent(int precision)
 
 			//angle
 			CCVector3 P2P3 = *P3-*P2;
+
+            //negatives
+            CCVector3 _P1P2 = -P1P2;
+            CCVector3 _P1P3 = -P1P3;
+            CCVector3 _P2P3 = -P2P3;
+
 			double angleAtP1 = GetAngle_deg(P1P2,P1P3);
-			double angleAtP2 = GetAngle_deg(P2P3,-P1P2);
-			double angleAtP3 = GetAngle_deg(-P1P3,-P2P3); //should be equal to 180-a1-a2!
+            double angleAtP2 = GetAngle_deg(P2P3,_P1P2);
+            double angleAtP3 = GetAngle_deg(_P1P3,_P2P3); //should be equal to 180-a1-a2!
 			QString angleStr = QString("Angles: A=%1 - B=%3 - C=%5 deg.").arg(angleAtP1,0,'f',precision).arg(angleAtP2,0,'f',precision).arg(angleAtP3,0,'f',precision);
 			body << angleStr;
 		}
@@ -398,7 +408,12 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 	//standard case: list names pushing
 	bool pushName = MACRO_DrawEntityNames(context);
 	if (pushName)
+	{
+		//not particularily fast
+		if (MACRO_DrawFastNamesOnly(context))
+			return;
 		glPushName(getUniqueID());
+	}
 
     const float c_sizeFactor = 4.0f;
     bool loop=false;
@@ -458,15 +473,14 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 				}
 			
 				//build-up point maker own 'context'
-				bool pushName = MACRO_DrawEntityNames(context);
 				CC_DRAW_CONTEXT markerContext = context;
 				markerContext.flags &= (~CC_DRAW_ENTITY_NAMES); //we must remove the 'push name flag' so that the sphere doesn't push its own!
 				markerContext._win = 0;
 
 				if (isSelected() && !pushName)
-					c_unitPointMarker->setColor(ccColor::red);
+					c_unitPointMarker->setTempColor(ccColor::red);
 				else
-					c_unitPointMarker->setColor(ccColor::magenta);
+					c_unitPointMarker->setTempColor(ccColor::magenta);
 
 				for (unsigned i=0; i<count; i++)
 				{

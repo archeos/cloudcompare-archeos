@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2257                                                              $
-//$LastChangedDate:: 2012-10-11 23:48:15 +0200 (jeu., 11 oct. 2012)        $
-//**************************************************************************
-//
 
 #include "ccGraphicalSegmentationTool.h"
 
@@ -147,7 +140,6 @@ bool ccGraphicalSegmentationTool::start()
 
     //the user must not close this window!
     m_associatedWin->setUnclosable(true);
-    //m_associatedWin->setPerspectiveState(false,false);
     m_associatedWin->addToOwnDB(m_segmentationPoly);
     m_associatedWin->setPickingMode(ccGLWindow::NO_PICKING);
     pauseSegmentationMode(false);
@@ -205,8 +197,7 @@ void ccGraphicalSegmentationTool::reset()
 {
     if (m_somethingHasChanged)
     {
-        ccHObject::Container::iterator p;
-        for (p=m_toSegment.begin();p!=m_toSegment.end();++p)
+        for (ccHObject::Container::iterator p=m_toSegment.begin(); p!=m_toSegment.end(); ++p)
         {
             if ((*p)->isKindOf(CC_POINT_CLOUD))
                 static_cast<ccGenericPointCloud*>(*p)->razVisibilityArray();
@@ -315,9 +306,12 @@ void ccGraphicalSegmentationTool::updatePolyLine(int x, int y, Qt::MouseButtons 
 
 		if (sz!=4)
 		{
-			m_segmentationPoly->reserve(4);
-			for (unsigned i=0;i<4;++i)
-				m_segmentationPoly->addPointIndex(i);
+			m_segmentationPoly->clear();
+			if (!m_segmentationPoly->addPointIndex(0,4))
+			{
+				ccLog::Error("Out of memory!");
+				return;
+			}
 			m_segmentationPoly->setClosingState(true);
 		}
 	}
@@ -356,32 +350,47 @@ void ccGraphicalSegmentationTool::addPointToPolyline(int x, int y)
 	//start new polyline?
 	if (((m_state & RUNNING) == 0) || sz==0 || ctrlKeyPressed)
 	{
-		//reset polyline
-		m_segmentationPoly->clear();
-		m_polyVertices->clear();
 		//reset state
 		m_state = (ctrlKeyPressed ? RECTANGLE : POLYLINE);
 		m_state |= (STARTED | RUNNING);
+		//reset polyline
+		m_polyVertices->clear();
+		if (!m_polyVertices->reserve(2))
+		{
+			ccLog::Error("Out of memory!");
+			return;
+		}
 		//we add the same point twice (the last point will be used for display only)
-		m_polyVertices->reserve(2);
 		m_polyVertices->addPoint(P);
 		m_polyVertices->addPoint(P);
-		m_segmentationPoly->addPointIndex(0);
-		m_segmentationPoly->addPointIndex(1);
+		m_segmentationPoly->clear();
+		if (!m_segmentationPoly->addPointIndex(0,2))
+		{
+			ccLog::Error("Out of memory!");
+			return;
+		}
 	}
 	else //next points in "polyline mode" only
 	{
 		//we were already in 'polyline' mode?
 		if (m_state & POLYLINE)
 		{
-			m_polyVertices->reserve(sz+4);
+			if (!m_polyVertices->reserve(sz+1))
+			{
+				ccLog::Error("Out of memory!");
+				return;
+			}
 
 			//we replace last point by the current one
-			CCVector3* lastP = const_cast<CCVector3*>(m_polyVertices->getPointPersistentPtr(sz));
+			CCVector3* lastP = const_cast<CCVector3*>(m_polyVertices->getPointPersistentPtr(sz-1));
 			*lastP = P;
 			//and add a new (equivalent) one
 			m_polyVertices->addPoint(P);
-			m_segmentationPoly->addPointIndex(sz);
+			if (!m_segmentationPoly->addPointIndex(sz))
+			{
+				ccLog::Error("Out of memory!");
+				return;
+			}
 			m_segmentationPoly->setClosingState(true);
 		}
 		else //we must change mode
@@ -437,7 +446,7 @@ void ccGraphicalSegmentationTool::closePolyLine(int, int)
 	else
 	{
 		//remove last point!
-		m_segmentationPoly->resize(sz-1);
+		m_segmentationPoly->resize(sz-1); //can't fail --> smaller
 		m_segmentationPoly->setClosingState(true);
 	}
 
@@ -458,7 +467,7 @@ void ccGraphicalSegmentationTool::segmentOut()
     segment(false);
 }
 
-void ccGraphicalSegmentationTool::segment(bool inside)
+void ccGraphicalSegmentationTool::segment(bool keepPointsInside)
 {
     if (!m_associatedWin)
         return;
@@ -484,36 +493,34 @@ void ccGraphicalSegmentationTool::segment(bool inside)
 	int VP[4];
 	m_associatedWin->getViewportArray(VP);
 
-	CCVector3 P;
-	CCVector2 P2D;
-	bool pointInside;
-
     //for each selected entity
     for (ccHObject::Container::iterator p=m_toSegment.begin();p!=m_toSegment.end();++p)
     {
         ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(*p);
         assert(cloud);
 
-        ccGenericPointCloud::VisibilityTableType* vis = cloud->getTheVisibilityArray();
-		assert(vis);
+        ccGenericPointCloud::VisibilityTableType* visibilityArray = cloud->getTheVisibilityArray();
+		assert(visibilityArray);
 
-        unsigned i,cloudSize = cloud->size();
+        unsigned cloudSize = cloud->size();
 
         //we project each point and we check if it falls inside the segmentation polyline
-        for (i=0;i<cloudSize;++i)
-        {
-			cloud->getPoint(i,P);
+        for (unsigned i=0; i<cloudSize; ++i)
+		{
+			if (visibilityArray->getValue(i) == POINT_VISIBLE)
+			{
+				CCVector3 P;
+				cloud->getPoint(i,P);
 
-			GLdouble xp,yp,zp;
-			gluProject(P.x,P.y,P.z,MM,MP,VP,&xp,&yp,&zp);
-			P2D.x = xp - half_w;
-			P2D.y = yp - half_h;
+				GLdouble xp,yp,zp;
+				gluProject(P.x,P.y,P.z,MM,MP,VP,&xp,&yp,&zp);
 
-			pointInside = CCLib::ManualSegmentationTools::isPointInsidePoly(P2D,m_segmentationPoly);
+				CCVector2 P2D(xp-half_w,yp-half_h);
+				bool pointInside = CCLib::ManualSegmentationTools::isPointInsidePoly(P2D,m_segmentationPoly);
 
-            if ((inside && !pointInside)||(!inside && pointInside))
-				vis->setValue(i,0); //hiddenValue=0
-        }
+				visibilityArray->setValue(i, keepPointsInside != pointInside ? POINT_HIDDEN : POINT_VISIBLE );
+			}
+		}
     }
 
     m_somethingHasChanged = true;
@@ -569,9 +576,7 @@ void ccGraphicalSegmentationTool::doSetPolylineSelection()
 	if (!m_rectangularSelection)
 		return;
 
-	QIcon icon(QString::fromUtf8(":/CC/Comp/images/comp/polygonSelect.png"));
-	//QIcon icon;
-	//icon.addFile(QString::fromUtf8(":/CC/Comp/images/comp/polygonSelect.png"), QSize(), QIcon::Normal, QIcon::Off);
+	QIcon icon(QString::fromUtf8(":/CC/images/ccPolygonSelect.png"));
 	selectionModelButton->setIcon(icon);
 
 	m_rectangularSelection=false;
@@ -591,9 +596,7 @@ void ccGraphicalSegmentationTool::doSetRectangularSelection()
 	if (m_rectangularSelection)
 		return;
 
-	QIcon icon(QString::fromUtf8(":/CC/Comp/images/comp/rectangleSelect.png"));
-	//QIcon icon;
-	//icon.addFile(QString::fromUtf8(":/CC/Comp/images/comp/rectangleSelect.png"), QSize(), QIcon::Normal, QIcon::Off);
+	QIcon icon(QString::fromUtf8(":/CC/images/ccRectangleSelect.png"));
 	selectionModelButton->setIcon(icon);
 
 	m_rectangularSelection=true;

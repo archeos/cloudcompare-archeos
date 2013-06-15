@@ -1,6 +1,10 @@
 #include "LowStretchSphereParametrization.h"
 #include "Bitmap.h"
 
+#if !defined(_WIN32) && !defined(WIN32)
+#include <unistd.h>
+#endif
+
 LowStretchSphereParametrization::LowStretchSphereParametrization(
 	const Sphere &sphere)
 : m_sphere(&sphere)

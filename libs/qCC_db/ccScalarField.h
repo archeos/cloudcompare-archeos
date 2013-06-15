@@ -23,7 +23,10 @@
 
 //qCC_db
 #include "ccSerializableObject.h"
-#include "ccColorTablesManager.h"
+#include "ccColorScale.h"
+
+//System
+#include <assert.h>
 
 //! A scalar field associated to display-related parameters
 /** Extends the CCLib::ScalarField object.
@@ -41,89 +44,161 @@ public:
 
 	//! Default constructor
 	/** \param name scalar field name
-        \param positive specifies whether negative values should be ignored
     **/
-	ccScalarField(const char* name = 0, bool positive = false);
+	ccScalarField(const char* name = 0);
 
 	/*** Scalar values display handling ***/
 
-	//! Returns the minimum displayed value
-	inline DistanceType getMinDisplayed() const {return m_minDisplayed;}
-	//! Returns the maximum displayed value
-	inline DistanceType getMaxDisplayed() const {return m_maxDisplayed;}
-	//! Returns the minimum value to start color gradient
-	inline DistanceType getMinSaturation() const {return m_minSaturation;}
-	//! Returns the maximum value to end color gradient
-	inline DistanceType getMaxSaturation() const {return m_maxSaturation;}
+	//! Range structure
+	struct Range
+	{
+	public:
+
+		//! Default constructor
+		Range() : m_min(0), m_start(0), m_stop(0), m_max(0) {}
+
+		//getters
+		inline ScalarType min()			const { return m_min;		}
+		inline ScalarType start()		const { return m_start;		}
+		inline ScalarType stop()		const { return m_stop;		}
+		inline ScalarType max()			const { return m_max;		}
+		inline ScalarType range()		const { return m_range;		}
+		inline ScalarType maxRange()	const { return m_max-m_min; }
+
+		//setters
+		void setBounds(ScalarType minVal, ScalarType maxVal, bool resetStartStop = true)
+		{
+			assert(minVal <=maxVal);
+			m_min = minVal; m_max = maxVal;
+			if (resetStartStop)
+			{
+				m_start = m_min;
+				m_stop = m_max;
+			}
+			else
+			{
+				m_start = inbound(m_start);
+				m_stop = inbound(m_stop);
+			}
+			updateRange();
+		}
+
+		inline void setStart(ScalarType value) { m_start = inbound(value); if (m_stop < m_start) m_stop = m_start; updateRange(); }
+		inline void setStop(ScalarType value) { m_stop = inbound(value); if (m_stop < m_start) m_start = m_stop; updateRange(); }
+		
+		//! Returns the nearest inbound value
+		inline ScalarType inbound(ScalarType val) const { return (val < m_min ?  m_min : (val > m_max ? m_max : val)); }
+		//! Returns whether a value is inbound or not
+		inline bool isInbound(ScalarType val) const { return (val >= m_min && val <= m_max); }
+		//! Returns whether a value is inside range or not
+		inline bool isInRange(ScalarType val) const { return (val >= m_start && val <= m_stop); }
+
+	protected:
+
+		//! Updates actual range
+		inline void updateRange() { m_range = std::max(m_stop-m_start,(ScalarType)ZERO_TOLERANCE); }
+
+		ScalarType m_min;		/**< Minimum value **/
+		ScalarType m_start;		/**< Current start value (in [min,max]) **/
+		ScalarType m_stop;		/**< Current stop value (in [min,max]) **/
+		ScalarType m_max;		/**< Minimum value **/
+		ScalarType m_range;		/**< Actual range: start-stop (but can't be ZERO!) **/
+	};
+
+	//! Access to the range of displayed values
+	/** Values outside of the [start;stop] intervale will either be grey
+		or invisible (see showNaNValuesInGrey).
+	**/
+	inline const Range& displayRange() const { return m_displayRange; }
+
+	//! Access to the range of saturation values
+	/** Relative color scales will only be applied to values inside the
+		[start;stop] intervale.
+	**/
+	inline const Range& saturationRange() const { return m_logScale ? m_logSaturationRange : m_saturationRange; }
+
+	//! Access to the range of log scale saturation values
+	/** Relative color scales will only be applied to values inside the
+		[start;stop] intervale.
+	**/
+	inline const Range& logSaturationRange() const { return m_logSaturationRange; }
 
 	//! Sets the minimum displayed value
-	void setMinDisplayed(DistanceType dist);
+	inline void setMinDisplayed(ScalarType val) { m_displayRange.setStart(val); }
 	//! Sets the maximum displayed value
-	void setMaxDisplayed(DistanceType dist);
-	//! Sets the minimum value at which to start color gradient
-	void setMinSaturation(DistanceType dist);
-	//! Sets the maximum value at which to end color gradient
-	void setMaxSaturation(DistanceType dist);
+	inline void setMaxDisplayed(ScalarType val) { m_displayRange.setStop(val); }
+	//! Sets the value at which to start color gradient
+	void setSaturationStart(ScalarType val);
+	//! Sets the value at which to stop color gradient
+	void setSaturationStop(ScalarType val);
 
-	//! Normalizes a scalar value between 0 and 1
-	/** This method relies on the values of MinDisplayed, MinSaturation, MaxSaturation
-		and MaxDisplayed.
-		\param d a scalar value
-		\return a number between 0 and 1 if inside [MinDisplayed:MaxDisplayed] or -1 otherwise
+	//! Returns the color corresponding to a given value (wrt to the current display parameters)
+	/** Warning: must no be called if the SF is not associated to a color scale!
 	**/
-	DistanceType normalize(DistanceType d) const;
+	inline const colorType* getColor(ScalarType value) const
+	{
+		assert(m_colorScale);
+		return m_colorScale->getColorByRelativePos(normalize(value), m_colorRampSteps, m_showNaNValuesInGrey ? ccColor::lightGrey : 0);
+	}
 
-	//! Returns a normalized value (see ScalarField::normalize)
-	/** This method relies on the values of MinDisplayed, MinSaturation, MaxSaturation
-		and MaxDisplayed.
-		\param index scalar value index
-		\return a number between 0 and 1 if inside [MinDisplayed:MaxDisplayed] or -1 otherwise
-	**/
-	inline DistanceType getNormalizedValue(unsigned index) const {return normalize(getValue(index));}
+	//! Shortcut to getColor
+	inline const colorType* getValueColor(unsigned index) const { return getColor(getValue(index)); }
 
-	//! Sets whether min and max saturation values are absolute or not
-	/** For signed SF only.
-	**/
-	void setAbsoluteSaturation(bool state);
+	//! Sets whether NaN/out of displayed range values should be displayed in grey or hidden
+	inline void showNaNValuesInGrey(bool state) { m_showNaNValuesInGrey = state; }
 
-	//! Returns whether min and max saturation values are absolute or not
-	/** For signed SF only.
+	//! Returns whether NaN values are displayed in grey or hidden
+	inline bool areNaNValuesShownInGrey() const { return m_showNaNValuesInGrey; }
+
+	//! Sets whether 0 should always appear in associated color ramp or not
+	inline void alwaysShowZero(bool state) { m_alwaysShowZero = state; }
+
+	//! Returns whether 0 should always appear in associated color ramp or not
+	inline bool isZeroAlwaysShown() const { return m_alwaysShowZero; }
+
+	//! Sets whether the color scale should be symmetrical or not
+	/** For relative color scales only.
 	**/
-	inline bool absoluteSaturation() const {return m_absSaturation;};
+	void setSymmetricalScale(bool state);
+
+	//! Returns whether the color scale s symmetrical or not
+	/** For relative color scales only.
+	**/
+	inline bool symmetricalScale() const { return m_symmetricalScale; }
 
 	//! Sets whether scale is logarithmic or not
 	void setLogScale(bool state);
 
 	//! Returns whether scalar field is logarithmic or not
-	inline bool logScale() const {return m_logScale;};
-
-	//! Sets whether to automatically update boundaries (when scalar field may have changed) or keep user defined ones
-	/** Automatically calls 'computeMinAndMax' if toggled to false.
-	**/
-	void autoUpdateBoundaries(bool state);
-
-	//! Whether boundaries are automatically updated or not
-	inline bool areBoundariesAutoUpdated() const { return m_autoBoundaries; }
-
-	//! Sets the boundaries
-	/** Automatically switches scalar field to 'autoUpdateBoundaries' mode.
-	**/
-	void setBoundaries(DistanceType minValue, DistanceType maxValue);
+	inline bool logScale() const { return m_logScale; }
 
 	//inherited
 	virtual void computeMinAndMax();
 
-	//! Returns associated color ramp
-	inline CC_COLOR_RAMPS getColorRamp() const {return m_activeColorRamp;};
+	//! Returns associated color scale
+	inline const ccColorScale::Shared& getColorScale() const { return m_colorScale; }
 
-	//! Sets associated color ramp
-	virtual void setColorRamp(CC_COLOR_RAMPS cr);
+	//! Sets associated color scale
+	void setColorScale(ccColorScale::Shared scale);
 
 	//! Returns number of color ramp steps
-	inline unsigned getColorRampSteps() const {return m_colorRampSteps;}
+	inline unsigned getColorRampSteps() const { return m_colorRampSteps; }
 
-	//! Sets number of color ramp steps
+	//! Sets number of color ramp steps used for display
     void setColorRampSteps(unsigned steps);
+
+	//! Simple histogram structure
+	struct Histogram : std::vector<unsigned>
+	{
+		//! Max histogram value
+		unsigned maxValue;
+
+		//! Default constructor
+		Histogram() { maxValue = 0; }
+	};
+
+	//! Returns associated histogram values (for display)
+	const Histogram& getHistogram() const { return m_histogram; }
 
 	//inherited from ccSerializableObject
 	virtual bool isSerializable() const { return true; }
@@ -137,40 +212,50 @@ protected:
 	**/
 	virtual ~ccScalarField() {};
 
-	//! Updates normalization coefficient
-	void updateNormalizeCoef();
+	//! Updates saturation values
+	void updateSaturationBounds();
 
-	//! Minimum displayed value
-	DistanceType m_minDisplayed;
-	//! Maximum displayed value
-	DistanceType m_maxDisplayed;
-	//! Minimum saturation value (for color mapping)
-	DistanceType m_minSaturation;
-	//! Maximum saturation value (for color mapping)
-	DistanceType m_maxSaturation;
-	//! Minimum saturation value (for log scale color mapping)
-	DistanceType m_minSaturationLog;
-	//! Maximum saturation value (for log scale color mapping)
-	DistanceType m_maxSaturationLog;
-
-	//! Normalisation coef.
-	DistanceType m_normalizeCoef;
-
-	//! Flag whether min and max saturation values are absolute or not
-	/** For signed SF only.
+	//! Normalizes a scalar value between 0 and 1 (wrt to current parameters)
+	/**	\param val scalar value
+		\return a number between 0 and 1 if inside displayed range or -1 otherwise
 	**/
-	bool m_absSaturation;
+	ScalarType normalize(ScalarType val) const;
 
-	//! logarithmic scale
+	//! Displayed values range
+	Range m_displayRange;
+
+	//! Saturation values range
+	/** For color mapping with relative scales.
+	**/
+	Range m_saturationRange;
+
+	//! saturation values range (log scale mode)
+	/** For log scale color mapping with relative scales.
+	**/
+	Range m_logSaturationRange;
+
+	// Whether NaN values are shown in grey or are hidden
+	bool m_showNaNValuesInGrey;
+
+	//! Whether color scale is symmetrical or not
+	/** For relative color scales only.
+	**/
+	bool m_symmetricalScale;
+
+	//! Whether scale is logarithmic or not
 	bool m_logScale;
 
-	//! Active color ramp
-	CC_COLOR_RAMPS m_activeColorRamp;
-	//! Active color ramp steps
+	//! Whether 0 should always appear in associated color ramp
+	bool m_alwaysShowZero;
+
+	//! Active color ramp (for display)
+	ccColorScale::Shared m_colorScale;
+	
+	//! Number of color ramps steps (for display)
 	unsigned m_colorRampSteps;
 
-	//! Whether to automatically update boundaries (when scalar field may have changed) or keep user defined ones
-	bool m_autoBoundaries;
+	//! Associated histogram values (for display)
+	Histogram m_histogram;
 };
 
 #endif //CC_DB_SCALAR_FIELD_HEADER

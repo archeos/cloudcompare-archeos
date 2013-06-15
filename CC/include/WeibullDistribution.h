@@ -47,21 +47,21 @@ public:
 		\param _b the Weibull b parameter
 		\param _valueShift a value shift
 	**/
-	WeibullDistribution(DistanceType _a, DistanceType _b, DistanceType _valueShift=0.0);
+	WeibullDistribution(ScalarType _a, ScalarType _b, ScalarType _valueShift=0.0);
 
 	//! Returns the distribution parameters
 	/** \param _a a field to transmit the Weibull a paramter
 		\param _b a field to transmit the Weibull b paramter
 		return the parameters validity
 	**/
-	bool getParameters(DistanceType &_a, DistanceType &_b) const;
+	bool getParameters(ScalarType &_a, ScalarType &_b) const;
 
 	//! Returns the normal distribution equivalent parameters
 	/** \param _mu a field to transmit the equivalent mean
 		\param _sigma2 a field to transmit the equivalent variance
 		return the parameters validity
 	**/
-	bool getOtherParameters(DistanceType &_mu, DistanceType &_sigma2) const;
+	bool getOtherParameters(ScalarType &_mu, ScalarType &_sigma2) const;
 
 	//! Sets the distribution parameters
 	/** \param _a the Weibull a parameter
@@ -69,25 +69,23 @@ public:
 		\param _valueShift a value shift
 		return the parameters validity
 	**/
-	bool setParameters(DistanceType _a, DistanceType _b, DistanceType _valueShift=0.0);
+	bool setParameters(ScalarType _a, ScalarType _b, ScalarType _valueShift=0.0);
 
 	//! Sets the distribution value shift
 	/** \param vs value shift
 	**/
-	void setValueShift(DistanceType vs) {if (vs != valueShift) parametersDefined = false; valueShift=vs;}
+	void setValueShift(ScalarType vs);
 
 	//! Returns the distribution value shift
-	DistanceType getValueShift() const {return valueShift;};
+	inline ScalarType getValueShift() const { return valueShift; }
 
 	//inherited methods (see GenericDistribution)
-	virtual bool computeParameters(const GenericCloud* Yk, bool includeNegValues);
-	virtual double computeP(DistanceType x) const;
-	virtual double computePfromZero(DistanceType x) const;
-	virtual double computeP(DistanceType x1, DistanceType x2) const;
-	virtual double computeChi2Dist(const GenericCloud* Yk, unsigned numberOfClasses, bool includeNegValues, int* histo=0);
-	virtual void getTextualDescription(char* buffer) const;
-	virtual bool isValid() const {return parametersDefined;};
-
+	virtual bool computeParameters(const GenericCloud* Yk);
+	virtual double computeP(ScalarType x) const;
+	virtual double computePfromZero(ScalarType x) const;
+	virtual double computeP(ScalarType x1, ScalarType x2) const;
+	virtual double computeChi2Dist(const GenericCloud* cloud, unsigned numberOfClasses, int* histo=0);
+	virtual const char* getName() const { return "Weibull"; }
 
 protected:
 
@@ -98,26 +96,32 @@ protected:
 	**/
 	virtual bool setChi2ClassesPositions(unsigned numberOfClasses);
 
+	//! Chi2 classes limits
+	/** Used internally. Stores both limits for each class in a vector
+		(min_class_1, max_class_1, min_class_2, max_class_2, etc.).
+	**/
+	std::vector<ScalarType> chi2ClassesPositions;
+
 	//! Parameters validity
 	bool parametersDefined;
 	//! Weibull distribution parameter a
-	DistanceType a;
+	ScalarType a;
 	//! Weibull distribution parameter b
-	DistanceType b;
+	ScalarType b;
 	//! Weibull distribution parameter 'value shift'
-	DistanceType valueShift;
+	ScalarType valueShift;
 
 	//! Normal distribution equivalent parameter: mean
-	DistanceType mu;
+	ScalarType mu;
 	//! Normal distribution equivalent parameter: variance
-	DistanceType sigma2;
+	ScalarType sigma2;
 
 	//! internal function for parameters evaluation from sample points
-	DistanceType computeG(const GenericCloud* Yk, DistanceType a) const;
+	ScalarType computeG(const GenericCloud* Yk, ScalarType a) const;
 	//! internal function for parameters evaluation from sample points (overflow-safe version)
-	DistanceType computeG(const GenericCloud* Yk, DistanceType a, DistanceType inverseVmax) const;
+	ScalarType computeG(const GenericCloud* Yk, ScalarType a, ScalarType inverseVmax) const;
 	//! internal function for parameters evaluation from sample points
-	DistanceType findGRoot(const GenericCloud* Yk, DistanceType inverseMaxValue) const;
+	ScalarType findGRoot(const GenericCloud* Yk, ScalarType inverseMaxValue) const;
 };
 
 }

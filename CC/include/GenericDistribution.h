@@ -51,32 +51,42 @@ class GenericDistribution
 public:
 
     //! Default constructor
-    GenericDistribution() {};
+    GenericDistribution() : m_isValid(false) {};
 
     //! Default destructor
     virtual ~GenericDistribution() {};
+
+	//! Returns distribution name
+	virtual const char* getName() const = 0; 
+
+	//! Indicates if the distribution parameters are valid
+	/** This function is related to 'computeParameters()'. If the parameters
+		computation failed, then the parameters will be marked as 'invalid'. In this
+		case, the dsitribution should'nt be used (most of the methods won't work anyway).
+		\return true (if the distribution parameters are valid) or false (if not)
+	**/
+	virtual bool isValid() const { return m_isValid; }
 
 	//! Computes the distribution parameters from a group of sample points
 	/**	Virtual method to determine the distribution parameters from the
 		scalar values.
 		Warning: be sure to activate an OUTPUT scalar field on the input cloud
-		\param Yk a group of points
-		\param includeNegValues specifies whether negative values should be included in computation
+		\param cloud a point cloud with associated scalar values
 		\return true (if the computation succeeded) or false (if not)
 	**/
-	virtual bool computeParameters(const GenericCloud* Yk, bool includeNegValues)=0;
+	virtual bool computeParameters(const GenericCloud* cloud) = 0;
 
 	//! Computes the probability of x
 	/** \param x the variable
 		\return the probabilty
 	**/
-	virtual double computeP(DistanceType x) const = 0;
+	virtual double computeP(ScalarType x) const = 0;
 
 	//! Computes the cumulative probability between 0 and x
 	/** \param x the upper boundary
 		\return the cumulative probabilty
 	**/
-	virtual double computePfromZero(DistanceType x) const = 0;
+	virtual double computePfromZero(ScalarType x) const = 0;
 
 	//! Computes the cumulative probability between x1 and x2
 	/** x1 should be lower than x2
@@ -84,7 +94,7 @@ public:
 		\param x2 the upper boundary
 		\return the cumulative probabilty
 	**/
-	virtual double computeP(DistanceType x1, DistanceType x2) const = 0;
+	virtual double computeP(ScalarType x1, ScalarType x2) const = 0;
 
 	//! Computes the Chi2 distance (related to the Chi2 Test)
 	/** Computes the Chi2 distance from a group of point, accordingly to
@@ -96,35 +106,18 @@ public:
 		Warning: be sure to activate an OUTPUT scalar field on the input cloud
 		\param Yk a group of points
 		\param numberOfClasses the number of classes for the Chi2 Test
-		\param includeNegValues specifies whether negative values should be included in computation
 		\param histo an array to store the values projection result (optionnal)
 		\return the Chi2 distance (or -1.0 if an error occured)
 	**/
-	virtual double computeChi2Dist(const GenericCloud* Yk, unsigned numberOfClasses, bool includeNegValues, int* histo=0) = 0;
-
-	//! Gives a short description of the distribution
-	/** Returns in a characters buffer a short description of the distribution (name,
-		parameters, etc.). This buffer should be already allocated in memory, with a
-		sufficient size (1024 should be sufficient).
-		\param buffer a char buffer to store the description
-	**/
-	virtual void getTextualDescription(char* buffer) const = 0;
-
-	//! Indicates if the distribution parameters are valid
-	/** This function is related to 'computeParameters()'. If the parameters
-		computation failed, then the parameters will be marked as 'invalid'. In this
-		case, the dsitribution should'nt be used (most of the methods won't work anyway).
-		\return true (if the distribution parameters are valid) or false (if not)
-	**/
-	virtual bool isValid() const = 0;
+	virtual double computeChi2Dist(const GenericCloud* Yk, unsigned numberOfClasses, int* histo=0) = 0;
 
 protected:
 
-	//! Chi2 classes limits
-	/** Used internally. Stores both limits for each class in a vector
-		(min_class_1, max_class_1, min_class_2, max_class_2, etc.).
-	**/
-	std::vector<DistanceType> chi2ClassesPositions;
+	//! Sets distribution current validity
+	void setValid(bool state) { m_isValid = state; }
+
+	//! Whether the distribution is in a valid state or not
+	bool m_isValid;
 };
 
 }

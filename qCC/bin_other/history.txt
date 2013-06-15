@@ -1,8 +1,108 @@
 *** CloudCompare versions history ***
 
 v2.4 ??/??/2013
-- 3DConnexion devices (3D mouses) support
-- 3D slicer
+- New tool: "Cross section"
+	* accessible via 'Tools > Segmentation > Cross Section' or a dedicated icon in the main
+		toolbar (next to the scissors icon)
+	* manually scale, rotate and translate the clipping box
+	* extract the corresponding selection as a new cloud
+	* extract multiple slices in an automated way
+	* works only with clouds for the moment
+- New option for ICP registration (thanks to Luca Penasa once again!):
+	* check "Free scale parameter" to register objects with different scales
+- New dialog for computing the octree:
+	* the user can specify the cell size at the maximum subdivision level
+	* or define a custom bounding box
+- "Height grid generation" dialog enhanced:
+	* the user can now define custom grid limits
+- New tool: "Convert RGB to scalar field"
+	* Edit > Colors
+- New option is ASCII file load/save dialogs:
+	* maximum number of points per cloud on load
+	* option to write the number of points as a dedicated header line on save
+- Menus modifications:
+	* "Primitive factory" menu entry has been moved to the "File" menu
+	* "Point picking" and "Point list picking" menu entries have been moved to the "Tools" menu
+	* "Edit" and "Tools" menus are now always enabled even if no entity is selected
+- The (old) limit of 128 million points per cloud has been removed on the 64 bits version
+	(new - theoretical - limit is 2 billions)
+- Global shift information is now kept by qRansacSD plugin (shape detection)
+- Global shift information can now be edited with the 'Edit > Edit global shift' menu entry
+- LAS import/export enhanced:
+	* new dialog to choose the fields to import
+	* all official fields are now properly imported/exported ("Intensity", "Return Number",
+		"Number of Returns", "Scan Direction", "Flightline Edge", "Classification",
+		"Scan Angle Rank", "User Data", "Point Source ID", "Red", "Green", "Blue", "Time")
+	* the 'classification' field can be split into its 'value' and the 3 associated
+		flags ("Synthetic", "Key-point" and "Withheld")
+	* a warning is issued if the user attempts to save a cloud with SFs having non "official"
+		names
+- New icon for the 'clone' method (thanks to JF Hullo): two sheeps instead of one!
+- 'Stippling' (fake transparency) option has been added to meshes
+- Bug fixes:
+	* applying the interactive 'rotate/translate' tool to an entity and its parent at the
+		same time would make CC crash
+	* "Intensity", "Time" and "Return number" fields are now properly exported with LAS files
+	* "Height Grid Generation" tool accuracy fixed (when dealing with coordinates above 10^5)
+
+v2.4 04/25/2013
+- 3D mouses (3dConnexion devices) are now supported:
+	* OBJECT mode corresponds to ortho. and object-centered perspective
+	* CAMERA mode corresponds to viewer-centered perspective
+	* can be enabled/disabled via the 'File > 3D mouse' menu
+- Dynamic color lookup for displaying scalar fields greatly accelerated
+	* a dedicated shader is automatically activated if GPU supports it
+	* speed-up of scalar fields display of up to 300%!
+- Introducing the "Color Scale Manager":
+	* edit, copy and create custom color scales
+	* accessible via a button next to the 'current scale' combo-box in the properties view
+		or via the 'Edit > Scalar Field > Color Scale Manager' menu entry
+	* custom scalar scales are saved along with the entity (in BIN format)
+		and are automatically imported when loading the file (on another computer typically)
+	* color scales can be relative (to current scalar fields bounds) or absolute (the user
+		can specify custom bounds and steps, which can be useful to apply the same color ramp
+		to multiple clouds)
+- New Scalar Field Properties dialog
+	* most color ramp parameters are now saved per-scalar field, and not per-cloud anymore
+- New color ramp (with histogram)
+	* color ramp is "smarter"
+- New entity picking mechanism:
+	* press ALT + left mouse button to define a rectangular selection area to select multiple
+		entities at once
+	* picking speed enhanced
+- 3D camera management enhanced:
+	* transitions between perspective modes are smoother
+	* custom light appears and can be intearctively moved (with CTRL+right click) in all modes
+	* interactive transformation can be performed in all modes
+	* 3D rotation center symbol added (can be 'always visible', 'only when moving' or 'hidden')
+	* default views (top, bottom, left, etc.) are more 'intuitive'
+	* new default views added: front and back 'isometric' views
+	* default FOV (field of view) is now 30 degrees for perspective mode
+- New method:
+	* 'Edit > Mesh > Export materials/textures to RGB' (per-vertex color)
+- New pop-menus added to the 'View' toolbar:
+	* selection of the current rotation center visibility (see above)
+	* selection of the current view mode (orthographic, object-based and viewer-based perspective)
+- New context menu entry for the DB tree: 'Information (recursive)'
+	* recursively gather various information (number of points, triangles, colors, etc.)
+- Local Statistical Test now works on signed scalar fields!
+- No more distinction between (antiquated) 'positive' scalar fields and the standard ones
+- New dialog for saving ASCII files
+	* choose output numerical precisions, separator, order, etc.
+- STL and PLY files can now be saved in both BINARY and ASCII formats
+- PLY files can now save texture coordinates (and the texture in a separated file) if only one
+	texture is associated to the mesh (otherwise CC will suggest to convert materials/textures to RGB)
+- Default materials and lights have been updated
+- Bug fixes:
+	* BIN files saved with labels would make CC crash when re-opened!
+	* Closing the 'About' dialog would make CC crash!
+	* ccViewer no longer displays the colorbar if the scalar field is hidden!
+	* The cloud/cloud distance with the 'Height Function' model refinement was giving weird results!
+	* The cones produced with the Primitive Factory were upside down
+	* The following methods were broken:
+		- Edit > Normals > Resolve direction
+		- Tools > Projection > Unroll (on cone)
+		- Tools > Statistics > Local Statistical Test
 
 v2.4 03/10/2013
 - Points size can now be independently set for each cloud

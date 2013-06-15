@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author::                                                                $
-//$Rev::                                                                   $
-//$LastChangedDate::                                                       $
-//**************************************************************************
-//
 
 #ifndef DGM_OCTREE_HEADER
 #define DGM_OCTREE_HEADER
@@ -138,7 +131,7 @@ public:
 		//! Point index
 		unsigned pointIndex;
 		//! Point associated distance value
-		DistanceType squareDist;
+		ScalarType squareDist;
 
 		//! Default constructor
 		PointDescriptor()
@@ -157,7 +150,7 @@ public:
 		}
 
 		//! Constructor with point, its index and square distance
-		PointDescriptor(const CCVector3* P, unsigned index, DistanceType d2)
+		PointDescriptor(const CCVector3* P, unsigned index, ScalarType d2)
 			: point(P)
 			, pointIndex(index)
 			, squareDist(d2)
@@ -250,7 +243,7 @@ public:
 			hasn't find any neighbour (acceleration). To disable this behavior,
 			set the maxSearchSquareDist to -1).
 		**/
-		DistanceType maxSearchSquareDist;
+		ScalarType maxSearchSquareDist;
 
 		/*** Information to set to 0 before search ***/
 
@@ -319,7 +312,7 @@ public:
 		bool ready;
 
 		//! Updates maxD2 and minD2 with search radius and cellSize
-		void prepare(PointCoordinateType radius, PointCoordinateType cellSize)
+		inline void prepare(PointCoordinateType radius, PointCoordinateType cellSize)
 		{
 #ifdef TEST_CELLS_FOR_SPHERICAL_NN
 			PointCoordinateType cellDiag = cellSize * (PointCoordinateType)(SQRT_3/2.0);
@@ -338,7 +331,7 @@ public:
 			, ready(false)
 #ifdef TEST_CELLS_FOR_SPHERICAL_NN
 			, maxInD2(0.0)
-			, minOutD2(FLOAT_MAX)
+			, minOutD2(FLT_MAX)
 #endif
 		{
 		}
@@ -348,7 +341,7 @@ public:
 	/** Index could be the index of a point, in which case the code
 		would correspond to the octree cell where the point lies.
 	**/
-	struct indexAndCode
+	struct IndexAndCode
 	{
         //! index
 		unsigned theIndex;
@@ -356,50 +349,50 @@ public:
 		OctreeCellCodeType theCode;
 
 		//! Default constructor
-		indexAndCode()
+		IndexAndCode()
 			: theIndex(0)
 			, theCode(0)
 		{
 		}
 
 		//! Constructor from an index and a code
-		indexAndCode(unsigned index, OctreeCellCodeType code)
+		IndexAndCode(unsigned index, OctreeCellCodeType code)
 			: theIndex(index)
 			, theCode(code)
 		{
 		}
 
 		//! Copy constructor
-		indexAndCode(const indexAndCode& ic)
+		IndexAndCode(const IndexAndCode& ic)
 			: theIndex(ic.theIndex)
 			, theCode(ic.theCode)
 		{
 		}
 
 		//! Code-based comparison operator
-		/** \param a first indexAndCode structure
-			\param b second indexAndCode structure
+		/** \param a first IndexAndCode structure
+			\param b second IndexAndCode structure
 			\return whether the code of 'a' is smaller than the code of 'b'
 		**/
-		static bool codeComp(const indexAndCode& a, const indexAndCode& b) throw()
+		static bool codeComp(const IndexAndCode& a, const IndexAndCode& b) throw()
 		{
 			return a.theCode < b.theCode;
 		}
 
 		//! Index-based comparison operator
-		/** \param a first indexAndCode structure
-			\param b second indexAndCode structure
+		/** \param a first IndexAndCode structure
+			\param b second IndexAndCode structure
 			\return whether the index of 'a' is smaller than the index of 'b'
 		**/
-		static bool indexComp(const indexAndCode& a, const indexAndCode& b) throw()
+		static bool indexComp(const IndexAndCode& a, const IndexAndCode& b) throw()
 		{
 			return a.theIndex < b.theIndex;
 		}
 
 	};
 
-	//! Container of 'indexAndCode' structures
-	typedef std::vector<indexAndCode> cellsContainer;
+	//! Container of 'IndexAndCode' structures
+	typedef std::vector<IndexAndCode> cellsContainer;
 
     //! Octree cell descriptor
 	struct octreeCell
@@ -485,10 +478,10 @@ public:
 
 	//! Returns the octree bounding box
 	/**	Method to request the octree bounding box limits
-		\param Mins a 3 elements array to store the lower BB limits (Xmin,Ymin,Zmin)
-		\param Maxs a 3 elements array to store the higher BB limits (Xmax,Ymax,Zmax)
+		\param bbMin lower bounding-box limits (Xmin,Ymin,Zmin)
+		\param bbMax higher bounding-box limits (Xmax,Ymax,Zmax)
 	**/
-	void getBoundingBox(PointCoordinateType Mins[], PointCoordinateType Maxs[]) const;
+	void getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[]) const;
 
 	//! Returns the lowest cell positions in the octree along all dimensions and for a given level of subdivision
 	/** For example, at a level	n, the octree length is 2^n cells along each
@@ -605,35 +598,27 @@ public:
 							  ReferenceCloud* Yk,
 							  unsigned maxNumberOfNeighbors,
 							  uchar level,
-							  DistanceType &maxSquareDist,
-							  DistanceType maxSearchDist=-1.0) const;
+							  ScalarType &maxSquareDist,
+							  ScalarType maxSearchDist=-1.0) const;
 
 	//! Advanced form of the nearest neighbour search algorithm (unique neighbour)
 	/** This version is optimized for a unique nearest-neighbour search.
 		See DgmOctree::NearestNeighboursSearchStruct for more details.
-		WARNING: if 'getOnlyPointsWithPositiveDist' is true, be sure to activate an OUTPUT
-		scalar field on the associated cloud - it will be used to test for 'postitive distances'
 		\param nNSS NN search parameters
-		\param getOnlyPointsWithPositiveDist select only nearest neighbours with positive distances
 		\return the square distance between the query point and its nearest neighbour (or -1 if none was found)
 	**/
-	DistanceType findTheNearestNeighborStartingFromCell(NearestNeighboursSearchStruct &nNSS,
-												bool getOnlyPointsWithPositiveDist) const;
+	ScalarType findTheNearestNeighborStartingFromCell(NearestNeighboursSearchStruct &nNSS) const;
 
 	//! Advanced form of the nearest neighbours search algorithm (multiple neighbours)
 	/** This version is optimized for a multiple nearest neighbours search
 		that is applied around several query points included in the same octree
 		cell. See DgmOctree::NearestNeighboursSearchStruct for more details.
-		WARNING: if 'getOnlyPointsWithPositiveDist' is true, be sure to activate an OUTPUT
-		scalar field on the associated cloud - it will be used to test for 'postitive distances'
 		\param nNSS NN search parameters
-		\param bypassFirstCell indicates if the first cell (the one that includes the query point) should be visited or not
-		\param getOnlyPointsWithPositiveDist select only nearest neighbours with positive distances
+		\param getOnlyPointsWithValidScalar wether to ignore points having an invalid associated scalar value
 		\return the number of neighbours found
 	**/
 	unsigned findNearestNeighborsStartingFromCell(NearestNeighboursSearchStruct &nNSS,
-                                                    bool bypassFirstCell=false,
-                                                    bool getOnlyPointsWithPositiveDist=false) const;
+													bool getOnlyPointsWithValidScalar=false) const;
 
 	//! Advanced form of the nearest neighbours search algorithm (in a sphere)
 	/** This version is optimized for a spatially bounded search instead of
@@ -788,8 +773,9 @@ public:
 		to the indexes of the first points of each cell.
 		\param level the level of subdivision
 		\param vec the list of indexes
+		\return false if an error occured (e.g. not enough memory)
 	**/
-	void getCellIndexes(uchar level, cellIndexesContainer& vec) const;
+	bool getCellIndexes(uchar level, cellIndexesContainer& vec) const;
 
 	//! Returns the list of indexes and codes corresponding to the octree cells for a given level of subdivision
 	/** Only the non empty cells are represented in the octree structure.
@@ -1119,27 +1105,19 @@ protected:
 									uchar level) const;
 
 	//! Gets point in the neighbourhing cells of a specific cell
-	/** WARNING: if 'getOnlyPointsWithPositiveDist' is true, be sure to activate an OUTPUT
-		scalar field on the associated cloud - it will be used to test for 'postitive distances'
-		\param nNSS NN search parameters (from which are used: cellPos, pointsInNeighbourCells and level)
+	/** \param nNSS NN search parameters (from which are used: cellPos, pointsInNeighbourCells and level)
 		\param neighbourhoodLength the new distance (in terms of cells) at which to look for neighbour cells
+		\param getOnlyPointsWithValidScalar wether to ignore points having an invalid associated scalar value
 	**/
 	void getPointsInNeighbourCellsAround(NearestNeighboursSearchStruct &nNSS,
-											int neighbourhoodLength) const;
+											int neighbourhoodLength,
+											bool getOnlyPointsWithValidScalar=false) const;
 
 #ifdef TEST_CELLS_FOR_SPHERICAL_NN
 	void getPointsInNeighbourCellsAround(NearestNeighboursSphericalSearchStruct &nNSS,
 												int minNeighbourhoodLength,
 												int maxNeighbourhoodLength) const;
 #endif
-
-	//! Gets point associated to positive scalars in the neighbourhing cells of a specific cell
-	/** Same version as getPointsInNeighbourCellsAround, but only for neighbours with positive scalars.
-		\param nNSS NN search parameters (from which are used: cellPos, pointsInNeighbourCells and level)
-		\param neighbourhoodLength the new distance (in terms of cells) at which to look for neighbour cells
-	**/
-    void getPointsWithPositiveDistanceInNeighbourCellsAround(NearestNeighboursSearchStruct &nNSS,
-															int neighbourhoodLength) const;
 
 	//! Returns the index of a given cell represented by its code
 	/** The index is found thanks to a binary search. The index of an existing cell

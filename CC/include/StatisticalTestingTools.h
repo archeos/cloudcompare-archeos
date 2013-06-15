@@ -22,12 +22,6 @@
 #include "CCToolbox.h"
 #include "DgmOctree.h"
 
-//! Statistical distributions
-enum CC_STATISTICAL_DISTRIBUTION {  GAUSS		=	0,		/**< Gauss/Normal distribution: (mu, sigma) **/
-									WEIBULL		=	1		/**< Weibull distribution (a,b) **/
-};
-const char CC_STATISTICAL_DISTRIBUTION_TITLES[2][12] = {"Gauss","Weibull"};
-
 namespace CCLib
 {
 
@@ -48,40 +42,35 @@ class StatisticalTestingTools : public CCToolbox
 {
 public:
 
-	//! Computes the Chi2 distance on scalar values of a subset of points
-	/** The Chi2 distance is computed between an empiric distribution generated from this
-        set of scalar values (with a specific number of classes), and a theoretical distribution.
-		This version is "unbounded", meaning that the distance can diverge (which should
-		not be possible according to the Chi2 Test theory, but can be useful for
-		classification purposes).
-		Warning: be sure to activate an OUTPUT scalar field on the input cloud
-		\param distrib a theoretical distribution
-		\param Yk a subset of points (associated to scalar values)
-		\param numberOfClasses number of classes for the empirical distribution (>1)
-		\param includeNegValues specifies whether negative values should be included in computation
-		\param dumpHisto this array can be used during the distance computation (to avoid repetitive memory allocation) - its size should be equal to the number of classes
-		\param npis this array can be used to get afterwards the theoretical probabilities for each class (its size should be therefore equal to the initial number of classes)
-		\return the Chi2 distance (or -1.0 if an error occured)
-	**/
-	static double computeChi2Dist(const GenericDistribution* distrib, const GenericCloud* Yk, unsigned numberOfClasses, bool includeNegValues, unsigned* dumpHisto=0, double* npis=0);
-
 	//! Computes the Chi2 distance on a sample of scalar values
-	/** See the other version of this method. This one is more correct accordingly to the
-		Chi2 Test theory. It assures that each class of the empirical distribution is such
-		that it respects n.pi>=5 (where n is the total number of points, and pi is the
-		cumulative probability of the class). In this case, the number of classes can be
-		changed by the method.
+	/** The Chi2 distance is computed between an empiric distribution generated from a
+        set of scalar values (with a specific number of classes), and a theoretical distribution.
+		It assures that each class of the empirical distribution is such that it respects n.pi>=5
+		(where n is the total number of points, and pi is the cumulative probability of the class).
+		Therefore the number of classes can be changed by the method.
+		If the 'noClassCompression' parameter is set to true, the above condition is not
+		checked and distance can diverge (which should not be possible according to the Chi2 Test theory,
+		but it can be useful for classification purposes).
 		\param distrib a theoretical distribution
-		\param Yk a subset of points (associated to scalar values)
+		\param cloud a subset of points (associated to scalar values)
 		\param numberOfClasses initial number of classes for the empirical distribution (0 for automatic determination, >1 otherwise)
 		\param finalNumberOfClasses final number of classes of the empirical distribution
-		\param includeNegValues specifies whether negative values should be included in computation
-		\param forceZeroAsMin whether min boudnary should be forced to zero (only valid if includeNegValues is false)
-		\param dumpHisto this array can be used during the distance computation (to avoid repetitive memory allocation - its size should be equal to the initial number of classes)
-		\param npis this array can be used to get afterwards the theoretical probabilities for each class (its size should be therefore equal to the initial number of classes)
+		\param noClassCompression prevent the algorithm from performing classes compression (faster but less accurate)
+		\param histoMin [optional] minimum histogram value
+		\param histoMax [optional] maximum histogram value
+		\param[out] histoValues [optional] histogram array (its size should be equal to the initial number of classes)
+		\param[out] npis [optional] array containing the theoretical probabilities for each class (its size should be equal to the initial number of classes)
 		\return the Chi2 distance (or -1.0 if an error occured)
 	**/
-	static double computeAdaptativeChi2Dist(const GenericDistribution* distrib, const GenericCloud* Yk, unsigned numberOfClasses, unsigned &finalNumberOfClasses, bool includeNegValues, bool forceZeroAsMin, unsigned* dumpHisto=0, double* npis=0);
+	static double computeAdaptativeChi2Dist(const GenericDistribution* distrib,
+											const GenericCloud* cloud,
+											unsigned numberOfClasses,
+											unsigned &finalNumberOfClasses,
+											bool noClassCompression = false,
+											ScalarType* histoMin = 0,
+											ScalarType* histoMax = 0,
+											unsigned* histoValues = 0,
+											double* npis = 0);
 
 	//! Computes the Chi2 fractile
 	/** Returns the max Chi2 Distance for a given "confidence" probability and a given number of
@@ -118,7 +107,6 @@ public:
 		\param theCloud the point cloud to classify
 		\param numberOfNeighbours the neighbourhood size for the local analysis
 		\param pTrust the Chi2 Test confidence probability
-		\param includeNegValues specifies whether negative values should be included in computation
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
 		\param _theOctree the cloud octree if it has already be computed
 		\return the distance threshold for filtering (or -1 if someting went wrong during the process)
@@ -127,25 +115,10 @@ public:
                                                 GenericIndexedCloudPersist* theCloud,
                                                 unsigned numberOfNeighbours,
                                                 double pTrust,
-                                                bool includeNegValues = false,
                                                 GenericProgressCallback* progressCb=0,
                                                 DgmOctree* _theOctree=0);
 
 protected:
-
-	//! An element of a double-chained-list structure (used by computeAdaptativeChi2Dist)
-	struct Chi2Element
-	{
-		//! Probability Pi
-		double pi;
-		//! Number of elements for the class
-		int n;
-		//! Precedent element
-		Chi2Element* pred;
-		//! Next element
-		Chi2Element* next;
-
-	};
 
 	//! Computes (locally) the Chi2 distance inside an octree cell
 	/** Additional parameters are:

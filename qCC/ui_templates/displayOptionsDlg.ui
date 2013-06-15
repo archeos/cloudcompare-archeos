@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>423</width>
+    <width>422</width>
     <height>420</height>
    </rect>
   </property>
@@ -35,7 +35,7 @@
         <x>0</x>
         <y>0</y>
         <width>405</width>
-        <height>263</height>
+        <height>246</height>
        </rect>
       </property>
       <attribute name="label">
@@ -347,7 +347,7 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>405</width>
+        <width>404</width>
         <height>263</height>
        </rect>
       </property>
@@ -356,9 +356,9 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_7">
        <item>
-        <widget class="QCheckBox" name="colorScaleAlwaysShowZeroCheckBox">
+        <widget class="QCheckBox" name="colorScaleShowHistogramCheckBox">
          <property name="text">
-          <string>Always show 0</string>
+          <string>Show histogram next to color ramp</string>
          </property>
          <property name="checked">
           <bool>true</bool>
@@ -366,15 +366,9 @@
         </widget>
        </item>
        <item>
-        <widget class="QCheckBox" name="colorScaleAlwaysSymmetricalCheckBox">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
+        <widget class="QCheckBox" name="useColorScaleShaderCheckBox">
          <property name="text">
-          <string>Always symmetrical (for signed scalar fields only)</string>
-         </property>
-         <property name="checked">
-          <bool>true</bool>
+          <string>Enable shader for faster display (ATI cards: use at your own risk ;)</string>
          </property>
         </widget>
        </item>
@@ -383,23 +377,23 @@
          <item>
           <widget class="QLabel" name="label_10">
            <property name="text">
-            <string>Square size</string>
+            <string>Ramp width</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QSpinBox" name="colorScaleSquareSizeSpinBox">
+          <widget class="QSpinBox" name="colorRampWidthSpinBox">
            <property name="suffix">
             <string> pixels</string>
            </property>
            <property name="minimum">
-            <number>2</number>
+            <number>10</number>
            </property>
            <property name="maximum">
             <number>200</number>
            </property>
            <property name="value">
-            <number>20</number>
+            <number>50</number>
            </property>
           </widget>
          </item>
@@ -438,7 +432,7 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>405</width>
+        <width>404</width>
         <height>263</height>
        </rect>
       </property>
@@ -555,7 +549,7 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>405</width>
+        <width>404</width>
         <height>263</height>
        </rect>
       </property>

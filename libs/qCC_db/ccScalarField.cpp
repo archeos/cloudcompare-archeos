@@ -17,193 +17,250 @@
 
 #include "ccScalarField.h"
 
+//Local
+#include "ccColorScalesManager.h"
+#include "ccColorRampShader.h"
+
 //CCLib
 #include <CCConst.h>
 
 using namespace CCLib;
 
-ccScalarField::ccScalarField(const char* name/*=0*/, bool positive /*=false*/)
-	: ScalarField(name,positive)
-    , m_minDisplayed(0)
-    , m_maxDisplayed(0)
-    , m_minSaturation(0)
-    , m_maxSaturation(0)
-    , m_minSaturationLog(0)
-    , m_maxSaturationLog(0)
-    , m_normalizeCoef(0)
-	, m_absSaturation(false)
+//! Default number of classes for associated histogram
+const unsigned MAX_HISTOGRAM_SIZE = 512;
+
+ccScalarField::ccScalarField(const char* name/*=0*/)
+	: ScalarField(name)
+	, m_showNaNValuesInGrey(true)
+	, m_symmetricalScale(false)
 	, m_logScale(false)
-	, m_activeColorRamp(DEFAULT_COLOR_RAMP)
-	, m_colorRampSteps(256)
-	, m_autoBoundaries(true)
+	, m_alwaysShowZero(false)
+	, m_colorScale(0)
+	, m_colorRampSteps(0)
 {
-	setColorRampSteps(DEFAULT_COLOR_RAMP_SIZE < 256 ? DEFAULT_COLOR_RAMP_SIZE : 256);
+	setColorRampSteps(ccColorScale::DEFAULT_STEPS);
+	setColorScale(ccColorScalesManager::GetUniqueInstance()->getDefaultScale(ccColorScalesManager::BGYR));
 }
 
-DistanceType ccScalarField::normalize(DistanceType d) const
+ScalarType ccScalarField::normalize(ScalarType d) const
 {
-	if (d<m_minDisplayed || d>m_maxDisplayed)
-		return HIDDEN_VALUE;
+	if (/*!ValidValue(d) || */!m_displayRange.isInRange(d)) //NaN values are also rejected by 'isInRange'!
+		return (ScalarType)-1.0;
 
-	if (m_onlyPositiveValues || !m_absSaturation)
+	//most probable path first!
+	if (!m_logScale)
 	{
-		if (d<=m_minSaturation)
-            return 0.0f;
-		if (d>=m_maxSaturation)
-            return 1.0f;
-		if(!m_logScale)
-			return (d-m_minSaturation)*m_normalizeCoef;
-		return (log10(std::max(d,(DistanceType)ZERO_TOLERANCE))-m_minSaturationLog)*m_normalizeCoef;
+		if (!m_symmetricalScale)
+		{
+			if (d <= m_saturationRange.start())
+				return 0;
+			else if (d >= m_saturationRange.stop())
+				return (ScalarType)1.0;
+			return (d - m_saturationRange.start()) / m_saturationRange.range();
+		}
+		else //symmetric scale
+		{
+			if (fabs(d) <= m_saturationRange.start())
+				return (ScalarType)0.5;
+			
+			if (d >= 0)
+			{
+				if (d >= m_saturationRange.stop())
+					return (ScalarType)1.0;
+				return ((ScalarType)1.0 + (d - m_saturationRange.start()) / m_saturationRange.range()) / (ScalarType)2.0;
+			}
+			else
+			{
+				if (d <= -m_saturationRange.stop())
+					return (ScalarType)0.0;
+				return ((ScalarType)1.0 + (d + m_saturationRange.start()) / m_saturationRange.range()) / (ScalarType)2.0;
+			}
+		}
 	}
-	else
+	else //log scale
 	{
-		if (d<0)
-		{
-			if (-d<=m_minSaturation)
-				return 0.5f;
-			if (-d>=m_maxSaturation)
-				return 0.0f;
-			if(!m_logScale)
-				return 0.5f+(d+m_minSaturation)*m_normalizeCoef*0.5f;
-			return 0.5f+(-log10(std::max(-d,(DistanceType)ZERO_TOLERANCE))+m_minSaturationLog)*m_normalizeCoef*0.5f;
-		}
-		else
-		{
-			if (d<=m_minSaturation)
-				return 0.5f;
-			if (d>=m_maxSaturation)
-				return 1.0f;
-			if(!m_logScale)
-				return 0.5f+(d-m_minSaturation)*m_normalizeCoef*0.5f;
-			return 0.5f+(log10(std::max(d,(DistanceType)ZERO_TOLERANCE))-m_minSaturationLog)*m_normalizeCoef*0.5f;
-		}
+        ScalarType dLog = log10(std::max( (ScalarType) fabs(d),(ScalarType)ZERO_TOLERANCE));
+		if (dLog <= m_logSaturationRange.start())
+			return 0;
+		else if (dLog >= m_logSaturationRange.stop())
+			return (ScalarType)1.0;
+		return (dLog - m_logSaturationRange.start()) / m_logSaturationRange.range();
+	}
+
+	//can't get here normally!
+	assert(false);
+	return (ScalarType)-1.0;
+}
+
+void ccScalarField::setColorScale(ccColorScale::Shared scale)
+{
+	if (m_colorScale != scale)
+	{
+		bool wasAbsolute = (m_colorScale && !m_colorScale->isRelative());
+		bool isAbsolute = (scale && !scale->isRelative());
+
+		m_colorScale = scale;
+
+		if (isAbsolute)
+			m_symmetricalScale = false;
+
+		if (isAbsolute || wasAbsolute != isAbsolute)
+			updateSaturationBounds();
 	}
 }
 
-void ccScalarField::setAbsoluteSaturation(bool state)
+void ccScalarField::setSymmetricalScale(bool state)
 {
-	if (m_absSaturation != state)
+	if (m_symmetricalScale != state)
 	{
-		m_absSaturation = state;
-		computeMinAndMax();
+		m_symmetricalScale = state;
+		updateSaturationBounds();
+	}
+}
+
+void ccScalarField::setLogScale(bool state)
+{
+	if (m_logScale != state)
+	{
+		m_logScale = state;
+		if (m_logScale && m_minVal < 0)
+		{
+			ccLog::Warning("[ccScalarField] Scalar field contains negative values! Log scale will only consider absolute values...");
+		}
 	}
 }
 
 void ccScalarField::computeMinAndMax()
 {
-	if (m_autoBoundaries)
-		ScalarField::computeMinAndMax();
+	ScalarField::computeMinAndMax();
 
-	m_minDisplayed = m_minVal;
-	m_maxDisplayed = m_maxVal;
+	m_displayRange.setBounds(m_minVal,m_maxVal);
 
-	//if log scale, we force absolute saturation for not strictly positive SFs!
-	if (m_logScale && !m_onlyPositiveValues)
-		m_absSaturation = true;
-
-	if (m_absSaturation)
+	//update histogram
 	{
-		m_minSaturation = (m_onlyPositiveValues ? std::min(fabs(m_minDisplayed),fabs(m_maxDisplayed)) : 0.0f);
-		m_maxSaturation = std::max(fabs(m_minDisplayed),fabs(m_maxDisplayed));
-	}
-	else
-	{
-		m_minSaturation = m_minDisplayed;
-		m_maxSaturation = m_maxDisplayed;
+		if (m_displayRange.maxRange() == 0 || currentSize() == 0)
+		{
+			//can't build histogram of a flat field
+			m_histogram.clear();
+		}
+		else
+		{
+			unsigned count = currentSize();
+			unsigned numberOfClasses = (unsigned)ceil(sqrt((double)count));
+			numberOfClasses = std::max<unsigned>(std::min<unsigned>(numberOfClasses,MAX_HISTOGRAM_SIZE),4);
 
-		assert(m_onlyPositiveValues || !m_logScale);
+			m_histogram.maxValue = 0;
+
+			//reserve memory
+			try
+			{
+				m_histogram.resize(numberOfClasses);
+			}
+			catch(std::bad_alloc)
+			{
+				ccLog::Warning("[ccScalarField::computeMinAndMax] Failed to update associated histogram!");
+				m_histogram.clear();
+			}
+
+			if (!m_histogram.empty())
+			{
+				std::fill(m_histogram.begin(),m_histogram.end(),0);
+
+				//compute histogram
+				{
+					for (unsigned i=0; i<count; ++i)
+					{
+						const ScalarType& val = getValue(i);
+
+						unsigned bin = static_cast<unsigned>(floor((val-m_displayRange.min())*(ScalarType)numberOfClasses/m_displayRange.maxRange()));
+						++m_histogram[std::min(bin,numberOfClasses-1)];
+					}
+				}
+
+				//update 'maxValue'
+				m_histogram.maxValue = *std::max_element(m_histogram.begin(),m_histogram.end());
+			}
+		}
 	}
 
-	if (m_logScale || m_onlyPositiveValues)
-	{
-		m_minSaturationLog = log10(std::max(m_minSaturation,(DistanceType)ZERO_TOLERANCE));
-		m_maxSaturationLog = log10(std::max(m_maxSaturation,(DistanceType)ZERO_TOLERANCE));
-	}
-
-	updateNormalizeCoef();
+	updateSaturationBounds();
 }
 
-void ccScalarField::setLogScale(bool state)
+void ccScalarField::updateSaturationBounds()
 {
-	if (m_logScale == state)
-		return;
-
-	m_logScale = state;
-
-	if (m_logScale)
+	if (!m_colorScale || m_colorScale->isRelative()) //Relative scale (default)
 	{
-		//we force absolute saturation for not strictly positive SFs
-		if (!m_onlyPositiveValues && !m_absSaturation)
+		ScalarType minAbsVal = ( m_maxVal < 0 ? std::min(-m_maxVal,-m_minVal) : std::max<ScalarType>(m_minVal,0) );
+		ScalarType maxAbsVal = std::max(fabs(m_minVal),fabs(m_maxVal));
+
+		if (m_symmetricalScale)
 		{
-			m_minSaturation = (m_onlyPositiveValues ? std::min(fabs(m_minDisplayed),fabs(m_maxDisplayed)) : 0.0f);
-			m_maxSaturation = std::max(fabs(m_minDisplayed),fabs(m_maxDisplayed));
-			m_absSaturation = true;
+			m_saturationRange.setBounds(minAbsVal,maxAbsVal);
+		}
+		else
+		{
+			m_saturationRange.setBounds(m_minVal,m_maxVal);
 		}
 
-		m_minSaturationLog = log10(std::max(m_minSaturation,(DistanceType)ZERO_TOLERANCE));
-		m_maxSaturationLog = log10(std::max(m_maxSaturation,(DistanceType)ZERO_TOLERANCE));
+		//log scale (we always update it even if m_logScale is not enabled!)
+		//if (m_logScale)
+		{
+			ScalarType minSatLog = log10(std::max(minAbsVal,(ScalarType)ZERO_TOLERANCE));
+			ScalarType maxSatLog = log10(std::max(maxAbsVal,(ScalarType)ZERO_TOLERANCE));
+			m_logSaturationRange.setBounds(minSatLog,maxSatLog);
+		}
 	}
-
-	updateNormalizeCoef();
-}
-
-void ccScalarField::updateNormalizeCoef()
-{
-	if (m_minSaturation>=m_maxSaturation)
+	else //absolute scale
 	{
-		m_normalizeCoef = 1.0f;
-		return;
+		//DGM: same formulas as for the 'relative scale' case but we use the boundaries
+		//defined by the scale itself instead of the current SF boundaries...
+		double minVal=0, maxVal=0;
+		m_colorScale->getAbsoluteBoundaries(minVal,maxVal);
+
+		m_saturationRange.setBounds(minVal,maxVal);
+
+		//log scale (we always update it even if m_logScale is not enabled!)
+		//if (m_logScale)
+		{
+			ScalarType minAbsVal = ( maxVal < 0 ? std::min(-maxVal,-minVal) : std::max<ScalarType>(minVal,0) );
+			ScalarType maxAbsVal = (ScalarType)std::max(fabs(minVal),fabs(maxVal));
+			ScalarType minSatLog = log10(std::max(minAbsVal,(ScalarType)ZERO_TOLERANCE));
+			ScalarType maxSatLog = log10(std::max(maxAbsVal,(ScalarType)ZERO_TOLERANCE));
+			m_logSaturationRange.setBounds(minSatLog,maxSatLog);
+		}
 	}
+}
 
+void ccScalarField::setSaturationStart(ScalarType val)
+{
 	if (m_logScale)
-		m_normalizeCoef = 1.0f/(m_maxSaturationLog-m_minSaturationLog);
+	{
+		m_logSaturationRange.setStart(val/*log10(std::max(val,(ScalarType)ZERO_TOLERANCE))*/);
+	}
 	else
-		m_normalizeCoef = 1.0f/(m_maxSaturation-m_minSaturation);
+	{
+		m_saturationRange.setStart(val);
+	}
 }
 
-void ccScalarField::setMinDisplayed(DistanceType dist)
+void ccScalarField::setSaturationStop(ScalarType val)
 {
-	m_minDisplayed=dist;
-	updateNormalizeCoef();
-}
-
-void ccScalarField::setMaxDisplayed(DistanceType dist)
-{
-	m_maxDisplayed=dist;
-	updateNormalizeCoef();
-}
-
-void ccScalarField::setMinSaturation(DistanceType dist)
-{
-	m_minSaturation=dist;
-
-	if (m_logScale || m_onlyPositiveValues)
-		m_minSaturationLog = log10(std::max(m_minSaturation,(DistanceType)ZERO_TOLERANCE));
-
-	updateNormalizeCoef();
-}
-
-void ccScalarField::setMaxSaturation(DistanceType dist)
-{
-	m_maxSaturation=dist;
-
-	if (m_logScale || m_onlyPositiveValues)
-		m_maxSaturationLog = log10(std::max(m_maxSaturation,(DistanceType)ZERO_TOLERANCE));
-
-	updateNormalizeCoef();
-}
-
-void ccScalarField::setColorRamp(CC_COLOR_RAMPS cr)
-{
-    m_activeColorRamp = cr;
+	if (m_logScale)
+	{
+		m_logSaturationRange.setStop(val/*log10(std::max(val,(ScalarType)ZERO_TOLERANCE))*/);
+	}
+	else
+	{
+		m_saturationRange.setStop(val);
+	}
 }
 
 void ccScalarField::setColorRampSteps(unsigned steps)
 {
-    if (steps > (unsigned)DEFAULT_COLOR_RAMP_SIZE)
-        m_colorRampSteps = (unsigned)DEFAULT_COLOR_RAMP_SIZE;
-    else if (steps < 2)
-        m_colorRampSteps = 2;
+	if (steps > ccColorScale::MAX_STEPS)
+		m_colorRampSteps = ccColorScale::MAX_STEPS;
+	else if (steps < ccColorScale::MIN_STEPS)
+        m_colorRampSteps = ccColorScale::MIN_STEPS;
     else
         m_colorRampSteps = steps;
 }
@@ -216,52 +273,58 @@ bool ccScalarField::toFile(QFile& out) const
 	if (out.write(m_name,256)<0)
 		return WriteError();
 
-	//'strictly positive' state (dataVersion>=20)
-	if (out.write((const char*)&m_onlyPositiveValues,sizeof(bool))<0)
-		return WriteError();
-
 	//data (dataVersion>=20)
 	if (!ccSerializationHelper::GenericArrayToFile(*this,out))
 		return WriteError();
 
 	//displayed values & saturation boundaries (dataVersion>=20)
-	double dValue = (double)m_minDisplayed;
+	double dValue = (double)m_displayRange.start();
 	if (out.write((const char*)&dValue,sizeof(double))<0)
 		return WriteError();
-	dValue = (double)m_maxDisplayed;
+	dValue = (double)m_displayRange.stop();
 	if (out.write((const char*)&dValue,sizeof(double))<0)
 		return WriteError();
-	dValue = (double)m_minSaturation;
+	dValue = (double)m_saturationRange.start();
 	if (out.write((const char*)&dValue,sizeof(double))<0)
 		return WriteError();
-	dValue = (double)m_maxSaturation;
+	dValue = (double)m_saturationRange.stop();
 	if (out.write((const char*)&dValue,sizeof(double))<0)
 		return WriteError();
-	dValue = (double)m_minSaturationLog;
+	dValue = (double)m_logSaturationRange.start();
 	if (out.write((const char*)&dValue,sizeof(double))<0)
 		return WriteError();
-	dValue = (double)m_maxSaturationLog;
+	dValue = (double)m_logSaturationRange.stop();
 	if (out.write((const char*)&dValue,sizeof(double))<0)
-		return WriteError();
-
-	//'absolute saturation' state (dataVersion>=20)
-	if (out.write((const char*)&m_absSaturation,sizeof(bool))<0)
 		return WriteError();
 
 	//'logarithmic scale' state (dataVersion>=20)
 	if (out.write((const char*)&m_logScale,sizeof(bool))<0)
 		return WriteError();
 
-	//'automatic boundaries update' state (dataVersion>=20)
-	if (out.write((const char*)&m_autoBoundaries,sizeof(bool))<0)
+	//'symmetrical scale' state (dataVersion>=27)
+	if (out.write((const char*)&m_symmetricalScale,sizeof(bool))<0)
 		return WriteError();
 
-	//active color ramp (dataVersion>=20)
-	uint32_t activeColorRamp = (uint32_t)m_activeColorRamp;
-	if (out.write((const char*)&activeColorRamp,4)<0)
+	//'NaN values in grey' state (dataVersion>=27)
+	if (out.write((const char*)&m_showNaNValuesInGrey,sizeof(bool))<0)
 		return WriteError();
 
-	//active color ramp steps (dataVersion>=20)
+	//'always show 0' state (dataVersion>=27)
+	if (out.write((const char*)&m_alwaysShowZero,sizeof(bool))<0)
+		return WriteError();
+
+	//color scale (dataVersion>=27)
+	{
+		bool hasColorScale = (m_colorScale != 0);
+		if (out.write((const char*)&hasColorScale,sizeof(bool))<0)
+			return WriteError();
+
+		if (m_colorScale)
+			if (!m_colorScale->toFile(out))
+				return WriteError();
+	}
+
+	//color ramp steps (dataVersion>=20)
 	uint32_t colorRampSteps = (uint32_t)m_colorRampSteps;
 	if (out.write((const char*)&colorRampSteps,4)<0)
 		return WriteError();
@@ -280,78 +343,185 @@ bool ccScalarField::fromFile(QFile& in, short dataVersion)
 	if (in.read(m_name,256)<0)
 		return ReadError();
 
-	//'strictly positive' state (dataVersion>=20)
-	if (in.read((char*)&m_onlyPositiveValues,sizeof(bool))<0)
-		return ReadError();
+	//'strictly positive' state (20 <= dataVersion < 26)
+	bool onlyPositiveValues = false;
+	if (dataVersion < 26)
+	{
+		if (in.read((char*)&onlyPositiveValues,sizeof(bool))<0)
+			return ReadError();
+	}
 
 	//data (dataVersion>=20)
 	if (!ccSerializationHelper::GenericArrayFromFile(*this,in,dataVersion))
 		return false;
 
-	//displayed values & saturation boundaries (dataVersion>=20)
-	double dValue = 0;
-	if (in.read((char*)&dValue,sizeof(double))<0)
-		return ReadError();
-	m_minDisplayed = (DistanceType)dValue;
-	if (in.read((char*)&dValue,sizeof(double))<0)
-		return ReadError();
-	m_maxDisplayed = (DistanceType)dValue;
-	if (in.read((char*)&dValue,sizeof(double))<0)
-		return ReadError();
-	m_minSaturation = (DistanceType)dValue;
-	if (in.read((char*)&dValue,sizeof(double))<0)
-		return ReadError();
-	m_maxSaturation = (DistanceType)dValue;
-	if (in.read((char*)&dValue,sizeof(double))<0)
-		return ReadError();
-	m_minSaturationLog = (DistanceType)dValue;
-	if (in.read((char*)&dValue,sizeof(double))<0)
-		return ReadError();
-	m_maxSaturationLog = (DistanceType)dValue;
+	//convert former 'hidden/NaN' values for non strictly positive SFs (dataVersion < 26)
+	if (dataVersion < 26)
+	{
+		const ScalarType FORMER_BIG_VALUE = (ScalarType)(sqrt(3.4e38f)-1.0f);
 
-	//'absolute saturation' state (dataVersion>=20)
-	if (in.read((char*)&m_absSaturation,sizeof(bool))<0)
+		for (unsigned i=0; i<m_maxCount; ++i)
+		{
+			ScalarType val = getValue(i);
+			//convert former 'HIDDEN_VALUE' and 'BIG_VALUE' to 'NAN_VALUE'
+			if (onlyPositiveValues && val < 0 || !onlyPositiveValues && val >= FORMER_BIG_VALUE)
+				val = NAN_VALUE;
+		}
+	}
+
+	//displayed values & saturation boundaries (dataVersion>=20)
+	double minDisplayed = 0;
+	if (in.read((char*)&minDisplayed,sizeof(double))<0)
 		return ReadError();
+	double maxDisplayed = 0;
+	if (in.read((char*)&maxDisplayed,sizeof(double))<0)
+		return ReadError();
+	double minSaturation = 0;
+	if (in.read((char*)&minSaturation,sizeof(double))<0)
+		return ReadError();
+	double maxSaturation = 0;
+	if (in.read((char*)&maxSaturation,sizeof(double))<0)
+		return ReadError();
+	double minLogSaturation = 0;
+	if (in.read((char*)&minLogSaturation,sizeof(double))<0)
+		return ReadError();
+	double maxLogSaturation = 0;
+	if (in.read((char*)&maxLogSaturation,sizeof(double))<0)
+		return ReadError();
+
+	if (dataVersion < 27)
+	{
+		//'absolute saturation' state (27>dataVersion>=20)
+		bool absSaturation = false;
+		if (in.read((char*)&absSaturation,sizeof(bool))<0)
+			return ReadError();
+		//quite equivalent to 'symmetrical mode' now...
+		m_symmetricalScale = absSaturation;
+	}
 
 	//'logarithmic scale' state (dataVersion>=20)
 	if (in.read((char*)&m_logScale,sizeof(bool))<0)
 		return ReadError();
 
-	//'automatic boundaries update' state (dataVersion>=20)
-	if (in.read((char*)&m_autoBoundaries,sizeof(bool))<0)
-		return ReadError();
+	if (dataVersion < 27)
+	{
+		bool autoBoundaries = false;
+		//'automatic boundaries update' state (dataVersion>=20)
+		if (in.read((char*)&autoBoundaries,sizeof(bool))<0)
+			return ReadError();
+		//warn the user that this option is deprecated
+		if (!autoBoundaries)
+		{
+			ccLog::Warning("[ccScalarField] Former 'released' boundaries are deprecated!");
+			ccLog::Warning("[ccScalarField] You'll have to create the corresponding 'absolute' color scale (see the Color Scale Manager) and replace the file.");
+		}
+	}
 
-	//active color ramp (dataVersion>=20)
-	uint32_t activeColorRamp = 0;
-	if (in.read((char*)&activeColorRamp,4)<0)
-		return ReadError();
-	m_activeColorRamp = (CC_COLOR_RAMPS)activeColorRamp;
+	//new attributes
+	if (dataVersion >= 27)
+	{
+		//'symmetrical scale' state (27<=dataVersion)
+		if (in.read((char*)&m_symmetricalScale,sizeof(bool))<0)
+			return ReadError();
 
-	//active color ramp steps (dataVersion>=20)
-	uint32_t colorRampSteps = 0;
-	if (in.read((char*)&colorRampSteps,4)<0)
-		return ReadError();
-	m_colorRampSteps = (unsigned)colorRampSteps;
+		//'NaN values in grey' state (dataVersion>=27)
+		if (in.read((char*)&m_showNaNValuesInGrey,sizeof(bool))<0)
+			return ReadError();
 
-	//Normalisation coef.
-	updateNormalizeCoef();
+		//'always show 0' state (27<=dataVersion)
+		if (in.read((char*)&m_alwaysShowZero,sizeof(bool))<0)
+			return ReadError();
+	}
+
+	//color scale
+	{
+		ccColorScalesManager* colorScalesManager = ccColorScalesManager::GetUniqueInstance();
+		if (!colorScalesManager)
+		{
+			ccLog::Warning("[ccScalarField::fromFile] Failed to access color scales manager?!");
+			assert(false);
+		}
+
+		//old versions
+		if (dataVersion<27)
+		{
+			uint32_t activeColorScale = 0;
+			if (in.read((char*)&activeColorScale,4)<0)
+				return ReadError();
+
+			//Retrieve equivalent default scale
+			ccColorScalesManager::DEFAULT_SCALE activeColorScaleType = ccColorScalesManager::BGYR;
+			switch(activeColorScale)
+			{
+			case ccColorScalesManager::BGYR:
+				activeColorScaleType = ccColorScalesManager::BGYR;
+				break;
+			case ccColorScalesManager::GREY:
+				activeColorScaleType = ccColorScalesManager::GREY;
+				break;
+			case ccColorScalesManager::BWR:
+				activeColorScaleType = ccColorScalesManager::BWR;
+				break;
+			case ccColorScalesManager::RY:
+				activeColorScaleType = ccColorScalesManager::RY;
+				break;
+			case ccColorScalesManager::RW:
+				activeColorScaleType = ccColorScalesManager::RW;
+				break;
+			default:
+				ccLog::Warning("[ccScalarField::fromFile] Color scale is no more supported!");
+				break;
+			}
+			m_colorScale = ccColorScalesManager::GetDefaultScale(activeColorScaleType);
+		}
+		else //(dataVersion>=27)
+		{
+			bool hasColorScale = false;
+			if (in.read((char*)&hasColorScale,sizeof(bool))<0)
+				return ReadError();
+
+			if (hasColorScale)
+			{
+				ccColorScale::Shared colorScale = ccColorScale::Create("temp");
+				if (!colorScale->fromFile(in,dataVersion))
+					return ReadError();
+				m_colorScale = colorScale;
+
+				if (colorScalesManager)
+				{
+					ccColorScale::Shared existingColorScale = colorScalesManager->getScale(colorScale->getUuid());
+					if (!existingColorScale)
+					{
+						colorScalesManager->addScale(colorScale);
+					}
+					else //same UUID?
+					{
+						//FIXME: we should look if the color scale is exactly the same!
+						m_colorScale = existingColorScale;
+					}
+				}
+			}
+		}
+
+		//A scalar fiels must have a color scale!
+		if (!m_colorScale)
+			m_colorScale = ccColorScalesManager::GetDefaultScale();
+
+		//color ramp steps (dataVersion>=20)
+		uint32_t colorRampSteps = 0;
+		if (in.read((char*)&colorRampSteps,4)<0)
+			return ReadError();
+		setColorRampSteps((unsigned)colorRampSteps);
+	}
+
+	//update values
+	computeMinAndMax();
+	m_displayRange.setStart((ScalarType)minDisplayed);
+	m_displayRange.setStop((ScalarType)maxDisplayed);
+	m_saturationRange.setStart((ScalarType)minSaturation);
+	m_saturationRange.setStop((ScalarType)maxSaturation);
+	m_logSaturationRange.setStart((ScalarType)minLogSaturation);
+	m_logSaturationRange.setStop((ScalarType)maxLogSaturation);
 
 	return true;
-}
-
-void ccScalarField::autoUpdateBoundaries(bool state)
-{
-	bool updateBoundaries = (!m_autoBoundaries && state);
-	m_autoBoundaries = state;
-	if (updateBoundaries)
-		computeMinAndMax();
-}
-
-void ccScalarField::setBoundaries(DistanceType minValue, DistanceType maxValue)
-{
-	autoUpdateBoundaries(false);
-	setMin(minValue);
-	setMax(maxValue);
-
-	computeMinAndMax();
 }

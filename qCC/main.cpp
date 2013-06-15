@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2172                                                              $
-//$LastChangedDate:: 2012-06-24 18:33:24 +0200 (dim., 24 juin 2012)        $
-//**************************************************************************
-//
 
 #include <ccIncludeGL.h>
 
@@ -38,7 +31,7 @@
 #include <ccTimer.h>
 #include <ccObject.h>
 #include <ccNormalVectors.h>
-#include <ccColorTablesManager.h>
+#include <ccColorScalesManager.h>
 
 #include "mainwindow.h"
 #include "ccConsole.h"
@@ -107,7 +100,7 @@ int main(int argc, char **argv)
 
         //splash screen
         start_time = clock();
-        QPixmap pixmap(QString::fromUtf8(":/CC/Menu/images/menu/cc_logo_v2_qt.png"));
+        QPixmap pixmap(QString::fromUtf8(":/CC/images/imLogoV2Qt.png"));
         splash = new QSplashScreen(pixmap,Qt::WindowStaysOnTopHint);
         splash->show();
         QApplication::processEvents();
@@ -117,7 +110,7 @@ int main(int argc, char **argv)
 	ccObject::ResetUniqueIDCounter();
     ccTimer::Init();
 	ccNormalVectors::GetUniqueInstance(); //force pre-computed normals array initialization
-	ccColorTablesManager::GetUniqueInstance(); //force pre-computed color tables initialization
+	ccColorScalesManager::GetUniqueInstance(); //force pre-computed color tables initialization
 
     int result = 0;
 
@@ -171,7 +164,7 @@ int main(int argc, char **argv)
 
     ccGui::ReleaseInstance();
 	ccNormalVectors::ReleaseUniqueInstance();
-    ccColorTablesManager::ReleaseUniqueInstance();
+    ccColorScalesManager::ReleaseUniqueInstance();
 	ccConsole::ReleaseInstance();
 
 #ifdef CC_TRACK_ALIVE_SHARED_OBJECTS

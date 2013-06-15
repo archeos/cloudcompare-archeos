@@ -22,10 +22,12 @@
 
 #include "ccGLMatrix.h"
 #include "ccGenericGLDisplay.h"
-#include "ccColorTablesManager.h"
+#include "ccColorScalesManager.h"
 #include "ccBBox.h"
 #include "ccScalarField.h"
 #include "ccMaterial.h"
+
+class ccColorRampShader;
 
 //! Display parameters of a 3D entity
 struct glDrawParams
@@ -36,30 +38,6 @@ struct glDrawParams
 	bool showColors;
 	//! Display normals
 	bool showNorms;
-};
-
-//! Vertex buffer object
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-struct QCC_DB_DLL_API vboStruct
-#else
-struct vboStruct
-#endif
-{
-	bool enabled;
-	unsigned idVert;
-	unsigned idInd;
-	unsigned char* buffer;
-
-	inline unsigned maxSize() const {return MAX_NUMBER_OF_ELEMENTS_PER_CHUNK;}
-	inline unsigned xyzShift() const {return 0;}
-	inline unsigned normShift() const {return 12;}
-	inline unsigned rgbShift() const {return 24;}
-	inline unsigned elemSize() const {return 32;}	//NVidia indicates that a multiple of 32 bytes is better
-                                                    //and we must put there: 3 floats (coordinates) + 3 floats (normals) + 3 bytes (RGB) = 12+12+3=27 bytes;
-	vboStruct();
-	void clear();
-	void init();
 };
 
 //! Display context
@@ -85,8 +63,9 @@ struct glDrawContext
 
 	//information on displayed color scale
 	ccScalarField* sfColorScaleToDisplay;
-    bool greyForNanScalarValues;
-    char colorRampTitle[256];
+	
+	//shader for fast dynamic color ramp lookup
+	ccColorRampShader* colorRampShader;
 
 	//picked points
 	float pickedPointsRadius;
@@ -97,9 +76,6 @@ struct glDrawContext
 
 	//for displaying labels
 	unsigned labelsTransparency;
-
-	//VBO
-	vboStruct vbo;
 
 	//transparency
 	GLenum sourceBlend;
@@ -114,16 +90,14 @@ struct glDrawContext
     , decimateCloudOnMove(true)
     , decimateMeshOnMove(true)
     , sfColorScaleToDisplay(0)
-    , greyForNanScalarValues(true)
+	, colorRampShader(0)
 	, pickedPointsRadius(4)
 	, pickedPointsTextShift(0.0)
 	, dispNumberPrecision(6)
 	, labelsTransparency(100)
 	, sourceBlend(GL_SRC_ALPHA)
 	, destBlend(GL_ONE_MINUS_SRC_ALPHA)
-    {
-        colorRampTitle[0]=0;
-    }
+    {}
 };
 typedef glDrawContext CC_DRAW_CONTEXT;
 
@@ -138,9 +112,10 @@ typedef glDrawContext CC_DRAW_CONTEXT;
 #define CC_DRAW_ENTITY_NAMES                    0x0040
 #define CC_DRAW_POINT_NAMES                     0x0080
 #define CC_DRAW_TRI_NAMES						0x0100
-#define CC_DRAW_ANY_NAMES						0x01C0		// = CC_DRAW_ENTITY_NAMES | CC_DRAW_POINT_NAMES | CC_DRAW_TRI_NAMES
-#define CC_LOD_ACTIVATED                        0x0200
-#define CC_VIRTUAL_TRANS_ENABLED                0x0400
+#define CC_DRAW_FAST_NAMES_ONLY					0x0200
+#define CC_DRAW_ANY_NAMES						0x03C0		// = CC_DRAW_ENTITY_NAMES | CC_DRAW_POINT_NAMES | CC_DRAW_TRI_NAMES
+#define CC_LOD_ACTIVATED                        0x0400
+#define CC_VIRTUAL_TRANS_ENABLED                0x0800
 
 // Drawing flags testing macros (see ccDrawableObject)
 #define MACRO_Draw2D(context) (context.flags & CC_DRAW_2D)
@@ -149,6 +124,7 @@ typedef glDrawContext CC_DRAW_CONTEXT;
 #define MACRO_DrawTriangleNames(context) (context.flags & CC_DRAW_TRI_NAMES)
 #define MACRO_DrawEntityNames(context) (context.flags & CC_DRAW_ENTITY_NAMES)
 #define MACRO_DrawNames(context) (context.flags & CC_DRAW_ANY_NAMES)
+#define MACRO_DrawFastNamesOnly(context) (context.flags & CC_DRAW_FAST_NAMES_ONLY)
 #define MACRO_SkipUnselected(context) (context.flags & CC_SKIP_UNSELECTED)
 #define MACRO_SkipSelected(context) (context.flags & CC_SKIP_SELECTED)
 #define MACRO_LightIsEnabled(context) (context.flags & CC_LIGHT_ENABLED)

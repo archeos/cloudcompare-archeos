@@ -97,7 +97,7 @@ CC_FILE_ERROR DepthMapFileFilter::saveToOpenedFile(FILE* fp, ccGBLSensor* sensor
     ccGenericPointCloud* cloud = static_cast<ccGenericPointCloud*>(sensor->getParent());
 
     //the depth map associated to this sensor
-    CCLib::GroundBasedLidarSensor::DepthBuffer db = sensor->getDepthBuffer();
+    const ccGBLSensor::DepthBuffer& db = sensor->getDepthBuffer();
 
     fprintf(fp,"// CLOUDCOMPARE DEPTH MAP\n");
     fprintf(fp,"// Associated cloud: %s\n",qPrintable(cloud->getName()));
@@ -110,13 +110,13 @@ CC_FILE_ERROR DepthMapFileFilter::saveToOpenedFile(FILE* fp, ccGBLSensor* sensor
             sensor->getThetaMin(),
             sensor->getThetaMax());
     fprintf(fp,"// pMax   = %f\n",sensor->getSensorRange());
-    fprintf(fp,"// L      = %i\n",db.l_buff);
-    fprintf(fp,"// H      = %i\n",db.h_buff);
+    fprintf(fp,"// L      = %i\n",db.width);
+    fprintf(fp,"// H      = %i\n",db.height);
     fprintf(fp,"/////////////////////////\n");
 
-    //an array of projected normals (same size à depth map)
+    //an array of projected normals (same size a depth map)
     PointCoordinateType* theNorms = NULL;
-    //an array of projected colors (same size à depth map)
+    //an array of projected colors (same size a depth map)
     uchar* theColors = NULL;
 
     //if the sensor is associated to a "ccPointCloud", we may also extract
@@ -175,11 +175,11 @@ CC_FILE_ERROR DepthMapFileFilter::saveToOpenedFile(FILE* fp, ccGBLSensor* sensor
 
     PointCoordinateType* _theNorms = theNorms;
     uchar* _theColors = theColors;
-    DistanceType* _zBuff = db.zBuff;
+    ScalarType* _zBuff = db.zBuff;
 
-    for (int j=0;j<db.h_buff;++j)
+    for (int j=0;j<db.width;++j)
 	{
-        for (int k=0;k<db.l_buff;++k)
+        for (int k=0;k<db.height;++k)
         {
             //grid index and depth
             fprintf(fp,"%f %f %f",float(k),float(j),*_zBuff++);

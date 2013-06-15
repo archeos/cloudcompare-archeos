@@ -6,8 +6,8 @@ project( CloudCompareProjects )
 set( CMAKE_DEBUG_POSTFIX d )
 
 if( UNIX )
-	list( APPEND CMAKE_CXX_FLAGS "-fPIC" )
-	list( APPEND CMAKE_C_FLAGS "-fPIC" )
+        set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+        set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 endif()
 
 if( MSVC )
@@ -37,7 +37,7 @@ include( CMakeExternalLibs.cmake )
 # Libs requested by both qCC & ccViewer
 add_subdirectory( libs/Glew )
 add_subdirectory( libs/CCFbo )
-add_subdirectory( libs/qCC_db )
+add_subdirectory( libs/qCC_db ) # must always be included after CCFbo (dependency)
 
 # liblas support
 include( LiblasSupport.cmake )
@@ -45,6 +45,8 @@ include( LiblasSupport.cmake )
 include( XIOTSupport.cmake )
 # E57 support
 include( E57Support.cmake )
+# 3DXWARE (3dConnexion devices) support
+include( 3DXSupport.cmake )
 # PDMS support
 OPTION( OPTION_SUPPORT_MAC_PDMS_FORMAT "Build with .mac PDMS format" OFF )
 

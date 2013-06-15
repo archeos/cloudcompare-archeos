@@ -23,9 +23,6 @@
 namespace CCLib
 {
 
-//! Scalar values container
-typedef std::vector<DistanceType> distancesContainer;
-
 //! The Normal/Gaussian statistical distribution
 /** Implements the GenericDistribution interface.
 **/
@@ -49,45 +46,46 @@ public:
 		\param _mu the normal distribution mean
 		\param _sigma2 the normal distribution variance
 	**/
-	NormalDistribution(DistanceType _mu, DistanceType _sigma2);
+	NormalDistribution(ScalarType _mu, ScalarType _sigma2);
 
 	//inherited methods (see GenericDistribution)
-	virtual bool computeParameters(const GenericCloud* Yk, bool includeNegValues);
-	virtual double computeP(DistanceType x) const;
-	virtual double computePfromZero(DistanceType x) const;
-	virtual double computeP(DistanceType x1, DistanceType x2) const;
-	virtual double computeChi2Dist(const GenericCloud* Yk, unsigned numberOfClasses, bool includeNegValues, int* histo=0);
-	virtual void getTextualDescription(char* buffer) const;
-	virtual bool isValid() const {return parametersDefined;};
+	virtual bool computeParameters(const GenericCloud* cloud);
+	virtual double computeP(ScalarType x) const;
+	virtual double computePfromZero(ScalarType x) const;
+	virtual double computeP(ScalarType x1, ScalarType x2) const;
+	virtual double computeChi2Dist(const GenericCloud* Yk, unsigned numberOfClasses, int* histo=0);
+	virtual const char* getName() const { return "Gauss"; }
 
 	//! Returns the distribution parameters
 	/** \param _mu a field to transmit the distribution mean
 		\param _sigma2 a field to transmit the distribution variance
 		return the parameters validity
 	**/
-	bool getParameters(DistanceType &_mu, DistanceType &_sigma2) const;
+	bool getParameters(ScalarType &_mu, ScalarType &_sigma2) const;
 
 	//! Sets the distribution parameters
 	/** \param _mu the distribution mean
 		\param _sigma2 the distribution variance
 		return the parameters validity
 	**/
-	bool setParameters(DistanceType _mu, DistanceType _sigma2);
+	bool setParameters(ScalarType _mu, ScalarType _sigma2);
 
 	//! Returns the distribution mean
-	inline DistanceType getMu() const {return mu;};
+	inline ScalarType getMu() const { return m_mu; }
 
 	//! Returns the distribution variance
-	inline DistanceType getSigma2() const {return sigma2;};
+	inline ScalarType getSigma2() const { return m_sigma2; }
+
+	//! Scalar values container
+	typedef std::vector<ScalarType> ScalarContainer;
 
 	//! Computes the distribution parameters from an array of scalar values
 	/** Specific method to compute the parameters directly from an array
 		(vector) of scalar values, without associated points.
 		\param values the scalar values
-		\param includeNegValues specifies whether negative values should be included in computation
 		\return the validity of the computed parameters
 	**/
-	bool computeParameters(const distancesContainer& values, bool includeNegValues);
+	bool computeParameters(const ScalarContainer& values);
 
 	//! Computes robust parameters for the distribution from an array of scalar values
 	/** Specific method to compute the parameters directly from an array
@@ -96,10 +94,9 @@ public:
 		variance) are kept to make a second and more robust evaluation of the parameters.
 		\param values the scalar values
 		\param nSigma the values filtering interval size ([mu -nSigma * stddev : mu + nSigma * stddev])
-		\param includeNegValues specifies whether negative values should be included in computation
 		\return the validity of the computed parameters
 	**/
-	bool computeRobustParameters(const distancesContainer& values, double nSigma, bool includeNegValues);
+	bool computeRobustParameters(const ScalarContainer& values, double nSigma);
 
 protected:
 
@@ -110,20 +107,23 @@ protected:
 	**/
 	virtual bool setChi2ClassesPositions(unsigned numberOfClasses);
 
-	//! Parameters validity
-	bool parametersDefined;
-
 	//! Mean
-	DistanceType mu;
+	ScalarType m_mu;
 	//! Variance
-	DistanceType sigma2;
-	//! exponential quotient
-	DistanceType qFactor;
+	ScalarType m_sigma2;
+	//! Exponential quotient
+	double m_qFactor;
 	//! Normalization factor
-	double normFactor;
+	double m_normFactor;
+
+	//! Chi2 classes limits
+	/** Used internally. Stores both limits for each class in a vector
+		(min_class_1, max_class_1, min_class_2, max_class_2, etc.).
+	**/
+	std::vector<ScalarType> m_chi2ClassesPositions;
 
 	//! Structure used during the Chi2 distance computation
-	std::vector<DistanceType> Pi;
+	std::vector<ScalarType> m_Pi;
 };
 
 }

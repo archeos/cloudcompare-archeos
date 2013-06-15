@@ -83,6 +83,9 @@ public:
 	//! Constructor from a 3x3 rotation matrix R and a vector T
 	ccGLMatrix(const CCLib::SquareMatrix& R, const CCVector3& T);
 
+    //! Constructor from a 3x3 rotation matrix R, a vector T, a scale S
+    ccGLMatrix(const CCLib::SquareMatrix& R, const CCVector3& T, float S);
+
 	//! Constructor from a rotation center G, a 3x3 rotation matrix R and a vector T
 	ccGLMatrix(const CCLib::SquareMatrix& R, const CCVector3& T, const CCVector3& rotCenter);
 
@@ -103,6 +106,19 @@ public:
 		\param to normalized non-zero destination vector
 	**/
 	static ccGLMatrix FromToRotation(const CCVector3& from, const CCVector3& to);
+
+	//! Converts a quaternion to a rotation matrix
+	/** \param q quaternion (4 values: w,x,y,z)
+		\return corresponding rotation matrix
+	**/
+	static ccGLMatrix FromQuaternion(const float q[]);
+
+	//! Returns the rotation component around X only
+	ccGLMatrix xRotation() const;
+	//! Returns the rotation component around Y only
+	ccGLMatrix yRotation() const;
+	//! Returns the rotation component around Z only
+	ccGLMatrix zRotation() const;
 
 	//! Clears matrix
 	/** Matrix is set to 0.
@@ -145,7 +161,7 @@ public:
 	/** Translation corresponds to the begining of the
 		third column of the matrix.
 	**/
-	inline  float* getTranslation() { return m_mat+12; }
+	inline float* getTranslation() { return m_mat+12; }
 
 	//! Retruns a const pointer to internal translation
 	/** Translation corresponds to the begining of the

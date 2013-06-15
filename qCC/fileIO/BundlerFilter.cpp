@@ -653,7 +653,6 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(const char* filename,
 				{
 					//for ortho-rectification log
 					ORImageInfo info;
-					bool firstImage = (OR_pixelSize<0);
 					double corners[8];
 					ccImage* orthoImage = image->orthoRectifyAsImage(_keypointsCloud,
 																		keypointsImage,
@@ -823,8 +822,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(const char* filename,
 		{
 			assert(mntSamples && mntColors);
 			unsigned k,sampleCount=mntSamples->size();
-			QColor qColor;
-			int blackValue = qColor.black();
+         const QRgb blackValue = QColor( Qt::black ).rgb();
 
 			//back project each MNT samples in this image to get color
 			for (k=0;k<sampleCount;++k)

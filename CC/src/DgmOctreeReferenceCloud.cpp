@@ -64,13 +64,13 @@ const CCVector3* DgmOctreeReferenceCloud::getNextPoint()
 	return (m_globalIterator < size() ? m_set->at(m_globalIterator++).point : 0);
 }
 
-void DgmOctreeReferenceCloud::setPointScalarValue(unsigned pointIndex, DistanceType value)
+void DgmOctreeReferenceCloud::setPointScalarValue(unsigned pointIndex, ScalarType value)
 {
 	assert(pointIndex < size());
 	m_set->at(pointIndex).squareDist = value;
 }
 
-DistanceType DgmOctreeReferenceCloud::getPointScalarValue(unsigned pointIndex) const
+ScalarType DgmOctreeReferenceCloud::getPointScalarValue(unsigned pointIndex) const
 {
 	assert(pointIndex < size());
 	return m_set->at(pointIndex).squareDist;
@@ -121,13 +121,13 @@ void DgmOctreeReferenceCloud::computeBB()
 	m_validBB=true;
 }
 
-void DgmOctreeReferenceCloud::getBoundingBox(PointCoordinateType Mins[], PointCoordinateType Maxs[])
+void DgmOctreeReferenceCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
 {
 	if (!m_validBB)
 		computeBB();
 
-	memcpy(Mins,m_bbMins,sizeof(PointCoordinateType)*3);
-	memcpy(Maxs,m_bbMaxs,sizeof(PointCoordinateType)*3);
+	memcpy(bbMin, m_bbMins, sizeof(PointCoordinateType)*3);
+	memcpy(bbMax, m_bbMaxs, sizeof(PointCoordinateType)*3);
 }
 
 void DgmOctreeReferenceCloud::placeIteratorAtBegining()

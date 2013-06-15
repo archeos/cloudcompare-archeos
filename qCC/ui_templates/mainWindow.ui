@@ -52,8 +52,21 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
+    <widget class="QMenu" name="menu3DMouse">
+     <property name="title">
+      <string>3D mouse</string>
+     </property>
+     <property name="icon">
+      <iconset resource="../icones.qrc">
+       <normaloff>:/CC/images/im3DxLogo.png</normaloff>:/CC/images/im3DxLogo.png</iconset>
+     </property>
+     <addaction name="actionEnable3DMouse"/>
+    </widget>
     <addaction name="actionOpen"/>
     <addaction name="actionSave"/>
+    <addaction name="actionPrimitiveFactory"/>
+    <addaction name="separator"/>
+    <addaction name="menu3DMouse"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
@@ -96,13 +109,13 @@
     </widget>
     <addaction name="actionFullScreen"/>
     <addaction name="actionRefresh"/>
-    <addaction name="actionTestFrameRate"/>
     <addaction name="actionToggleCenteredPerspective"/>
     <addaction name="actionToggleViewerBasedPerspective"/>
     <addaction name="actionRenderToFile"/>
     <addaction name="actionDisplayOptions"/>
     <addaction name="actionEditCamera"/>
     <addaction name="actionSaveViewportAsObject"/>
+    <addaction name="actionTestFrameRate"/>
     <addaction name="separator"/>
     <addaction name="menuLights"/>
     <addaction name="menuShadersAndFilters"/>
@@ -137,6 +150,8 @@
      <addaction name="actionAddConstantSF"/>
      <addaction name="actionScalarFieldArithmetic"/>
      <addaction name="separator"/>
+     <addaction name="actionOpenColorScalesManager"/>
+     <addaction name="separator"/>
      <addaction name="actionDeleteScalarField"/>
      <addaction name="actionDeleteAllSF"/>
      <addaction name="separator"/>
@@ -148,6 +163,7 @@
      <addaction name="actionSetUniqueColor"/>
      <addaction name="actionColorize"/>
      <addaction name="actionSetColorGradient"/>
+     <addaction name="actionScalarFieldFromColor"/>
      <addaction name="separator"/>
      <addaction name="actionClearColor"/>
     </widget>
@@ -185,8 +201,9 @@
      <addaction name="actionComputeMeshLS"/>
      <addaction name="actionMeshBestFittingQuadric"/>
      <addaction name="separator"/>
+     <addaction name="actionConvertTextureToColor"/>
      <addaction name="actionSamplePoints"/>
-     <addaction name="actionSmoothMesh_Laplacian"/>
+     <addaction name="actionSmoothMeshLaplacian"/>
      <addaction name="actionSubdivideMesh"/>
      <addaction name="actionMeasureMeshSurface"/>
      <addaction name="separator"/>
@@ -234,13 +251,11 @@
     <addaction name="menuScalarFields"/>
     <addaction name="menuBoundingBox"/>
     <addaction name="separator"/>
-    <addaction name="actionPointPicking"/>
-    <addaction name="actionPointListPicking"/>
-    <addaction name="separator"/>
     <addaction name="actionClone"/>
     <addaction name="actionFuse"/>
     <addaction name="actionApplyTransformation"/>
     <addaction name="actionMultiply"/>
+    <addaction name="actionEditGlobalShift"/>
     <addaction name="actionSubsample"/>
     <addaction name="actionSynchronize"/>
     <addaction name="menuToggle"/>
@@ -281,6 +296,7 @@
      <addaction name="actionLabelConnectedComponents"/>
      <addaction name="actionKMeans"/>
      <addaction name="actionFrontPropagation"/>
+     <addaction name="actionCrossSection"/>
     </widget>
     <widget class="QMenu" name="menuProjection">
      <property name="title">
@@ -329,7 +345,9 @@
     <addaction name="menuStatistics"/>
     <addaction name="menuSegmentation"/>
     <addaction name="menuOther"/>
-    <addaction name="actionPrimitiveFactory"/>
+    <addaction name="separator"/>
+    <addaction name="actionPointPicking"/>
+    <addaction name="actionPointListPicking"/>
    </widget>
    <addaction name="menu_File"/>
    <addaction name="menuEdit"/>
@@ -340,16 +358,10 @@
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QDockWidget" name="DockableDBTree">
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Preferred" vsizetype="Ignored">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
-   </property>
    <property name="minimumSize">
     <size>
-     <width>150</width>
-     <height>159</height>
+     <width>109</width>
+     <height>147</height>
     </size>
    </property>
    <property name="floating">
@@ -460,6 +472,8 @@
    <addaction name="actionSetViewBack"/>
    <addaction name="actionSetViewRight"/>
    <addaction name="actionSetViewBottom"/>
+   <addaction name="actionSetViewIso1"/>
+   <addaction name="actionSetViewIso2"/>
   </widget>
   <widget class="QDockWidget" name="DockableConsole">
    <property name="sizePolicy">
@@ -553,6 +567,7 @@
    <addaction name="separator"/>
    <addaction name="actionSegment"/>
    <addaction name="actionTranslateRotate"/>
+   <addaction name="actionCrossSection"/>
   </widget>
   <widget class="QToolBar" name="toolBarSFTools">
    <property name="windowTitle">
@@ -594,6 +609,12 @@
    </attribute>
   </widget>
   <widget class="QDockWidget" name="DockableProperties">
+   <property name="minimumSize">
+    <size>
+     <width>100</width>
+     <height>111</height>
+    </size>
+   </property>
    <property name="floating">
     <bool>false</bool>
    </property>
@@ -661,7 +682,7 @@
   <action name="actionOpen">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/open.png</normaloff>:/CC/Menu/images/menu/open.png</iconset>
+     <normaloff>:/CC/images/ccOpen.png</normaloff>:/CC/images/ccOpen.png</iconset>
    </property>
    <property name="text">
     <string>&amp;Open</string>
@@ -682,7 +703,7 @@
   <action name="actionSave">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/save.png</normaloff>:/CC/Menu/images/menu/save.png</iconset>
+     <normaloff>:/CC/images/ccSave.png</normaloff>:/CC/images/ccSave.png</iconset>
    </property>
    <property name="text">
     <string>&amp;Save</string>
@@ -714,7 +735,7 @@
    </property>
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/zoomin.png</normaloff>:/CC/Menu/images/menu/zoomin.png</iconset>
+     <normaloff>:/CC/images/ccZoomIn.png</normaloff>:/CC/images/ccZoomIn.png</iconset>
    </property>
    <property name="text">
     <string>&amp;Full screen</string>
@@ -738,7 +759,7 @@
   <action name="actionDisplayOptions">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_settings.png</normaloff>:/CC/Menu/images/menu/cc_settings.png</iconset>
+     <normaloff>:/CC/images/ccSettings.png</normaloff>:/CC/images/ccSettings.png</iconset>
    </property>
    <property name="text">
     <string>Display settings</string>
@@ -773,6 +794,10 @@
    </property>
   </action>
   <action name="actionSetUniqueColor">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/typeRgbCcolor.png</normaloff>:/CC/images/typeRgbCcolor.png</iconset>
+   </property>
    <property name="text">
     <string>Set unique</string>
    </property>
@@ -798,6 +823,10 @@
    </property>
   </action>
   <action name="actionComputeNormals">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/typeNormal.png</normaloff>:/CC/images/typeNormal.png</iconset>
+   </property>
    <property name="text">
     <string>Compute</string>
    </property>
@@ -820,6 +849,10 @@
    </property>
   </action>
   <action name="actionComputeOctree">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/dbOctreeSymbol.png</normaloff>:/CC/images/dbOctreeSymbol.png</iconset>
+   </property>
    <property name="text">
     <string>Compute</string>
    </property>
@@ -839,7 +872,7 @@
    </property>
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/console.png</normaloff>:/CC/Menu/images/menu/console.png</iconset>
+     <normaloff>:/CC/images/ccConsole.png</normaloff>:/CC/images/ccConsole.png</iconset>
    </property>
    <property name="text">
     <string>Console</string>
@@ -895,7 +928,7 @@
   <action name="actionClone">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_cloneIcon.png</normaloff>:/CC/Menu/images/menu/cc_cloneIcon.png</iconset>
+     <normaloff>:/CC/images/ccClone.png</normaloff>:/CC/images/ccClone.png</iconset>
    </property>
    <property name="text">
     <string>Clone</string>
@@ -904,7 +937,7 @@
   <action name="actionFuse">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_fuseIcon.png</normaloff>:/CC/Menu/images/menu/cc_fuseIcon.png</iconset>
+     <normaloff>:/CC/images/ccFuse.png</normaloff>:/CC/images/ccFuse.png</iconset>
    </property>
    <property name="text">
     <string>Fuse</string>
@@ -913,7 +946,7 @@
   <action name="actionDelete">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/trashSmall.png</normaloff>:/CC/Menu/images/menu/trashSmall.png</iconset>
+     <normaloff>:/CC/images/ccDelete.png</normaloff>:/CC/images/ccDelete.png</iconset>
    </property>
    <property name="text">
     <string>Delete</string>
@@ -928,7 +961,7 @@
   <action name="actionRegister">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_registerIcon.png</normaloff>:/CC/Menu/images/menu/cc_registerIcon.png</iconset>
+     <normaloff>:/CC/images/ccRegister.png</normaloff>:/CC/images/ccRegister.png</iconset>
    </property>
    <property name="text">
     <string>Fine registration (ICP)</string>
@@ -943,7 +976,7 @@
   <action name="actionCloudCloudDist">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_compareCCIcon.png</normaloff>:/CC/Menu/images/menu/cc_compareCCIcon.png</iconset>
+     <normaloff>:/CC/images/ccCloudCloudDistance.png</normaloff>:/CC/images/ccCloudCloudDistance.png</iconset>
    </property>
    <property name="text">
     <string>Cloud/Cloud Dist.</string>
@@ -958,7 +991,7 @@
   <action name="actionCloudMeshDist">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_compareCMIcon.png</normaloff>:/CC/Menu/images/menu/cc_compareCMIcon.png</iconset>
+     <normaloff>:/CC/images/ccCloudMeshDistance.png</normaloff>:/CC/images/ccCloudMeshDistance.png</iconset>
    </property>
    <property name="text">
     <string>Cloud/Mesh Dist</string>
@@ -973,22 +1006,22 @@
   <action name="actionStatisticalTest">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_statTestIcon.png</normaloff>:/CC/Menu/images/menu/cc_statTestIcon.png</iconset>
+     <normaloff>:/CC/images/ccStatTest.png</normaloff>:/CC/images/ccStatTest.png</iconset>
    </property>
    <property name="text">
-    <string>Statistical test</string>
+    <string>Local Statistical test</string>
    </property>
    <property name="toolTip">
-    <string>Apply a statistical test to classify diffrences</string>
+    <string>Apply a local statistical test to separate noise from true differences</string>
    </property>
    <property name="statusTip">
-    <string>Apply a statistical test to classify diffrences</string>
+    <string>Apply a local statistical test to separate noise from true differences</string>
    </property>
   </action>
   <action name="actionSamplePoints">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_samplePointsIcon.png</normaloff>:/CC/Menu/images/menu/cc_samplePointsIcon.png</iconset>
+     <normaloff>:/CC/images/ccSamplePoints.png</normaloff>:/CC/images/ccSamplePoints.png</iconset>
    </property>
    <property name="text">
     <string>Sample Points</string>
@@ -1003,7 +1036,7 @@
   <action name="actionLabelConnectedComponents">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_ccExtractIcon.png</normaloff>:/CC/Menu/images/menu/cc_ccExtractIcon.png</iconset>
+     <normaloff>:/CC/images/ccCCExtract.png</normaloff>:/CC/images/ccCCExtract.png</iconset>
    </property>
    <property name="text">
     <string>Label Connected Comp.</string>
@@ -1018,7 +1051,7 @@
   <action name="actionSegment">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_segmentIcon.png</normaloff>:/CC/Menu/images/menu/cc_segmentIcon.png</iconset>
+     <normaloff>:/CC/images/ccSegment.png</normaloff>:/CC/images/ccSegment.png</iconset>
    </property>
    <property name="text">
     <string>Segment</string>
@@ -1030,7 +1063,7 @@
    </property>
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_moveIcon.png</normaloff>:/CC/Menu/images/menu/cc_moveIcon.png</iconset>
+     <normaloff>:/CC/images/ccInteractiveTransformation.png</normaloff>:/CC/images/ccInteractiveTransformation.png</iconset>
    </property>
    <property name="text">
     <string>Translate/rotate</string>
@@ -1039,7 +1072,7 @@
   <action name="actionShowHistogram">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_histogramIcon.png</normaloff>:/CC/Menu/images/menu/cc_histogramIcon.png</iconset>
+     <normaloff>:/CC/images/ccHistogram.png</normaloff>:/CC/images/ccHistogram.png</iconset>
    </property>
    <property name="text">
     <string>Show histogram</string>
@@ -1048,7 +1081,7 @@
   <action name="actionComputeStatParams">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_computeStatIcon.png</normaloff>:/CC/Menu/images/menu/cc_computeStatIcon.png</iconset>
+     <normaloff>:/CC/images/ccComputeStat.png</normaloff>:/CC/images/ccComputeStat.png</iconset>
    </property>
    <property name="text">
     <string>Compute stat. params</string>
@@ -1063,7 +1096,7 @@
   <action name="actionFilterByValue">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_filterByValueIcon.png</normaloff>:/CC/Menu/images/menu/cc_filterByValueIcon.png</iconset>
+     <normaloff>:/CC/images/ccFilterByValue.png</normaloff>:/CC/images/ccFilterByValue.png</iconset>
    </property>
    <property name="text">
     <string>Filter By Value</string>
@@ -1078,7 +1111,7 @@
   <action name="actionGaussianFilter">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_gaussianFilterIcon.png</normaloff>:/CC/Menu/images/menu/cc_gaussianFilterIcon.png</iconset>
+     <normaloff>:/CC/images/ccGaussianFilter.png</normaloff>:/CC/images/ccGaussianFilter.png</iconset>
    </property>
    <property name="text">
     <string>Gaussian filter</string>
@@ -1093,7 +1126,7 @@
   <action name="actionDeleteScalarField">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_deleteSFIcon.png</normaloff>:/CC/Menu/images/menu/cc_deleteSFIcon.png</iconset>
+     <normaloff>:/CC/images/ccDeleteSF.png</normaloff>:/CC/images/ccDeleteSF.png</iconset>
    </property>
    <property name="text">
     <string>Delete</string>
@@ -1111,7 +1144,7 @@
   <action name="actionScalarFieldArithmetic">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_sfArithmetic.png</normaloff>:/CC/Menu/images/menu/cc_sfArithmetic.png</iconset>
+     <normaloff>:/CC/images/ccSfArithmetic.png</normaloff>:/CC/images/ccSfArithmetic.png</iconset>
    </property>
    <property name="text">
     <string>Arithmetic</string>
@@ -1163,6 +1196,10 @@
    </property>
   </action>
   <action name="actionClearColor">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccDelete.png</normaloff>:/CC/images/ccDelete.png</iconset>
+   </property>
    <property name="text">
     <string>Clear</string>
    </property>
@@ -1185,6 +1222,10 @@
    </property>
   </action>
   <action name="actionClearNormals">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccDelete.png</normaloff>:/CC/images/ccDelete.png</iconset>
+   </property>
    <property name="text">
     <string>Clear</string>
    </property>
@@ -1333,7 +1374,7 @@
   <action name="actionSFGradient">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_gradientIcon.png</normaloff>:/CC/Menu/images/menu/cc_gradientIcon.png</iconset>
+     <normaloff>:/CC/images/ccGradient.png</normaloff>:/CC/images/ccGradient.png</iconset>
    </property>
    <property name="text">
     <string>Gradient</string>
@@ -1342,7 +1383,7 @@
   <action name="actionZoomAndCenter">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_zoomIcon.png</normaloff>:/CC/Menu/images/menu/cc_zoomIcon.png</iconset>
+     <normaloff>:/CC/images/ccZoom.png</normaloff>:/CC/images/ccZoom.png</iconset>
    </property>
    <property name="text">
     <string>Zoom &amp; Center</string>
@@ -1363,10 +1404,16 @@
   <action name="actionSetViewTop">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_ViewZpos.png</normaloff>:/CC/Menu/images/menu/cc_ViewZpos.png</iconset>
+     <normaloff>:/CC/images/ccViewZpos.png</normaloff>:/CC/images/ccViewZpos.png</iconset>
    </property>
    <property name="text">
     <string>Top View</string>
+   </property>
+   <property name="toolTip">
+    <string>Set top view</string>
+   </property>
+   <property name="statusTip">
+    <string>Set top view</string>
    </property>
    <property name="shortcut">
     <string>8</string>
@@ -1378,10 +1425,16 @@
   <action name="actionSetViewFront">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_ViewYpos.png</normaloff>:/CC/Menu/images/menu/cc_ViewYpos.png</iconset>
+     <normaloff>:/CC/images/ccViewYpos.png</normaloff>:/CC/images/ccViewYpos.png</iconset>
    </property>
    <property name="text">
     <string>Front View</string>
+   </property>
+   <property name="toolTip">
+    <string>Set front view</string>
+   </property>
+   <property name="statusTip">
+    <string>Set front view</string>
    </property>
    <property name="shortcut">
     <string>5</string>
@@ -1393,10 +1446,16 @@
   <action name="actionSetViewBack">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_ViewYneg.png</normaloff>:/CC/Menu/images/menu/cc_ViewYneg.png</iconset>
+     <normaloff>:/CC/images/ccViewYneg.png</normaloff>:/CC/images/ccViewYneg.png</iconset>
    </property>
    <property name="text">
     <string>Back View</string>
+   </property>
+   <property name="toolTip">
+    <string>Set back view</string>
+   </property>
+   <property name="statusTip">
+    <string>Set back view</string>
    </property>
    <property name="shortcut">
     <string>0</string>
@@ -1408,10 +1467,16 @@
   <action name="actionSetViewLeft">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_ViewXpos.png</normaloff>:/CC/Menu/images/menu/cc_ViewXpos.png</iconset>
+     <normaloff>:/CC/images/ccViewXpos.png</normaloff>:/CC/images/ccViewXpos.png</iconset>
    </property>
    <property name="text">
     <string>Left Side View</string>
+   </property>
+   <property name="toolTip">
+    <string>Set left side view</string>
+   </property>
+   <property name="statusTip">
+    <string>Set left side view</string>
    </property>
    <property name="shortcut">
     <string>4</string>
@@ -1423,10 +1488,16 @@
   <action name="actionSetViewRight">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_ViewXneg.png</normaloff>:/CC/Menu/images/menu/cc_ViewXneg.png</iconset>
+     <normaloff>:/CC/images/ccViewXneg.png</normaloff>:/CC/images/ccViewXneg.png</iconset>
    </property>
    <property name="text">
     <string>Right Side View</string>
+   </property>
+   <property name="toolTip">
+    <string>Set right side view</string>
+   </property>
+   <property name="statusTip">
+    <string>Set right side view</string>
    </property>
    <property name="shortcut">
     <string>6</string>
@@ -1438,10 +1509,16 @@
   <action name="actionSetViewBottom">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_ViewZneg.png</normaloff>:/CC/Menu/images/menu/cc_ViewZneg.png</iconset>
+     <normaloff>:/CC/images/ccViewZneg.png</normaloff>:/CC/images/ccViewZneg.png</iconset>
    </property>
    <property name="text">
     <string>Bottom View</string>
+   </property>
+   <property name="toolTip">
+    <string>Set bottom view</string>
+   </property>
+   <property name="statusTip">
+    <string>Set bottom view</string>
    </property>
    <property name="shortcut">
     <string>2</string>
@@ -1541,7 +1618,7 @@
   <action name="actionGlobalZoom">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_globalZoom.png</normaloff>:/CC/Menu/images/menu/cc_globalZoom.png</iconset>
+     <normaloff>:/CC/images/ccGlobalZoom.png</normaloff>:/CC/images/ccGlobalZoom.png</iconset>
    </property>
    <property name="text">
     <string>Global Zoom</string>
@@ -1551,6 +1628,10 @@
    </property>
   </action>
   <action name="actionToggleCenteredPerspective">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccCenteredPerspective32.png</normaloff>:/CC/images/ccCenteredPerspective32.png</iconset>
+   </property>
    <property name="text">
     <string>Toggle Centered Perspective</string>
    </property>
@@ -1568,6 +1649,10 @@
    </property>
   </action>
   <action name="actionToggleViewerBasedPerspective">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccViewerBasedPerspective32.png</normaloff>:/CC/images/ccViewerBasedPerspective32.png</iconset>
+   </property>
    <property name="text">
     <string>Toggle Viewer Based Perspective</string>
    </property>
@@ -1585,6 +1670,10 @@
    </property>
   </action>
   <action name="actionRefresh">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/smallReset.png</normaloff>:/CC/images/smallReset.png</iconset>
+   </property>
    <property name="text">
     <string>Refresh</string>
    </property>
@@ -1611,6 +1700,10 @@
    </property>
   </action>
   <action name="actionConvertToRGB">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/typeRgbCcolor.png</normaloff>:/CC/images/typeRgbCcolor.png</iconset>
+   </property>
    <property name="text">
     <string>Convert to RGB</string>
    </property>
@@ -1619,6 +1712,10 @@
    </property>
   </action>
   <action name="actionProjectSensor">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/dbSensorSymbol.png</normaloff>:/CC/images/dbSensorSymbol.png</iconset>
+   </property>
    <property name="text">
     <string>Create</string>
    </property>
@@ -1657,7 +1754,7 @@
   <action name="actionSubsample">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_sampleCloudIcon.png</normaloff>:/CC/Menu/images/menu/cc_sampleCloudIcon.png</iconset>
+     <normaloff>:/CC/images/ccSampleCloud.png</normaloff>:/CC/images/ccSampleCloud.png</iconset>
    </property>
    <property name="text">
     <string>Subsample</string>
@@ -1693,7 +1790,7 @@
   <action name="actionPointPicking">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Comp/images/comp/pointPicking.png</normaloff>:/CC/Comp/images/comp/pointPicking.png</iconset>
+     <normaloff>:/CC/images/ccPointPicking.png</normaloff>:/CC/images/ccPointPicking.png</iconset>
    </property>
    <property name="text">
     <string>Point picking</string>
@@ -1730,7 +1827,7 @@
   <action name="actionEditCamera">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/camera.png</normaloff>:/CC/Menu/images/menu/camera.png</iconset>
+     <normaloff>:/CC/images/ccCamera.png</normaloff>:/CC/images/ccCamera.png</iconset>
    </property>
    <property name="text">
     <string>Camera settings</string>
@@ -1739,7 +1836,7 @@
   <action name="actionPointListPicking">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Comp/images/comp/pointListPicking.png</normaloff>:/CC/Comp/images/comp/pointListPicking.png</iconset>
+     <normaloff>:/CC/images/ccPointListPicking.png</normaloff>:/CC/images/ccPointListPicking.png</iconset>
    </property>
    <property name="text">
     <string>Point list picking</string>
@@ -1844,7 +1941,7 @@
     <string>Apply rotation and/or translation</string>
    </property>
   </action>
-  <action name="actionSmoothMesh_Laplacian">
+  <action name="actionSmoothMeshLaplacian">
    <property name="text">
     <string>Smooth (Laplacian)</string>
    </property>
@@ -1855,6 +1952,10 @@
    </property>
   </action>
   <action name="actionSaveViewportAsObject">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/dbViewportSymbol.png</normaloff>:/CC/images/dbViewportSymbol.png</iconset>
+   </property>
    <property name="text">
     <string>Save viewport as object</string>
    </property>
@@ -1868,7 +1969,7 @@
   <action name="actionPickRotationCenter">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_pickCenter.png</normaloff>:/CC/Menu/images/menu/cc_pickCenter.png</iconset>
+     <normaloff>:/CC/images/ccPickCenter.png</normaloff>:/CC/images/ccPickCenter.png</iconset>
    </property>
    <property name="text">
     <string>Pick rotation center</string>
@@ -1885,7 +1986,7 @@
   <action name="actionBilateralFilter">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_bilateralFilterIcon.png</normaloff>:/CC/Menu/images/menu/cc_bilateralFilterIcon.png</iconset>
+     <normaloff>:/CC/images/ccBilateralFilter.png</normaloff>:/CC/images/ccBilateralFilter.png</iconset>
    </property>
    <property name="text">
     <string>Bilateral filter</string>
@@ -1953,7 +2054,7 @@
   <action name="actionPointPairsAlign">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_register4pcsIcon.png</normaloff>:/CC/Menu/images/menu/cc_register4pcsIcon.png</iconset>
+     <normaloff>:/CC/images/ccAlign.png</normaloff>:/CC/images/ccAlign.png</iconset>
    </property>
    <property name="text">
     <string>Align (point pairs picking)</string>
@@ -1968,8 +2069,7 @@
   <action name="actionAddConstantSF">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Menu/images/menu/cc_addConstSF.png</normaloff>
-     <normalon>:/CC/Menu/images/menu/cc_addConstSF.png</normalon>:/CC/Menu/images/menu/cc_addConstSF.png</iconset>
+     <normaloff>:/CC/images/ccAddConstSF.png</normaloff>:/CC/images/ccAddConstSF.png</iconset>
    </property>
    <property name="text">
     <string>Add constant SF</string>
@@ -2002,7 +2102,7 @@
   <action name="actionPrimitiveFactory">
    <property name="icon">
     <iconset resource="../icones.qrc">
-     <normaloff>:/CC/Tree/images/miscGeomSymbol.png</normaloff>:/CC/Tree/images/miscGeomSymbol.png</iconset>
+     <normaloff>:/CC/images/dbMiscGeomSymbol.png</normaloff>:/CC/images/dbMiscGeomSymbol.png</iconset>
    </property>
    <property name="text">
     <string>Primitive factory</string>
@@ -2017,6 +2117,192 @@
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="actionEnable3DMouse">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Enable</string>
+   </property>
+  </action>
+  <action name="actionSetOrthoView">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccOrthoMode32.png</normaloff>:/CC/images/ccOrthoMode32.png</iconset>
+   </property>
+   <property name="text">
+    <string>Orthographic projection</string>
+   </property>
+   <property name="toolTip">
+    <string>Set orthographic projection for current 3D View</string>
+   </property>
+   <property name="statusTip">
+    <string>Set orthographic projection for current 3D View</string>
+   </property>
+  </action>
+  <action name="actionSetCenteredPerspectiveView">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccCenteredPerspective32.png</normaloff>:/CC/images/ccCenteredPerspective32.png</iconset>
+   </property>
+   <property name="text">
+    <string>Object-centered perspective</string>
+   </property>
+   <property name="toolTip">
+    <string>Set object-centered perspective for current 3D View</string>
+   </property>
+   <property name="statusTip">
+    <string>Set object-centered perspective for current 3D View</string>
+   </property>
+  </action>
+  <action name="actionSetViewerPerspectiveView">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccViewerBasedPerspective32.png</normaloff>:/CC/images/ccViewerBasedPerspective32.png</iconset>
+   </property>
+   <property name="text">
+    <string>Viewer-based perspective</string>
+   </property>
+   <property name="toolTip">
+    <string>Set viewer-based perspective for current 3D View</string>
+   </property>
+   <property name="statusTip">
+    <string>Set viewer-based perspectivefor current 3D View</string>
+   </property>
+  </action>
+  <action name="actionSetPivotAlwaysOn">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccPivotOn.png</normaloff>:/CC/images/ccPivotOn.png</iconset>
+   </property>
+   <property name="text">
+    <string>Always visible</string>
+   </property>
+   <property name="toolTip">
+    <string>Pivot always visible</string>
+   </property>
+   <property name="statusTip">
+    <string>Pivot always visible</string>
+   </property>
+  </action>
+  <action name="actionSetPivotRotationOnly">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccPivotAuto.png</normaloff>:/CC/images/ccPivotAuto.png</iconset>
+   </property>
+   <property name="text">
+    <string>Rotation only</string>
+   </property>
+   <property name="toolTip">
+    <string>Pivot visible when rotating</string>
+   </property>
+   <property name="statusTip">
+    <string>Pivot visible when rotating</string>
+   </property>
+  </action>
+  <action name="actionSetPivotOff">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccPivotOff.png</normaloff>:/CC/images/ccPivotOff.png</iconset>
+   </property>
+   <property name="text">
+    <string>Never visible</string>
+   </property>
+   <property name="toolTip">
+    <string>Pivot never visible</string>
+   </property>
+   <property name="statusTip">
+    <string>Pivot never visible</string>
+   </property>
+  </action>
+  <action name="actionSetViewIso1">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccViewIso1.png</normaloff>:/CC/images/ccViewIso1.png</iconset>
+   </property>
+   <property name="text">
+    <string>Iso 1</string>
+   </property>
+   <property name="toolTip">
+    <string>Set view to 'front' isometric</string>
+   </property>
+   <property name="statusTip">
+    <string>Set view to 'front' isometric</string>
+   </property>
+   <property name="shortcut">
+    <string>7</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="actionSetViewIso2">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccViewIso2.png</normaloff>:/CC/images/ccViewIso2.png</iconset>
+   </property>
+   <property name="text">
+    <string>Iso 2</string>
+   </property>
+   <property name="toolTip">
+    <string>Set view to 'back' isometric</string>
+   </property>
+   <property name="statusTip">
+    <string>Set view to 'back' isometric</string>
+   </property>
+   <property name="shortcut">
+    <string>9</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="actionConvertTextureToColor">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/typeRgbCcolor.png</normaloff>:/CC/images/typeRgbCcolor.png</iconset>
+   </property>
+   <property name="text">
+    <string>Convert texture/material to RGB</string>
+   </property>
+  </action>
+  <action name="actionOpenColorScalesManager">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/typeSF.png</normaloff>:/CC/images/typeSF.png</iconset>
+   </property>
+   <property name="text">
+    <string>Color Scales Manager</string>
+   </property>
+   <property name="toolTip">
+    <string>Open Color Scales Manager dialog</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="actionCrossSection">
+   <property name="icon">
+    <iconset resource="../icones.qrc">
+     <normaloff>:/CC/images/ccClippingBox.png</normaloff>:/CC/images/ccClippingBox.png</iconset>
+   </property>
+   <property name="text">
+    <string>Cross Section</string>
+   </property>
+   <property name="statusTip">
+    <string>Cross Section</string>
+   </property>
+  </action>
+  <action name="actionEditGlobalShift">
+   <property name="text">
+    <string>Edit global shift</string>
+   </property>
+  </action>
+  <action name="actionScalarFieldFromColor">
+   <property name="text">
+    <string>Convert to Scalar field</string>
    </property>
   </action>
  </widget>

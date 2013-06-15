@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2265                                                              $
-//$LastChangedDate:: 2012-10-13 22:22:51 +0200 (sam., 13 oct. 2012)        $
-//**************************************************************************
-//
 
 #include "ccPropertiesTreeDelegate.h"
 
@@ -30,6 +23,7 @@
 #include "../ccGLWindow.h"
 #include "../mainwindow.h"
 #include "../ccGuiParameters.h"
+#include "../ccColorScaleEditorDlg.h"
 
 //qCC_db
 #include <ccHObjectCaster.h>
@@ -57,6 +51,8 @@
 #include <QLocale>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QHBoxLayout>
+#include <QToolButton>
 
 //System
 #include <assert.h>
@@ -65,13 +61,49 @@
 const QString c_noDisplayString = QString("None");
 const QString c_defaultPointSizeString = QString("Default");
 
+// Default separator colors
+const QBrush SEPARATOR_BACKGROUND_BRUSH(Qt::darkGray);
+const QBrush SEPARATOR_TEXT_BRUSH(Qt::white);
+
+//! Advanced editor for color scales
+class QColorScaleSelector : public QFrame
+{
+public:
+
+	QColorScaleSelector(QWidget* parent)
+		: QFrame(parent)
+		, m_comboBox(new QComboBox())
+		, m_button(new QToolButton())
+	{
+		setLayout(new QHBoxLayout());
+		layout()->setContentsMargins(0,0,0,0);
+		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+
+		//combox box
+		if (m_comboBox)
+		{
+			layout()->addWidget(m_comboBox);
+		}
+		
+		//tool button
+		if (m_button)
+		{
+			m_button->setIcon(QIcon(QString::fromUtf8(":/CC/images/ccGear.png")));
+			layout()->addWidget(m_button);
+		}
+	}
+	
+	QComboBox* m_comboBox;
+	QToolButton* m_button;
+};
+
 ccPropertiesTreeDelegate::ccPropertiesTreeDelegate(QStandardItemModel* model,
 												   QAbstractItemView* view,
 												   QObject *parent)
-		: QItemDelegate(parent)
+		: QStyledItemDelegate(parent)
+		, m_currentObject(0)
 		, m_model(model)
 		, m_view(view)
-		, m_currentObject(0)
 {
 	assert(m_model && m_view);
 }
@@ -93,22 +125,25 @@ QSize ccPropertiesTreeDelegate::sizeHint(const QStyleOptionViewItem& option, con
         {
         case OBJECT_CURRENT_DISPLAY:
         case OBJECT_CURRENT_SCALAR_FIELD:
-        case OBJECT_CURRENT_COLOR_RAMP:
         case OBJECT_OCTREE_TYPE:
         case OBJECT_COLOR_RAMP_STEPS:
         case OBJECT_CLOUD_POINT_SIZE:
             return QSize(50,18);
+        case OBJECT_CURRENT_COLOR_RAMP:
+            return QSize(70,22);
+		case OBJECT_CLOUD_SF_EDITOR:
+            return QSize(250,160);
         }
     }
 
-    return QItemDelegate::sizeHint(option,index);
+    return QStyledItemDelegate::sizeHint(option,index);
 }
 //*/
 
 void ccPropertiesTreeDelegate::unbind()
 {
     if (m_model)
-        disconnect(m_model, SIGNAL(itemChanged(QStandardItem*)), this, SLOT(updateItem(QStandardItem*)));
+		m_model->disconnect(this);
 }
 
 ccHObject* ccPropertiesTreeDelegate::getCurrentObject()
@@ -125,9 +160,12 @@ void ccPropertiesTreeDelegate::fillModel(ccHObject* hObject)
 
     m_currentObject = hObject;
 
+	//save current scroll position
+	int scrollPos = (m_view && m_view->verticalScrollBar() ? m_view->verticalScrollBar()->value() : 0);
+
 	if (m_model)
 	{
-		m_model->clear();
+		m_model->removeRows(0,m_model->rowCount());
 		m_model->setColumnCount(2);
 		m_model->setHeaderData(0, Qt::Horizontal, "Property");
 		m_model->setHeaderData(1, Qt::Horizontal, "State/Value");
@@ -135,7 +173,7 @@ void ccPropertiesTreeDelegate::fillModel(ccHObject* hObject)
 
     if (m_currentObject->isHierarchy())
 		if (!m_currentObject->isA(CC_2D_VIEWPORT_LABEL)) //don't need to display this kind of info for viewport labels!
-        fillWithHObject(m_currentObject);
+			fillWithHObject(m_currentObject);
 
     if (m_currentObject->isKindOf(CC_POINT_CLOUD))
     {
@@ -192,33 +230,80 @@ void ccPropertiesTreeDelegate::fillModel(ccHObject* hObject)
         fillWithChunkedArray(static_cast<ColorsTableType*>(m_currentObject));
     }
 	
+	//go back to original position
+	if (scrollPos>0)
+		m_view->verticalScrollBar()->setSliderPosition(scrollPos);
+
 	if (m_model)
 		connect(m_model, SIGNAL(itemChanged(QStandardItem*)), this, SLOT(updateItem(QStandardItem*)));
 }
 
-void ccPropertiesTreeDelegate::addSeparator(const char* title)
+void ccPropertiesTreeDelegate::appendRow(QStandardItem* leftItem, QStandardItem* rightItem, bool openPersistentEditor/*=false*/)
 {
+	assert(leftItem && rightItem);
     assert(m_model);
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
+	if (m_model)
+	{
+		//append row
+		QList<QStandardItem*> rowItems;
+		{
+			rowItems.push_back(leftItem);
+			rowItems.push_back(rightItem);
+		}
+		m_model->appendRow(rowItems);
 
-    QBrush backgBrush(Qt::darkGray);
-    QBrush textBrush(Qt::white);
+		//the presistent editor (if any) is always the right one!
+		if (openPersistentEditor)
+			m_view->openPersistentEditor(m_model->index(m_model->rowCount()-1,1));
+	}
+}
 
+void ccPropertiesTreeDelegate::addSeparator(QString title)
+{
     //name
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem(title);
-    item->setFlags(Qt::ItemIsEnabled);
-    item->setForeground(textBrush);
-    item->setBackground(backgBrush);
-    m_model->setItem(curRow,0,item);
+    QStandardItem* leftItem = new QStandardItem(title);
+    leftItem->setForeground(SEPARATOR_TEXT_BRUSH);
+    leftItem->setBackground(SEPARATOR_BACKGROUND_BRUSH);
 
-    item = new QStandardItem();
-    item->setFlags(Qt::ItemIsEnabled);
-    item->setForeground(textBrush);
-    item->setBackground(backgBrush);
-    m_model->setItem(curRow,1,item);
+	//empty
+    QStandardItem* rightItem = new QStandardItem();
+    rightItem->setForeground(SEPARATOR_TEXT_BRUSH);
+    rightItem->setBackground(SEPARATOR_BACKGROUND_BRUSH);
+    
+	//append row
+	appendRow(leftItem,rightItem);
+}
+
+//Shortcut to create a delegate item
+QStandardItem* ITEM(QString name,
+					Qt::ItemFlag additionalFlags = Qt::NoItemFlags,
+					ccPropertiesTreeDelegate::CC_PROPERTY_ROLE role = ccPropertiesTreeDelegate::OBJECT_NO_PROPERTY)
+{
+	QStandardItem* item = new QStandardItem(name);
+	//flags
+	item->setFlags(Qt::ItemIsEnabled | additionalFlags);
+	//role (if any)
+	if (role != ccPropertiesTreeDelegate::OBJECT_NO_PROPERTY)
+		item->setData(role);
+
+	return item;
+}
+
+//Shortcut to create a checkable delegate item
+QStandardItem* CHECKABLE_ITEM(bool checkState, ccPropertiesTreeDelegate::CC_PROPERTY_ROLE role)
+{
+	QStandardItem* item = ITEM("",Qt::ItemIsUserCheckable,role);
+	//check  state
+	item->setCheckState(checkState ? Qt::Checked : Qt::Unchecked);
+
+	return item;
+}
+
+//Shortcut to create a persistent editor item
+QStandardItem* PERSISTENT_EDITOR(ccPropertiesTreeDelegate::CC_PROPERTY_ROLE role)
+{
+	return ITEM(QString(),Qt::ItemIsEditable,role);
 }
 
 void ccPropertiesTreeDelegate::fillWithHObject(ccHObject* _obj)
@@ -227,170 +312,67 @@ void ccPropertiesTreeDelegate::fillWithHObject(ccHObject* _obj)
 
     addSeparator("CC Object");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //name
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Name");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(_obj->getName());
-    item->setData(OBJECT_NAME);
-    item->setFlags(Qt::ItemIsEditable | Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Name"), ITEM(_obj->getName(),Qt::ItemIsEditable,OBJECT_NAME) );
 
     //unique ID
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Unique ID");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-	item = new QStandardItem(QString::number(_obj->getUniqueID()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Unique ID"), ITEM(QString::number(_obj->getUniqueID())) );
 
     //number of children
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Children");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString::number(_obj->getChildrenNumber()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Children"), ITEM(QString::number(_obj->getChildrenNumber())) );
 
     //visiblity
     if (!_obj->isVisiblityLocked())
-    {
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Visible");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        item->setCheckState(_obj->isVisible() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_VISIBILITY);
-        m_model->setItem(curRow,1,item);
-    }
+		appendRow( ITEM("Visible"), CHECKABLE_ITEM(_obj->isVisible(),OBJECT_VISIBILITY) );
 
     //colors
     if (_obj->hasColors())
-    {
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Colors");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        item->setCheckState(_obj->colorsShown() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_COLORS_SHOWN);
-        m_model->setItem(curRow,1,item);
-    }
+		appendRow( ITEM("Colors"), CHECKABLE_ITEM(_obj->colorsShown(),OBJECT_COLORS_SHOWN) );
 
     //normals
     if (_obj->hasNormals())
-    {
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Normals");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        item->setCheckState(_obj->normalsShown() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_NORMALS_SHOWN);
-        m_model->setItem(curRow,1,item);
-    }
+		appendRow( ITEM("Normals"), CHECKABLE_ITEM(_obj->normalsShown(),OBJECT_NORMALS_SHOWN) );
 
     //scalar fields
     if (_obj->hasScalarFields())
-    {
-        //Colors
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Scalar Field");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        item->setCheckState(_obj->sfShown() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_SCALAR_FIELD_SHOWN);
-        m_model->setItem(curRow,1,item);
-    }
+		appendRow( ITEM("Scalar Field"), CHECKABLE_ITEM(_obj->sfShown(),OBJECT_SCALAR_FIELD_SHOWN) );
 
     //name in 3D
-    {
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Show name (in 3D)");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-		item->setCheckState(_obj->nameShownIn3D() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_NAME_IN_3D);
-        m_model->setItem(curRow,1,item);
-    }
+	appendRow( ITEM("Show name (in 3D)"), CHECKABLE_ITEM(_obj->nameShownIn3D(),OBJECT_NAME_IN_3D) );
 
 	//display window
     if (!_obj->isLocked())
-    {
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Current Display");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem();
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-        item->setData(OBJECT_CURRENT_DISPLAY);
-        m_model->setItem(curRow,1,item);
-        m_view->openPersistentEditor(m_model->index(curRow,1));
-    }
+		appendRow( ITEM("Current Display"), PERSISTENT_EDITOR(OBJECT_CURRENT_DISPLAY), true );
 
     //Bounding-box
-	ccBBox box;
-	bool fitBBox = false;
-	if (_obj->getSelectionBehavior() == ccHObject::SELECTION_FIT_BBOX)
 	{
-		ccGLMatrix trans;
-		box = _obj->getFitBB(trans);
-		box += CCVector3(trans.getTranslation());
-		fitBBox = true;
+		ccBBox box;
+		bool fitBBox = false;
+		if (_obj->getSelectionBehavior() == ccHObject::SELECTION_FIT_BBOX)
+		{
+			ccGLMatrix trans;
+			box = _obj->getFitBB(trans);
+			box += CCVector3(trans.getTranslation());
+			fitBBox = true;
+		}
+		else
+		{
+			box = _obj->getBB();
+		}
+
+		if (box.isValid())
+		{
+			//Box dimensions
+			CCVector3 bboxDiag = box.getDiagVec();
+			appendRow(	ITEM(fitBBox ? "Local box dimensions" : "Box dimensions"),
+						ITEM(QString("X: %0\nY: %1\nZ: %2").arg(bboxDiag.x).arg(bboxDiag.y).arg(bboxDiag.z)) );
+
+			//Box center
+			CCVector3 bboxCenter = box.getCenter();
+			appendRow(	ITEM("Box center"),
+						ITEM(QString("X: %0\nY: %1\nZ: %2").arg(bboxCenter.x).arg(bboxCenter.y).arg(bboxCenter.z)) );
+		}
 	}
-	else
-	{
-		box = _obj->getBB();
-	}
-
-	if (box.isValid())
-	{
-		//Box dimensions
-		m_model->setRowCount(++curRow+1);
-		item = new QStandardItem(fitBBox ? "Local box dimensions" : "Box dimensions");
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,0,item);
-
-		CCVector3 bboxDiag = box.getDiagVec();
-		item = new QStandardItem(QString("X: %0\nY: %1\nZ: %2").arg(bboxDiag.x).arg(bboxDiag.y).arg(bboxDiag.z));
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,1,item);
-
-		//Box center
-		m_model->setRowCount(++curRow+1);
-		item = new QStandardItem("Box center");
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,0,item);
-
-		CCVector3 bboxCenter = box.getCenter();
-		item = new QStandardItem(QString("X: %0\nY: %1\nZ: %2").arg(bboxCenter.x).arg(bboxCenter.y).arg(bboxCenter.z));
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,1,item);
-	}
-
 }
 
 void ccPropertiesTreeDelegate::fillWithPointCloud(ccGenericPointCloud* _obj)
@@ -399,46 +381,17 @@ void ccPropertiesTreeDelegate::fillWithPointCloud(ccGenericPointCloud* _obj)
 
     addSeparator("Cloud");
 
-    int curRow = m_model->rowCount();
-
     //number of points
-	{
-		m_model->setRowCount(curRow+1);
-		QStandardItem* item = new QStandardItem("Points");
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,0,item);
-
-		item = new QStandardItem(QLocale(QLocale::English).toString(_obj->size()));
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,1,item);
-	}
+	appendRow( ITEM("Points"), ITEM(QLocale(QLocale::English).toString(_obj->size())) );
 
     //shift
 	{
-		m_model->setRowCount(++curRow+1);
-		QStandardItem* item = new QStandardItem("Global shift");
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,0,item);
-
 		const double* shift = _obj->getOriginalShift();
-		item = new QStandardItem(QString("(%1;%2;%3)").arg(shift[0],0,'f',2).arg(shift[1],0,'f',2).arg(shift[2],0,'f',2));
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,1,item);
+		appendRow( ITEM("Global shift"), ITEM(QString("(%1;%2;%3)").arg(shift[0],0,'f',2).arg(shift[1],0,'f',2).arg(shift[2],0,'f',2)) );
 	}
 
 	//custom point size
-	{
-		m_model->setRowCount(++curRow+1);
-		QStandardItem* item = new QStandardItem("Point size");
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,0,item);
-
-		item = new QStandardItem();
-		item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-		item->setData(OBJECT_CLOUD_POINT_SIZE);
-		m_model->setItem(curRow,1,item);
-		m_view->openPersistentEditor(m_model->index(curRow,1));
-	}
+	appendRow( ITEM("Point size"), PERSISTENT_EDITOR(OBJECT_CLOUD_POINT_SIZE), true );
 
 	fillSFWithPointCloud(_obj);
 }
@@ -452,117 +405,39 @@ void ccPropertiesTreeDelegate::fillSFWithPointCloud(ccGenericPointCloud* _obj)
     if (!cloud)
         return;
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //Scalar fields
-    int nsf = cloud->getNumberOfScalarFields();
-    if (nsf>0)
+    unsigned sfCount = cloud->getNumberOfScalarFields();
+    if (sfCount != 0)
     {
-        addSeparator((nsf>1 ? "Scalar Fields" : "Scalar Field"));
-        ++curRow;
+        addSeparator(sfCount > 1 ? "Scalar Fields" : "Scalar Field");
 
         //fields number
-        m_model->setRowCount(curRow+1);
-        item = new QStandardItem("Number");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
+		appendRow( ITEM("Count"), ITEM(QString::number(sfCount)) );
 
-        item = new QStandardItem(QString::number(nsf));
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,1,item);
+        //fields list combo
+		appendRow( ITEM("Active"), PERSISTENT_EDITOR(OBJECT_CURRENT_SCALAR_FIELD), true );
 
-        //fields combo
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Current");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem();
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-        item->setData(OBJECT_CURRENT_SCALAR_FIELD);
-        m_model->setItem(curRow,1,item);
-        m_view->openPersistentEditor(m_model->index(curRow,1));
-
+		//no need to go any further if no SF is currently active
 		CCLib::ScalarField* sf = cloud->getCurrentDisplayedScalarField();
-        if (!sf)
-			return;
+        if (sf)
+		{
+			addSeparator("Color Scale");
 
-        //color-ramp combo
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Color ramp");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
+			//color scale selection combo box
+			appendRow( ITEM("Current"), PERSISTENT_EDITOR(OBJECT_CURRENT_COLOR_RAMP), true );
 
-        item = new QStandardItem();
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-        item->setData(OBJECT_CURRENT_COLOR_RAMP);
-        m_model->setItem(curRow,1,item);
-        m_view->openPersistentEditor(m_model->index(curRow,1));
+			//color scale steps
+			appendRow( ITEM("Steps"), PERSISTENT_EDITOR(OBJECT_COLOR_RAMP_STEPS), true );
 
-        //color-ramp steps
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Color ramp steps");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
+			//scale visible?
+			appendRow( ITEM("Visible"), CHECKABLE_ITEM(cloud->sfColorScaleShown(),OBJECT_SF_SHOW_SCALE) );
 
-        item = new QStandardItem();
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-        item->setData(OBJECT_COLOR_RAMP_STEPS);
-        m_model->setItem(curRow,1,item);
-        m_view->openPersistentEditor(m_model->index(curRow,1));
+			addSeparator("SF display params");
 
-        //Positive state
-		m_model->setRowCount(++curRow+1);
-		item = new QStandardItem("Positive");
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,0,item);
-
-		item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-		item->setData(OBJECT_SCALAR_FIELD_POSITIVE);
-		m_model->setItem(curRow,1,item);
-        m_view->openPersistentEditor(m_model->index(curRow,1));
-
-        ++curRow;
-        addSeparator("SF Scale");
-
-        //sliders (warning: 2 columns)
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem();
-        item->setFlags(Qt::ItemIsEnabled);
-        item->setData(OBJECT_CLOUD_SF_EDITOR);
-        //QSize sz = item->sizeHint();
-        //DGM: with last QT versions, vertical size of item is ignored!
-        //--> new widgets are displayed on top of this one ... so we must
-        //setup its size manually
-        //item->setSizeHint(QSize(240,116));
-        m_model->setItem(curRow,0,item);
-        m_view->openPersistentEditor(m_model->index(curRow,0));
-
-        //NaN distances in gray
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("NaN in grey");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        item->setCheckState(cloud->areNanScalarValuesInGrey() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_NAN_IN_GREY);
-        m_model->setItem(curRow,1,item);
-
-        //scale
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Display color scale");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        item->setCheckState(cloud->sfColorScaleShown() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_SF_SHOW_SCALE);
-        m_model->setItem(curRow,1,item);
+			//SF edit dialog (warning: 2 columns)
+			m_model->appendRow(PERSISTENT_EDITOR(OBJECT_CLOUD_SF_EDITOR));
+			m_view->openPersistentEditor(m_model->index(m_model->rowCount()-1,0));
+		}
     }
 }
 
@@ -572,66 +447,12 @@ void ccPropertiesTreeDelegate::fillWithPrimitive(ccGenericPrimitive* _obj)
 
     addSeparator("Primitive");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //type
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Type");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-	QString type;
-	switch (_obj->getClassID())
-	{
-	case CC_PLANE:
-		type="Plane";
-		break;
-	case CC_SPHERE:
-		type="Sphere";
-		break;
-	case CC_TORUS:
-		type="Torus";
-		break;
-	case CC_CYLINDER:
-		type="Cylinder";
-		break;
-	case CC_CONE:
-		type="Cone";
-		break;
-	case CC_BOX:
-		type="Box";
-		break;
-	case CC_DISH:
-		type="Dish";
-		break;
-	case CC_EXTRU:
-		type="Extrusion";
-		break;
-	default:
-		type="Unknown"; //DGM: ?!
-		assert(false);
-		break;
-	}
-
-    item = new QStandardItem(type);
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Type"), ITEM(_obj->getTypeName()) );
 
 	//drawing steps
 	if (_obj->hasDrawingPrecision())
-	{
-		m_model->setRowCount(++curRow+1);
-		item = new QStandardItem("Drawing precision");
-		item->setFlags(Qt::ItemIsEnabled);
-		m_model->setItem(curRow,0,item);
-
-		item = new QStandardItem();
-		item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-		item->setData(OBJECT_PRIMITIVE_PRECISION);
-		m_model->setItem(curRow,1,item);
-		m_view->openPersistentEditor(m_model->index(curRow,1));
-	}
+		appendRow( ITEM("Drawing precision"), PERSISTENT_EDITOR(OBJECT_PRIMITIVE_PRECISION), true );
 }
 
 void ccPropertiesTreeDelegate::fillWithMesh(ccGenericMesh* _obj)
@@ -640,47 +461,21 @@ void ccPropertiesTreeDelegate::fillWithMesh(ccGenericMesh* _obj)
 
     addSeparator("Mesh");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //number of facets
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Faces");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QLocale(QLocale::English).toString(_obj->size()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Faces"), ITEM(QLocale(QLocale::English).toString(_obj->size())) );
 
 	//material/texture
 	if (_obj->hasMaterials())
-    {
-        m_model->setRowCount(++curRow+1);
-        item = new QStandardItem("Materials/textures");
-        item->setFlags(Qt::ItemIsEnabled);
-        m_model->setItem(curRow,0,item);
-
-        item = new QStandardItem("");
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-		item->setCheckState(_obj->materialsShown() ? Qt::Checked : Qt::Unchecked);
-        item->setData(OBJECT_MATERIALS);
-        m_model->setItem(curRow,1,item);
-    }
+		appendRow( ITEM("Materials/textures"), CHECKABLE_ITEM(_obj->materialsShown(),OBJECT_MATERIALS) );
 
     //wireframe
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("wireframe");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
+	appendRow( ITEM("Wireframe"), CHECKABLE_ITEM(_obj->isShownAsWire(),OBJECT_MESH_WIRE) );
 
-    item = new QStandardItem("");
-    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-    item->setCheckState(_obj->isShownAsWire() ? Qt::Checked : Qt::Unchecked);
-    item->setData(OBJECT_MESH_WIRE);
-    m_model->setItem(curRow,1,item);
+    //stippling (ccMesh only)
+	if (_obj->isA(CC_MESH))
+		appendRow( ITEM("Stippling"), CHECKABLE_ITEM(static_cast<ccMesh*>(_obj)->stipplingEnabled(),OBJECT_MESH_STIPPLING) );
 
-    //we also integrate vertices SF into mesh properties
+	//we also integrate vertices SF into mesh properties
     ccGenericPointCloud* vertices = _obj->getAssociatedCloud();
     if (vertices && (_obj->isA(CC_MESH_GROUP) || !vertices->isLocked() || _obj->isAncestorOf(vertices)))
         fillSFWithPointCloud(vertices);
@@ -692,32 +487,28 @@ void ccPropertiesTreeDelegate::fillWithPointOctree(ccOctree* _obj)
 
     addSeparator("Octree");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
-    //type
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Display type");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem();
-    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-    item->setData(OBJECT_OCTREE_TYPE);
-    m_model->setItem(curRow,1,item);
-    m_view->openPersistentEditor(m_model->index(curRow,1));
+    //display mode
+	appendRow( ITEM("Display mode"), PERSISTENT_EDITOR(OBJECT_OCTREE_TYPE), true );
 
     //level
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Display level");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
+	appendRow( ITEM("Display level"), PERSISTENT_EDITOR(OBJECT_OCTREE_LEVEL), true );
 
-    item = new QStandardItem();
-    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-    item->setData(OBJECT_OCTREE_LEVEL);
-    m_model->setItem(curRow,1,item);
-    m_view->openPersistentEditor(m_model->index(curRow,1));
+    addSeparator("Current level");
+
+	//current display level
+	int level = _obj->getDisplayedLevel();
+	assert(level>0 && level<=ccOctree::MAX_OCTREE_LEVEL);
+
+	//cell size
+	PointCoordinateType cellSize = _obj->getCellSize(level);
+	appendRow( ITEM("Cell size"), ITEM(QString::number(cellSize)) );
+
+	//cell count
+	unsigned cellCount = _obj->getCellNumber(level);
+	appendRow( ITEM("Cell count"), ITEM(QLocale(QLocale::English).toString(cellCount)) );
+
+	//total volume of filled cells
+	appendRow( ITEM("Filled volume"), ITEM(QString::number((double)cellCount*pow((double)cellSize,3.0))) );
 }
 
 void ccPropertiesTreeDelegate::fillWithImage(ccImage* _obj)
@@ -726,40 +517,14 @@ void ccPropertiesTreeDelegate::fillWithImage(ccImage* _obj)
 
     addSeparator("Image");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //image width
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Width");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString::number(_obj->getW()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Width"), ITEM(QString::number(_obj->getW())) );
 
     //image height
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Height");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString::number(_obj->getH()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Height"), ITEM(QString::number(_obj->getH())) );
 
     //transparency
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Alpha");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem();
-    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-    item->setData(OBJECT_IMAGE_ALPHA);
-    m_model->setItem(curRow,1,item);
-    m_view->openPersistentEditor(m_model->index(curRow,1));
+	appendRow( ITEM("Alpha"), PERSISTENT_EDITOR(OBJECT_IMAGE_ALPHA), true );
 }
 
 void ccPropertiesTreeDelegate::fillWithCalibratedImage(ccCalibratedImage* _obj)
@@ -768,30 +533,11 @@ void ccPropertiesTreeDelegate::fillWithCalibratedImage(ccCalibratedImage* _obj)
 
     addSeparator("Calibrated Image");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //"Set Viewport" button
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Apply Viewport");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem();
-    item->setFlags(Qt::ItemIsEnabled /*| Qt::ItemIsEditable*/);
-    item->setData(OBJECT_APPLY_IMAGE_VIEWPORT);
-    m_model->setItem(curRow,1,item);
-    m_view->openPersistentEditor(m_model->index(curRow,1));
+	appendRow( ITEM("Apply Viewport"), PERSISTENT_EDITOR(OBJECT_APPLY_IMAGE_VIEWPORT), true );
 
     //field of view
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("f.o.v. (deg)");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString::number(_obj->getFov()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("f.o.v. (deg)"), ITEM(QString::number(_obj->getFov())) );
 
 	//get camera matrix parameters
 	PointCoordinateType angle_rad;
@@ -799,34 +545,13 @@ void ccPropertiesTreeDelegate::fillWithCalibratedImage(ccCalibratedImage* _obj)
 	_obj->getCameraMatrix().getParameters(angle_rad, axis3D, t3D);
 
     //camera position
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Optical center");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
+	appendRow( ITEM("Optical center"), ITEM(QString("(%0,%1,%2)").arg(t3D.x).arg(t3D.y).arg(t3D.z)) );
 
-    item = new QStandardItem(QString("(%0,%1,%2)").arg(t3D.x).arg(t3D.y).arg(t3D.z));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+    //camera orientation axis
+	appendRow( ITEM("Orientation"), ITEM(QString("(%0,%1,%2)").arg(axis3D.x).arg(axis3D.y).arg(axis3D.z)) );
 
-    //camera orientation
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Orientation");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString("(%0,%1,%2)").arg(axis3D.x).arg(axis3D.y).arg(axis3D.z));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
-
-    //camera orientation (angle)
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Angle (degrees)");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString("%0°").arg(angle_rad*CC_RAD_TO_DEG));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+    //camera orientation angle
+	appendRow( ITEM("Angle (degrees)"), ITEM(QString("%0°").arg(angle_rad*CC_RAD_TO_DEG)) );
 }
 
 void ccPropertiesTreeDelegate::fillWithLabel(cc2DLabel* _obj)
@@ -835,43 +560,15 @@ void ccPropertiesTreeDelegate::fillWithLabel(cc2DLabel* _obj)
 
     addSeparator("Label");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //Body
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Body");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
 	QStringList body = _obj->getLabelContent(ccGui::Parameters().displayedNumPrecision);
-    item = new QStandardItem(body.join("\n"));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Body"), ITEM(body.join("\n")) );
 
 	//Show label in 2D
-	m_model->setRowCount(++curRow+1);
-	item = new QStandardItem("Show 2D label");
-	item->setFlags(Qt::ItemIsEnabled);
-	m_model->setItem(curRow,0,item);
-
-	item = new QStandardItem("");
-	item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-	item->setCheckState(_obj->isDisplayedIn2D() ? Qt::Checked : Qt::Unchecked);
-	item->setData(OBJECT_LABEL_DISP_2D);
-	m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Show 2D label"), CHECKABLE_ITEM(_obj->isDisplayedIn2D(),OBJECT_LABEL_DISP_2D) );
 
 	//Show label in 3D
-	m_model->setRowCount(++curRow+1);
-	item = new QStandardItem("Show 3D legend(s)");
-	item->setFlags(Qt::ItemIsEnabled);
-	m_model->setItem(curRow,0,item);
-
-	item = new QStandardItem("");
-	item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-	item->setCheckState(_obj->isDisplayedIn3D() ? Qt::Checked : Qt::Unchecked);
-	item->setData(OBJECT_LABEL_DISP_3D);
-	m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Show 3D legend(s)"), CHECKABLE_ITEM(_obj->isDisplayedIn3D(),OBJECT_LABEL_DISP_3D) );
 }
 
 void ccPropertiesTreeDelegate::fillWithViewportObject(cc2DViewportObject* _obj)
@@ -880,30 +577,11 @@ void ccPropertiesTreeDelegate::fillWithViewportObject(cc2DViewportObject* _obj)
 
     addSeparator("Viewport");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //Name
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Name");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-	item = new QStandardItem(!_obj->getName().isEmpty() ? _obj->getName() : "undefined");
-	item->setFlags(Qt::ItemIsEnabled);
-	m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Name"), ITEM(_obj->getName().isEmpty() ? "undefined" : _obj->getName()) );
 
     //"Apply Viewport" button
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Apply Viewport");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem();
-    item->setFlags(Qt::ItemIsEnabled /*| Qt::ItemIsEditable*/);
-    item->setData(OBJECT_APPLY_LABEL_VIEWPORT);
-    m_model->setItem(curRow,1,item);
-    m_view->openPersistentEditor(m_model->index(curRow,1));
+	appendRow( ITEM("Apply Viewport"), PERSISTENT_EDITOR(OBJECT_APPLY_LABEL_VIEWPORT), true );
 }
 
 void ccPropertiesTreeDelegate::fillWithGBLSensor(ccGBLSensor* _obj)
@@ -912,50 +590,17 @@ void ccPropertiesTreeDelegate::fillWithGBLSensor(ccGBLSensor* _obj)
 
     addSeparator("GBL Sensor");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //Angular steps (phi)
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("dPhi");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString::number(_obj->getDeltaPhi()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("dPhi"), ITEM(QString::number(_obj->getDeltaPhi())) );
 
     //Angular steps (theta)
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("dTheta");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString::number(_obj->getDeltaTheta()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("dTheta"), ITEM(QString::number(_obj->getDeltaTheta())) );
 
     //Uncertainty
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Uncertainty");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
+	appendRow( ITEM("Uncertainty"), ITEM(QString::number(_obj->getUncertainty())) );
 
-    item = new QStandardItem(QString::number(_obj->getUncertainty()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
-
-    //SF color scale
-    m_model->setRowCount(++curRow+1);
-    item = new QStandardItem("Display color scale");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem();
-    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
-    item->setData(OBJECT_SENSOR_DISPLAY_SCALE);
-    m_model->setItem(curRow,1,item);
-    m_view->openPersistentEditor(m_model->index(curRow,1));
+	//Sensor drawing scale
+	appendRow( ITEM("Drawing scale"), PERSISTENT_EDITOR(OBJECT_SENSOR_DISPLAY_SCALE), true );
 }
 
 void ccPropertiesTreeDelegate::fillWithMaterialSet(ccMaterialSet* _obj)
@@ -964,18 +609,8 @@ void ccPropertiesTreeDelegate::fillWithMaterialSet(ccMaterialSet* _obj)
 
     addSeparator("Material set");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //Count
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Count");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-    item = new QStandardItem(QString::number(_obj->size()));
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Count"), ITEM(QString::number(_obj->size())) );
 
 	//ccMaterialSet objects are 'shareable'
 	fillWithShareable(_obj);
@@ -987,64 +622,28 @@ void ccPropertiesTreeDelegate::fillWithShareable(CCShareable* _obj)
 
     addSeparator("Array");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
 	//Link count
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Shared");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-	unsigned linkCount = _obj->getLinkCount();
-	if (linkCount<3) //if we display it, it means it is a member of the DB --> ie. link is already >1
-		item = new QStandardItem(QString("No"));
-	else
-		item = new QStandardItem(QString("Yes (%1)").arg(linkCount-1)); //see above remark
-	item->setFlags(Qt::ItemIsEnabled);
-	m_model->setItem(curRow,1,item);
+	unsigned linkCount = _obj->getLinkCount(); //if we display it, it means it is a member of the DB --> ie. link is already >1
+	appendRow( ITEM("Shared"), ITEM(linkCount < 3 ? QString("No") : QString("Yes (%1)").arg(linkCount-1)) );
 }
 
-template<int N, class ScalarType> void ccPropertiesTreeDelegate::fillWithChunkedArray(ccChunkedArray<N,ScalarType>* _obj)
+template<int N, class ElementType> void ccPropertiesTreeDelegate::fillWithChunkedArray(ccChunkedArray<N,ElementType>* _obj)
 {
     assert(_obj && m_model);
 
     addSeparator("Array");
 
-    int curRow = m_model->rowCount();
-    QStandardItem* item = NULL;
-
     //Name
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Name");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-	item = new QStandardItem(!_obj->getName().isEmpty() ? _obj->getName() : "undefined");
-	item->setFlags(Qt::ItemIsEnabled);
-	m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Name"), ITEM(_obj->getName().isEmpty() ? "undefined" : _obj->getName() ) );
 
     //Count
-    m_model->setRowCount(++curRow+1);
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Elements");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
+	appendRow( ITEM("Elements"), ITEM(QLocale(QLocale::English).toString(_obj->currentSize()) ) );
 
-	item = new QStandardItem(QString("%1/%2").arg(_obj->currentSize()).arg(_obj->capacity()));
-	item->setFlags(Qt::ItemIsEnabled);
-	m_model->setItem(curRow,1,item);
+	//Capacity
+	appendRow( ITEM("Capacity"), ITEM(QLocale(QLocale::English).toString(_obj->capacity()) ) );
 
 	//Memory
-    m_model->setRowCount(++curRow+1);
-    m_model->setRowCount(curRow+1);
-    item = new QStandardItem("Memory");
-    item->setFlags(Qt::ItemIsEnabled);
-    m_model->setItem(curRow,0,item);
-
-	item = new QStandardItem(QString("%1 Mb").arg((double)_obj->memory()/1048576.0,0,'f',2));
-	item->setFlags(Qt::ItemIsEnabled);
-	m_model->setItem(curRow,1,item);
+	appendRow( ITEM("Memory"), ITEM(QString("%1 Mb").arg((double)_obj->memory()/1048576.0,0,'f',2)) );
 
 	//ccChunkedArray objects are 'shareable'
 	fillWithShareable(_obj);
@@ -1098,41 +697,38 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 		comboBox->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
         return comboBox;
     }
-	case OBJECT_SCALAR_FIELD_POSITIVE:
-	{
-        ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
-        assert(cloud);
-
-        QCheckBox *checkBox = new QCheckBox(parent);
-
-        ccScalarField* sf = cloud->getCurrentDisplayedScalarField();
-        if (sf)
-			checkBox->setChecked(sf->isPositive());
-		else
-			checkBox->setDisabled(true);
-
-        connect(checkBox, SIGNAL(toggled(bool)), this, SLOT(scalarFieldTypeChanged(bool)));
-
-		checkBox->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
-        return checkBox;
-	}
     case OBJECT_CURRENT_COLOR_RAMP:
     {
-        QComboBox *comboBox = new QComboBox(parent);
+		QColorScaleSelector* selector = new QColorScaleSelector(parent);
 
-        for (int i=0;i<COLOR_RAMPS_NUMBER;++i)
-            comboBox->addItem(COLOR_RAMPS_TITLES[i]);
+		//fill combox box
+		if (selector->m_comboBox)
+		{
+			selector->m_comboBox->blockSignals(true);
+			selector->m_comboBox->clear();
+			//add all available color scales
+			ccColorScalesManager* csManager = ccColorScalesManager::GetUniqueInstance();
+			assert(csManager);
+			for (ccColorScalesManager::ScalesMap::const_iterator it = csManager->map().begin(); it != csManager->map().end(); ++it)
+				selector->m_comboBox->addItem((*it)->getName(),(*it)->getUuid());
+			selector->m_comboBox->blockSignals(false);
 
-        connect(comboBox, SIGNAL(activated(int)), this, SLOT(colorRampChanged(int)));
+			connect(selector->m_comboBox, SIGNAL(activated(int)), this, SLOT(colorScaleChanged(int)));
+		}
+		//advanced tool button
+		if (selector->m_button)
+		{
+			connect(selector->m_button, SIGNAL(clicked()), this, SLOT(spawnColorRampEditor()));
+		}
 
-		comboBox->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
-        return comboBox;
+		selector->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
+        return selector;
     }
     case OBJECT_COLOR_RAMP_STEPS:
     {
         QSpinBox *spinBox = new QSpinBox(parent);
-        spinBox->setRange(2,DEFAULT_COLOR_RAMP_SIZE);
-        spinBox->setSingleStep(8);
+		spinBox->setRange(ccColorScale::MIN_STEPS,ccColorScale::MAX_STEPS);
+        spinBox->setSingleStep(4);
 
         connect(spinBox, SIGNAL(valueChanged(int)), this, SLOT(colorRampStepsChanged(int)));
 
@@ -1149,7 +745,7 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 		//sfd->setSizePolicy(QSizePolicy::Minimum,QSizePolicy::Maximum);
 		//parent->setSizePolicy(QSizePolicy::Minimum,QSizePolicy::Maximum);
 
-        connect(sfd, SIGNAL(entitySFHasChanged()), this, SLOT(redrawObjectSF()));
+        connect(sfd, SIGNAL(entitySFHasChanged()), this, SLOT(updateDisplay()));
 
 		sfd->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
         return sfd;
@@ -1242,43 +838,15 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
         return comboBox;
     }
     default:
-        return QItemDelegate::createEditor(parent, option, index);
+        return QStyledItemDelegate::createEditor(parent, option, index);
     }
 
     return NULL;
 }
 
-//bool ccPropertiesTreeDelegate::editorEvent(QEvent* event, QAbstractItemModel* model, const QStyleOptionViewItem& option, const QModelIndex& index)
-//{
-//	if (event->type() == QEvent::Resize)
-//	{
-//		if (!m_model || !m_currentObject)
-//			return false;
-//		
-//		assert(m_model == model);
-//
-//		QStandardItem* item = m_model->itemFromIndex(index);
-//
-//		if (!item || !item->data().isValid() || (item->column()==0 && item->data().toInt()!=OBJECT_CLOUD_SF_EDITOR))
-//			return false;
-//
-//		switch (item->data().toInt())
-//		{
-//		case OBJECT_CLOUD_SF_EDITOR:
-//			//sfEditDlg *sfd = qobject_cast<sfEditDlg*>(editor);
-//			//if (!sfd)
-//			//	return;
-//			event->accept();
-//			return true;
-//		}
-//	}
-//
-//	return false;
-//}
-
 void ccPropertiesTreeDelegate::updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index) const
 {
-	QItemDelegate::updateEditorGeometry(editor, option, index);
+	QStyledItemDelegate::updateEditorGeometry(editor, option, index);
 
     if (!m_model || !editor)
         return;
@@ -1315,7 +883,7 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
             return;
 
         ccGLWindow* win = static_cast<ccGLWindow*>(m_currentObject->getDisplay());
-        int pos = (win ? pos = comboBox->findText(win->windowTitle()) : 0);
+        int pos = (win ? comboBox->findText(win->windowTitle()) : 0);
 
         comboBox->setCurrentIndex(std::max(pos,0)); //0 = "NONE"
         break;
@@ -1333,27 +901,12 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
         comboBox->setCurrentIndex(pos+1);
         break;
     }
-	case OBJECT_SCALAR_FIELD_POSITIVE:
-	{
-        QCheckBox *checkBox = qobject_cast<QCheckBox*>(editor);
-		if (!checkBox)
-			return;
-
-		ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
-        assert(cloud);
-
-        ccScalarField* sf = cloud->getCurrentDisplayedScalarField();
-        if (!sf)
-			return;
-
-		checkBox->setChecked(sf->isPositive());
-		break;
-	}
     case OBJECT_CURRENT_COLOR_RAMP:
     {
-        QComboBox *comboBox = qobject_cast<QComboBox*>(editor);
-        if (!comboBox)
+        QFrame *selectorFrame = qobject_cast<QFrame*>(editor);
+        if (!selectorFrame)
             return;
+		QColorScaleSelector* selector = static_cast<QColorScaleSelector*>(selectorFrame);
 
         ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
         assert(cloud);
@@ -1361,8 +914,11 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
         ccScalarField* sf = cloud->getCurrentDisplayedScalarField();
         if (sf)
 		{
-			int pos = int(sf->getColorRamp());
-			comboBox->setCurrentIndex(pos);
+			int pos = -1;
+			//search right index by UUID
+			if (sf->getColorScale())
+				pos = selector->m_comboBox->findData(sf->getColorScale()->getUuid());
+			selector->m_comboBox->setCurrentIndex(pos);
 		}
         break;
     }
@@ -1391,7 +947,7 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
 
         ccScalarField* sf = cloud->getCurrentDisplayedScalarField();
         if (sf)
-            sfd->SetValuesWith(sf);
+			sfd->fillDialogWith(sf);
         break;
     }
     case OBJECT_OCTREE_TYPE:
@@ -1462,7 +1018,7 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
         break;
     }
     default:
-        QItemDelegate::setEditorData(editor, index);
+        QStyledItemDelegate::setEditorData(editor, index);
         break;
     }
 }
@@ -1480,8 +1036,18 @@ void ccPropertiesTreeDelegate::updateItem(QStandardItem * item)
 		emit ccObjectPropertiesChanged(m_currentObject);
 		break;
 	case OBJECT_VISIBILITY:
-		m_currentObject->setVisible(item->checkState() == Qt::Checked);
-		redraw=true;
+		{
+			bool objectWasDisplayed = m_currentObject->isDisplayed();
+			m_currentObject->setVisible(item->checkState() == Qt::Checked);
+			bool objectIsDisplayed = m_currentObject->isDisplayed();
+			if (objectWasDisplayed != objectIsDisplayed)
+			{
+				if (m_currentObject->isGroup())
+					emit ccObjectAndChildrenAppearanceChanged(m_currentObject);
+				else
+					emit ccObjectAppearanceChanged(m_currentObject);
+			}
+		}
 		break;
 	case OBJECT_COLORS_SHOWN:
 		m_currentObject->showColors(item->checkState() == Qt::Checked);
@@ -1503,14 +1069,6 @@ void ccPropertiesTreeDelegate::updateItem(QStandardItem * item)
 		m_currentObject->showSF(item->checkState() == Qt::Checked);
 		redraw=true;
 		break;
-	case OBJECT_NAN_IN_GREY:
-		{
-			ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
-			assert(cloud);
-			cloud->setGreyForNanScalarValues(item->checkState() == Qt::Checked);
-		}
-		redraw=true;
-		break;
 	case OBJECT_SF_SHOW_SCALE:
 		{
 			ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
@@ -1524,6 +1082,14 @@ void ccPropertiesTreeDelegate::updateItem(QStandardItem * item)
 			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(m_currentObject);
 			assert(mesh);
 			mesh->showWired(item->checkState() == Qt::Checked);
+		}
+		redraw=true;
+		break;
+	case OBJECT_MESH_STIPPLING:
+		{
+			ccMesh* mesh = ccHObjectCaster::ToMesh(m_currentObject);
+			assert(mesh);
+			mesh->enableStippling(item->checkState() == Qt::Checked);
 		}
 		redraw=true;
 		break;
@@ -1550,31 +1116,43 @@ void ccPropertiesTreeDelegate::updateItem(QStandardItem * item)
 	}
 
     if (redraw)
-    {
-        //DGM: point clouds may be mesh vertices which are generally hidden,
-        //while the mesh depends on their parameters
-        if (m_currentObject->isEnabled() ||
-                (m_currentObject->isKindOf(CC_POINT_CLOUD) && m_currentObject->getParent() && m_currentObject->getParent()->isKindOf(CC_MESH)))
-        {
-            if (m_currentObject->isGroup())
-                emit ccObjectAndChildrenAppearanceChanged(m_currentObject);
-            else
-                emit ccObjectAppearanceChanged(m_currentObject);
-        }
-    }
+		updateDisplay();
+}
+
+void ccPropertiesTreeDelegate::updateDisplay()
+{
+	ccHObject* object = m_currentObject;
+	if (!object)
+		return;
+
+	bool objectIsDisplayed = object->isDisplayed();
+	if (!objectIsDisplayed)
+	{
+		//DGM: point clouds may be mesh vertices of meshes which may depend on several of their parameters
+		if (object->isKindOf(CC_POINT_CLOUD))
+		{
+			ccHObject* parent = object->getParent();
+			if (parent && parent->isKindOf(CC_MESH) && parent->isDisplayed()) //specific case: vertices
+			{
+				object = parent;
+				objectIsDisplayed = true;
+			}
+		}
+	}
+
+	if (objectIsDisplayed)
+	{
+		if (object->isGroup())
+			emit ccObjectAndChildrenAppearanceChanged(m_currentObject);
+		else
+			emit ccObjectAppearanceChanged(m_currentObject);
+	}
 }
 
 void ccPropertiesTreeDelegate::updateModel()
 {
-	//save current scroll position
-	int scrollPos = (m_view && m_view->verticalScrollBar() ? m_view->verticalScrollBar()->value() : 0);
-
-	//re-fill model
+	//simply re-fill model!
 	fillModel(m_currentObject);
-	
-	//go back to original position
-	if (scrollPos>0)
-		m_view->verticalScrollBar()->setSliderPosition(scrollPos);
 }
 
 void ccPropertiesTreeDelegate::scalarFieldChanged(int pos)
@@ -1587,52 +1165,74 @@ void ccPropertiesTreeDelegate::scalarFieldChanged(int pos)
     {
         cloud->setCurrentDisplayedScalarField(pos-1);
 		cloud->showSF(pos>0);
-        if (cloud->isEnabled() || (cloud->getParent() && cloud->getParent()->isKindOf(CC_MESH)))
-            emit ccObjectAppearanceChanged(m_currentObject);
 
-        //we must reset the properties display!
+		updateDisplay();
+        //we must also reset the properties display!
         updateModel();
     }
 }
 
-void ccPropertiesTreeDelegate::scalarFieldTypeChanged(bool positive)
+void ccPropertiesTreeDelegate::spawnColorRampEditor()
 {
     if (!m_currentObject)
         return;
 
     ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
     assert(cloud);
-	ccScalarField* sf = cloud->getCurrentDisplayedScalarField();
-    if (sf && sf->isPositive() != positive)
-    {
-		sf->setPositive(positive);
-		sf->computeMinAndMax();
-        if (cloud->isEnabled() || (cloud->getParent() && cloud->getParent()->isKindOf(CC_MESH)))
-            emit ccObjectAppearanceChanged(m_currentObject);
-
-        //we must reset the properties display!
-        updateModel();
-    }
-}
-
-void ccPropertiesTreeDelegate::colorRampChanged(int pos)
-{
-    if (!m_currentObject)
-        return;
-
-    ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
-    assert(cloud);
-
-	ccScalarField* sf = static_cast<ccScalarField*>(cloud->getCurrentDisplayedScalarField());
+	ccScalarField* sf = (cloud ? static_cast<ccScalarField*>(cloud->getCurrentDisplayedScalarField()) : 0);
 	if (sf)
 	{
-		if (int(sf->getColorRamp()) != pos)
+		ccColorScaleEditorDialog* editorDialog = new ccColorScaleEditorDialog(sf->getColorScale(),static_cast<ccGLWindow*>(cloud->getDisplay()));
+		editorDialog->setAssociatedScalarField(sf);
+		if (editorDialog->exec())
 		{
-			sf->setColorRamp(COLOR_RAMPS_ENUMS[pos]);
+			if (editorDialog->getActiveScale())
+			{
+				sf->setColorScale(editorDialog->getActiveScale());
+				updateDisplay();
+			}
 
-			if (cloud->isEnabled() || (cloud->getParent() && cloud->getParent()->isKindOf(CC_MESH)))
-				emit ccObjectAppearanceChanged(m_currentObject);
+			//save current scale manager state to persistent settings
+			ccColorScalesManager::GetUniqueInstance()->toPersistentSettings();
+
+			updateModel();
 		}
+	}
+}
+
+void ccPropertiesTreeDelegate::colorScaleChanged(int pos)
+{
+    if (!m_currentObject)
+        return;
+
+	if (pos < 0)
+	{
+		assert(false);
+		return;
+	}
+
+	QComboBox* comboBox = dynamic_cast<QComboBox*>(QObject::sender());
+	if (!comboBox)
+		return;
+
+	QString UUID = comboBox->itemData(pos).toString();
+	ccColorScale::Shared colorScale = ccColorScalesManager::GetUniqueInstance()->getScale(UUID);
+
+	if (!colorScale)
+	{
+		ccLog::Error("Internal error: color scale doesn't seem to exist anymore!");
+		return;
+	}
+
+	//get current SF
+    ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
+    assert(cloud);
+	ccScalarField* sf = cloud ? static_cast<ccScalarField*>(cloud->getCurrentDisplayedScalarField()) : 0;
+	if (sf && sf->getColorScale() != colorScale)
+	{
+		sf->setColorScale(colorScale);
+		updateDisplay();
+		updateModel();
 	}
 }
 
@@ -1647,9 +1247,7 @@ void ccPropertiesTreeDelegate::colorRampStepsChanged(int pos)
 	if (sf)
 	{
 		sf->setColorRampSteps(pos);
-
-		if (cloud->isEnabled() || (cloud->getParent() && cloud->getParent()->isKindOf(CC_MESH)))
-			emit ccObjectAppearanceChanged(m_currentObject);
+		updateDisplay();
 	}
 }
 
@@ -1662,9 +1260,7 @@ void ccPropertiesTreeDelegate::octreeDisplayTypeChanged(int pos)
     assert(octree);
 
     octree->setDisplayType(OCTREE_DISPLAY_TYPE_ENUMS[pos]);
-
-    if (octree->isVisible() && octree->isEnabled())
-        emit ccObjectAppearanceChanged(m_currentObject);
+	updateDisplay();
 }
 
 void ccPropertiesTreeDelegate::octreeDisplayedLevelChanged(int val)
@@ -1674,10 +1270,14 @@ void ccPropertiesTreeDelegate::octreeDisplayedLevelChanged(int val)
 
     ccOctree* octree = ccHObjectCaster::ToOctree(m_currentObject);
     assert(octree);
-    octree->setDisplayedLevel(val);
 
-    if (octree->isVisible() && octree->isEnabled())
-        emit ccObjectAppearanceChanged(m_currentObject);
+	if (octree->getDisplayedLevel() != val) //to avoid infinite loops!
+	{
+		octree->setDisplayedLevel(val);
+		updateDisplay();
+		//we must also reset the properties display!
+		updateModel();
+	}
 }
 
 void ccPropertiesTreeDelegate::primitivePrecisionChanged(int val)
@@ -1695,10 +1295,8 @@ void ccPropertiesTreeDelegate::primitivePrecisionChanged(int val)
     primitive->setDrawingPrecision(val);
 	primitive->setVisible(wasVisible);
 
-    if (primitive->isVisible() && primitive->isEnabled())
-        emit ccObjectAppearanceChanged(m_currentObject);
-
-	//we must reset the properties display!
+	updateDisplay();
+	//we must also reset the properties display!
 	updateModel();
 }
 
@@ -1710,8 +1308,7 @@ void ccPropertiesTreeDelegate::imageAlphaChanged(int val)
         return;
     image->setAlpha(float(val)/255.0);
 
-    if (image->isVisible() && image->isEnabled())
-        emit ccObjectAppearanceChanged(m_currentObject);
+	updateDisplay();
 }
 
 void ccPropertiesTreeDelegate::applyImageViewport()
@@ -1722,10 +1319,8 @@ void ccPropertiesTreeDelegate::applyImageViewport()
     ccCalibratedImage* image = ccHObjectCaster::ToCalibratedImage(m_currentObject);
     assert(image);
 
-    //ccGLWindow* win = (image->getParent() ? image->getParent()->getDisplay() : 0);
     ccGLWindow* win = static_cast<ccGLWindow*>(image->getDisplay());
     if (!win)
-        //win = GetActiveGLWindow();
         return;
 
     win->applyImageViewport(image);
@@ -1754,10 +1349,9 @@ void ccPropertiesTreeDelegate::sensorScaleChanged(double val)
 
     ccGBLSensor* sensor = ccHObjectCaster::ToGBLSensor(m_currentObject);
     assert(sensor);
-    sensor->setGraphicScale(val);
 
-    if (sensor->isVisible() && sensor->isEnabled())
-        emit ccObjectAppearanceChanged(m_currentObject);
+	sensor->setGraphicScale(val);
+	updateDisplay();
 }
 
 void ccPropertiesTreeDelegate::cloudPointSizeChanged(int size)
@@ -1767,19 +1361,9 @@ void ccPropertiesTreeDelegate::cloudPointSizeChanged(int size)
 
 	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(m_currentObject);
     assert(cloud);
+
 	cloud->setPointSize(size);
-
-    if (cloud->isVisible() && cloud->isEnabled())
-        emit ccObjectAppearanceChanged(m_currentObject);
-}
-
-void ccPropertiesTreeDelegate::redrawObjectSF()
-{
-    if (!m_currentObject)
-        return;
-
-    if (m_currentObject->isEnabled() || (m_currentObject->getParent() && m_currentObject->getParent()->isKindOf(CC_MESH)))
-        emit ccObjectAppearanceChanged(m_currentObject);
+	updateDisplay();
 }
 
 void ccPropertiesTreeDelegate::objectDisplayChanged(const QString& newDisplayTitle)
