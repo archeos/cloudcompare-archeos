@@ -2,6 +2,7 @@ cloudcompare (2.4+git20130615-0archeos1) UNRELEASED; urgency=low
 
   * New upstream version 2.4+git20130615-0archeos1
     as usual, upstream changes are in the history.txt file
+  * Removed patch 04 for hardening (fixed upstream)
 
  -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 15 Jun 2013 15:12:02 +0200
 

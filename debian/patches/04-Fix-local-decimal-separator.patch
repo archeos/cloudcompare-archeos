@@ -10,11 +10,9 @@ It give consistency with Meshlab behavior.
  qCC/main.cpp      |    1 +
  2 files changed, 2 insertions(+)
 
-diff --git a/ccViewer/main.cpp b/ccViewer/main.cpp
-index da0d200..fa88bee 100644
 --- a/ccViewer/main.cpp
 +++ b/ccViewer/main.cpp
-@@ -46,6 +46,7 @@ class ccApplication : public QApplication
+@@ -46,6 +46,7 @@ class ccApplication : public QApplicatio
        {
           setOrganizationName("CCCorp");
           setApplicationName("CloudCompareViewer");
@@ -22,11 +20,9 @@ index da0d200..fa88bee 100644
  #ifdef Q_OS_MAC
           mViewer = NULL;
           
-diff --git a/qCC/main.cpp b/qCC/main.cpp
-index ebcd747..705f30a 100644
 --- a/qCC/main.cpp
 +++ b/qCC/main.cpp
-@@ -57,6 +57,7 @@ class qccApplication : public QApplication
+@@ -50,6 +50,7 @@ class qccApplication : public QApplicati
        {
           setOrganizationName("CCCorp");
           setApplicationName("CloudCompare");

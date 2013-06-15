@@ -20,7 +20,7 @@ Subject: Use debian libGLEW
  include_directories( ${CC_FBO_SOURCE_DIR}/include )
  include_directories( ${CC_DLL_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_DLL_SOURCE_DIR} )
-@@ -112,7 +112,8 @@ target_link_LIBE57( ${PROJECT_NAME} )
+@@ -123,7 +123,8 @@ target_link_3DXWARE( ${PROJECT_NAME} )
  set_default_cc_preproc( ${PROJECT_NAME} )
  
  # Add custom prepocessor definitions
@@ -39,7 +39,7 @@ Subject: Use debian libGLEW
 -add_subdirectory( libs/Glew )
 +#add_subdirectory( libs/Glew )
  add_subdirectory( libs/CCFbo )
- add_subdirectory( libs/qCC_db )
+ add_subdirectory( libs/qCC_db ) # must always be included after CCFbo (dependency)
  
 --- a/libs/CCFbo/CMakeLists.txt
 +++ b/libs/CCFbo/CMakeLists.txt
@@ -61,8 +61,8 @@ Subject: Use debian libGLEW
 +#include_directories( ${GLEW_SOURCE_DIR}/include )
  include_directories( ${CC_DLL_SOURCE_DIR}/include )
  include_directories( ${triangle_SOURCE_DIR} )
- if( MSVC )
-@@ -29,7 +29,8 @@ target_link_libraries( ${PROJECT_NAME} $
+ include_directories( ${CC_FBO_SOURCE_DIR}/include )
+@@ -30,7 +30,8 @@ target_link_libraries( ${PROJECT_NAME} $
  set_default_cc_preproc( ${PROJECT_NAME} )
  
  # Add custom prepocessor definitions

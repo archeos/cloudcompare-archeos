@@ -20,7 +20,7 @@ Subject: Use package directory for libs
  	install_shared( CC_DLL ${dest} ${dest}_debug )
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
-@@ -37,7 +37,7 @@ endif()
+@@ -38,7 +38,7 @@ endif()
  
  # install (shared) lib to specified destinations
  if( UNIX )
@@ -32,7 +32,7 @@ Subject: Use package directory for libs
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -10,6 +10,8 @@ if( UNIX )
- 	SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+         set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
  endif()
  
 +SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")

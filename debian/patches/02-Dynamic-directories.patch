@@ -11,9 +11,9 @@ Subject: Dynamic directies
 
 --- a/qCC/ccGLWindow.cpp
 +++ b/qCC/ccGLWindow.cpp
-@@ -28,6 +28,9 @@
- #include "db_tree/ccDBRoot.h"
- #endif
+@@ -24,6 +24,9 @@
+ #include "ccConsole.h"
+ #include "ccRenderingTools.h"
  
 +//config : handle dynamic directory creation
 +#include "config.h"
@@ -21,15 +21,7 @@ Subject: Dynamic directies
  //qCC_db
  #include <ccHObject.h>
  #include <ccBBox.h>
-@@ -53,6 +56,7 @@
- #include <math.h>
- #include <algorithm>
- 
-+
- #define CC_GL_MAX_ZOOM_RATIO 1.0e6f
- #define CC_GL_MIN_ZOOM_RATIO 1.0e-6f
- 
-@@ -2502,7 +2506,7 @@ bool ccGLWindow::renderToFile(const char
+@@ -3011,7 +3014,7 @@ bool ccGLWindow::renderToFile(const char
  
  			if (m_activeGLFilter && !filter)
  			{
@@ -38,7 +30,7 @@ Subject: Dynamic directies
  
  				if (!m_activeGLFilter->init(Wp,Hp,qPrintable(shadersPath)))
  				{
-@@ -2703,7 +2707,7 @@ bool ccGLWindow::initGLFilter(int w, int
+@@ -3212,7 +3215,7 @@ bool ccGLWindow::initGLFilter(int w, int
  	ccGlFilter* _filter = m_activeGLFilter;
  	m_activeGLFilter=0;
  
@@ -57,14 +49,14 @@ Subject: Dynamic directies
 @@ -17,6 +17,9 @@
  
  #include "mainwindow.h"
- 
+ #include <iostream>
 +//Dynamic directories
 +#include "config.h"
 +
  //CCLib Includes
  #include <GenericChunkedArray.h>
  #include <CloudSamplingTools.h>
-@@ -272,7 +275,7 @@ void MainWindow::loadPlugins()
+@@ -334,7 +337,7 @@ void MainWindow::loadPlugins()
      m_pluginsPath = path + "Plugins/ccPlugins";
  #else
      //plugins are in bin/plugins
@@ -100,17 +92,19 @@ Subject: Dynamic directies
  if( APPLE )
     set( MAC_APP_NAME ${PROJECT_NAME}.app )
     set( MAC_BUNDLE_MACOS_DIR ${CMAKE_INSTALL_PREFIX}/${CloudCompare_dest_release}/${MAC_APP_NAME}/Contents/MacOS )
-@@ -136,8 +146,8 @@ if( APPLE )
-    install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
+@@ -142,9 +152,9 @@ if( APPLE )
     install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
+    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag DESTINATION ${MAC_BUNDLE_SHADERS_DIR}/ColorRamp )
  else()
 -   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${CloudCompare_dest_release}/shaders ${CloudCompare_dest_debug}/shaders )
 -   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${CloudCompare_dest_release}/shaders ${CloudCompare_dest_debug}/shaders )
+-   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CloudCompare_dest_release}/shaders/ColorRamp ${CloudCompare_dest_debug}/shaders/ColorRamp )
 +   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.frag ${CloudCompare_shaders_dest_release} ${CloudCompare_dest_debug}/shaders )
 +   install_ext( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert ${CloudCompare_shaders_dest_release} ${CloudCompare_dest_debug}/shaders )
++   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CloudCompare_shaders_dest_release}/shaders/ColorRamp ${CloudCompare_dest_debug}/shaders/ColorRamp )
  endif()
  
- 
+ # Auxiliary files
 --- a/qCC/plugins/CMakePluginTpl.cmake
 +++ b/qCC/plugins/CMakePluginTpl.cmake
 @@ -74,7 +74,7 @@ if( APPLE )
