@@ -14,6 +14,7 @@ override_dh_auto_clean:
 
 override_dh_auto_configure:
 	dh_auto_configure -- -DINSTALL_QBLUR_PLUGIN=ON \
+		-D-DCMAKE_BUILD_TYPE=Release \
 		-DINSTALL_QHPR_PLUGIN=ON \
 		-DINSTALL_QPOISSON_RECON_PLUGIN=ON \
 		-DINSTALL_QEDL_PLUGIN=ON \
