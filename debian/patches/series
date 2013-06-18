@@ -3,3 +3,4 @@
 03-Use-Debian-libGLEW.patch
 04-Fix-local-decimal-separator.patch
 05-Use-package-directory-for-libs.patch
+06-Remove-StyleSheet-in-ccViewer.patch
