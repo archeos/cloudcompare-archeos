@@ -248,7 +248,10 @@ public:
     virtual void getViewportArray(int vp[/*4*/]);
 
 	//! Sets camera to a predefined view (top, bottom, etc.)
-    virtual void setView(CC_VIEW_ORIENTATION orientation, bool redraw=true);
+    virtual void setView(CC_VIEW_ORIENTATION orientation, bool redraw = true);
+	
+	//! Sets camera to a custom view (forward and up directions must be specified)
+	virtual void setCustomView(const CCVector3& forward, const CCVector3& up, bool forceRedraw = true);
 
 	//! Sets current interaction mode
 	virtual void setInteractionMode(INTERACTION_MODE mode);
@@ -323,6 +326,24 @@ public:
 
 	//! Returns whether the ColorRamp shader is supported or not
 	bool hasColorRampShader() const { return m_colorRampShader != 0; }
+
+	//! Returns whether rectangular picking is allowed or not
+	bool isRectangularPickingAllowed() const { return m_allowRectangularEntityPicking; }
+
+	//! Sets whether rectangular picking is allowed or not
+	void setRectangularPickingAllowed(bool state) { m_allowRectangularEntityPicking = state; }
+
+    //! Returns current viewing direction
+	/** This is the direction normal to the screen
+		(pointing 'inside') in world base.
+	**/
+    CCVector3 getCurrentViewDir() const;
+
+    //! Returns current up direction
+	/** This is the vertical direction of the screen
+		(pointing 'upward') in world base.
+	**/
+	CCVector3 getCurrentUpDir() const;
 
 public slots:
     void zoomGlobal();
@@ -460,12 +481,6 @@ protected:
 	virtual void dragEnterEvent(QDragEnterEvent* event);
 	virtual void dropEvent(QDropEvent* event);
 
-    //! Returns current viewing direction
-	/** This is the direction normal to the screen
-		(pointing 'inside') in world base.
-	**/
-    CCVector3 getCurrentViewDir() const;
-
     //! Starts OpenGL picking process
 	/** \param mode picking mode
 		\param centerX picking area center X position
@@ -497,6 +512,11 @@ protected:
     bool initGLFilter(int w, int h);
 	//! Releases active GL filter
     void removeGLFilter();
+
+	//! Converts a given (mouse) position in pixels to an orientation
+	/** The orientation vector origin is the current pivot point!
+	**/
+	CCVector3 convertMousePositionToOrientation(int x, int y);
 
 	/***************************************************
                     OpenGL Extensions
@@ -650,6 +670,9 @@ protected:
 
 	//! Whether pivot symbol should be shown or not
 	bool m_pivotSymbolShown;
+
+	//! Whether rectangular picking is allowed or not
+	bool m_allowRectangularEntityPicking;
 
 	//! Rectangular picking polyline
 	ccPolyline* m_rectPickingPoly;

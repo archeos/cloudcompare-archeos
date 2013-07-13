@@ -14,13 +14,7 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2266                                                              $
-//$LastChangedDate:: 2012-10-15 00:07:12 +0200 (lun., 15 oct. 2012)        $
-//**************************************************************************
-//
+
 #ifndef CC_FILE_IO_FILTER_HEADER
 #define CC_FILE_IO_FILTER_HEADER
 
@@ -43,7 +37,7 @@
 const int MAX_ASCII_FILE_LINE_LENGTH	=	4096;
 
 //! File types handled by CloudCompare (loading and/or saving)
-enum CC_FILE_TYPES {UNKNOWN_FILE		,		/**< unknown type */
+enum CC_FILE_TYPES {UNKNOWN_FILE = 0	,		/**< unknown type */
 					SOI					,		/**< SOI (Mensi Trimble) */
 					ASCII				,		/**< ASC,NEU, XYZ, TXT, PTS, etc. */
 					BIN					,		/**< CloudCompare binary */

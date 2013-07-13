@@ -57,7 +57,7 @@ CC_FILE_ERROR STLFilter::saveToFile(ccHObject* entity, const char* filename)
 	//ask for output format
 	QMessageBox msgBox(QMessageBox::Question,"Choose output format","Save in BINARY or ASCII format?");
 	QPushButton *binaryButton = msgBox.addButton("BINARY", QMessageBox::AcceptRole);
-	QPushButton *asciiButton = msgBox.addButton("ASCII", QMessageBox::AcceptRole);
+	msgBox.addButton("ASCII", QMessageBox::AcceptRole);
 	msgBox.exec();
 
 	//try to open file for saving
@@ -112,7 +112,6 @@ CC_FILE_ERROR STLFilter::saveToBINFile(ccGenericMesh* mesh, FILE *theFile)
 	//current vertex shift
 	ccGenericPointCloud* vertices = mesh->getAssociatedCloud();
 	assert(vertices);
-	const double* shift = vertices->getOriginalShift();
 
 	mesh->placeIteratorAtBegining();
 	for (unsigned i=0;i<faceCount;++i)

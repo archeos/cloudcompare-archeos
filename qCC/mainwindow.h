@@ -30,6 +30,7 @@
 
 //CCLib
 #include <PointProjectionTools.h>
+#include <AutoSegmentationTools.h>
 
 //GUI (generated with Qt Designer)
 #include <ui_mainWindow.h>
@@ -202,6 +203,7 @@ protected slots:
     virtual void toggleActiveWindowCustomLight();
     virtual void toggleActiveWindowSunLight();
     virtual void toggleActiveWindowViewerBasedPerspective();
+    virtual void setGlobalZoom();
     virtual void zoomOnSelectedEntities();
 	virtual void setPivotAlwaysOn();
 	virtual void setPivotRotationOnly();
@@ -224,7 +226,6 @@ protected slots:
 	void handleNewEntity(ccHObject*);
 
     void setActiveSubWindow(QWidget* window);
-    void setGlobalZoom();
     void setLightsAndMaterials();
     void showSelectedEntitiesHistogram();
     void testFrameRate();
@@ -271,6 +272,7 @@ protected slots:
     void doActionInvertNormals();
 	void doActionConvertNormalsToHSV();
     void doActionComputeOctree();
+	void doActionComputeKdTree();
     void doActionApplyTransformation();
     void doActionFuse();
     void doActionRegister();
@@ -379,6 +381,12 @@ protected:
 
 	//! Returns a default first guess for algorithms kernel size
 	static PointCoordinateType GetDefaultCloudKernelSize(const ccHObject::Container& entities);
+
+	//! Creates point clouds from multiple 'components'
+	void createComponentsClouds(ccGenericPointCloud* cloud,
+								CCLib::ReferenceCloudContainer& components,
+								unsigned minPointPerComponent,
+								bool randomColors);
 
     void closeEvent(QCloseEvent* event);
     void moveEvent(QMoveEvent* event);

@@ -2171,42 +2171,94 @@ ScalarType DistanceComputationTools::computePoint2TriangleDistance(const CCVecto
 	}
 }
 
-//distance from point P(xp,yp,zp) to the plane: a0.x + a1.y + a2.z = a3
 ScalarType DistanceComputationTools::computePoint2PlaneDistance(const CCVector3* P, const PointCoordinateType* planeEquation)
 {
-	//distance d'un point a un plan : d = fabs(a0*x+a1*y+a2*z-a3)/sqrt(a0^2+a1^2+a2^2)
-	PointCoordinateType norm2 = CCVector3::vnorm(planeEquation);
+	//point to plane distance: d = fabs(a0*x+a1*y+a2*z-a3)/sqrt(a0^2+a1^2+a2^2)
+	assert(fabs((double)CCVector3::vnorm2(planeEquation) - 1.0) < ZERO_TOLERANCE);
 
-	if (norm2 < ZERO_TOLERANCE)
-        return NAN_VALUE;
-
-	return (ScalarType)(fabs(CCVector3::vdot(P->u,planeEquation)-planeEquation[3])/sqrt(norm2));
+	return static_cast<ScalarType>(fabs(CCVector3::vdot(P->u,planeEquation)-planeEquation[3])/*/CCVector3::vnorm(planeEquation)*/); //norm == 1.0!
 }
 
-//calcule la distance d'un nuage de point par rapport au plan : a0.x + a1.y + a2.z = a3
-ScalarType DistanceComputationTools::computeCloud2PlaneDistance(GenericCloud* cloud, const PointCoordinateType* planeEquation)
+ScalarType DistanceComputationTools::computeCloud2PlaneDistanceRMS(GenericCloud* cloud, const PointCoordinateType* planeEquation)
 {
     assert(cloud && planeEquation);
 
-	//nombre de points
-	unsigned n = cloud->size();
-	//distance d'un point a un plan : d = fabs(a0*x+a1*y+a2*z-a3) / sqrt(a0\B2+a1\B2+a2\B2) <-- "norm"
-	double norm = CCVector3::vnorm(planeEquation);
+	//point count
+	unsigned count = cloud->size();
+	if (count == 0)
+		return 0;
 
-	if (norm == 0.0 || n == 0)
+	//point to plane distance: d = fabs(a0*x+a1*y+a2*z-a3) / sqrt(a0^2+a1^2+a2^2) <-- "norm"
+	//but the norm should always be equal to 1.0!
+	PointCoordinateType norm2 = CCVector3::vnorm2(planeEquation);
+	if (norm2 < ZERO_TOLERANCE)
         return NAN_VALUE;
+	assert(fabs((double)norm2 - 1.0) < 1.0e-6);
 
-	double dSum = 0.0;
+	double dSumSq = 0.0;
 
-	//calcul des differences
+	//compute deviations
 	cloud->placeIteratorAtBegining();
-	for (unsigned i=0;i<n;++i)
+	for (unsigned i=0; i<count; ++i)
 	{
 		const CCVector3* P = cloud->getNextPoint();
-		dSum += (double)fabs(CCVector3::vdot(P->u,planeEquation)-planeEquation[3]);
+		double d = static_cast<double>(CCVector3::vdot(P->u,planeEquation)-planeEquation[3])/*/norm*/; //norm == 1.0
+		
+		dSumSq += d*d;
 	}
 
-	return (ScalarType)(dSum/(norm*(double)n));
+	return (ScalarType)sqrt(dSumSq/(double)count);
+}
+
+ScalarType DistanceComputationTools::ComputeCloud2PlaneRobustMax(GenericCloud* cloud, const PointCoordinateType* planeEquation, float percent)
+{
+    assert(cloud && planeEquation);
+	assert(percent < 1.0f);
+
+	//point count
+	unsigned count = cloud->size();
+	if (count == 0)
+		return 0;
+
+	//point to plane distance: d = fabs(a0*x+a1*y+a2*z-a3) / sqrt(a0^2+a1^2+a2^2) <-- "norm"
+	//but the norm should always be equal to 1.0!
+	PointCoordinateType norm2 = CCVector3::vnorm2(planeEquation);
+	if (norm2 < ZERO_TOLERANCE)
+        return NAN_VALUE;
+	assert(fabs((double)norm2 - 1.0) < 1.0e-6);
+
+	//we search the max @ 'percent'% (to avoid outliers)
+	std::vector<PointCoordinateType> tail;
+	size_t tailSize = (size_t)ceil((float)count * percent);
+	tail.resize(tailSize);
+
+	//compute deviations
+	cloud->placeIteratorAtBegining();
+	size_t pos = 0;
+	for (unsigned i=0; i<count; ++i)
+	{
+		const CCVector3* P = cloud->getNextPoint();
+		PointCoordinateType d2 = (CCVector3::vdot(P->u,planeEquation)-planeEquation[3])/*/norm*/; //norm == 1.0
+		d2 *= d2;
+
+		if (pos < tailSize)
+		{
+			tail[pos++] = d2;
+		}
+		else if (tail.back() < d2)
+		{
+			tail.back() = d2;
+			//search the min element of the tail
+			size_t maxIndex = tailSize-1;
+			for (size_t j=2; j<=tailSize; ++j)
+				if (tail[tailSize-j] < tail[maxIndex])
+					maxIndex = tailSize-j;
+			//and put it to the back!
+			std::swap(tail[maxIndex],tail.back());
+		}		
+	}
+
+	return (ScalarType)sqrt(tail.back());
 }
 
 bool DistanceComputationTools::computeGeodesicDistances(GenericIndexedCloudPersist* cloud, unsigned seedPointIndex, uchar octreeLevel, GenericProgressCallback* progressCb)

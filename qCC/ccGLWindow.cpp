@@ -125,6 +125,7 @@ ccGLWindow::ccGLWindow(QWidget *parent, const QGLFormat& format, QGLWidget* shar
 	, m_font(font())
 	, m_pivotVisibility(PIVOT_SHOW_ON_MOVE)
 	, m_pivotSymbolShown(false)
+	, m_allowRectangularEntityPicking(true)
 	, m_rectPickingPoly(0)
 {
 	//GL window title
@@ -1405,6 +1406,7 @@ void ccGLWindow::recalcModelViewMatrix()
 		glScalef(totalZoom,totalZoom,totalZoom);
 	}
 
+	//apply current camera parameters (see trunk/doc/rendering_pipeline.doc)
 	if (m_params.objectCenteredView)
 	{
 		//place origin on camera center
@@ -1617,6 +1619,19 @@ CCVector3 ccGLWindow::getCurrentViewDir() const
 	return axis;
 }
 
+CCVector3 ccGLWindow::getCurrentUpDir() const
+{
+	//if (m_params.objectCenteredView)
+	//	return CCVector3(0.0f,1.0f,0.0f);
+
+	//otherwise up direction is the 2nd line of the current view matrix
+	const float* M = m_params.viewMat.data();
+	CCVector3 axis(M[1],M[5],M[9]);
+	axis.normalize();
+
+	return axis;
+}
+
 void ccGLWindow::setInteractionMode(INTERACTION_MODE mode)
 {
 	m_interactionMode = mode;
@@ -1650,26 +1665,63 @@ void ccGLWindow::enableEmbeddedIcons(bool state)
 	setMouseTracking(state);
 }
 
-static void ProjectPointOnSphere(int x, int y, int width, int height, CCVector3& v)
+CCVector3 ccGLWindow::convertMousePositionToOrientation(int x, int y)
 {
-	v.x = float(2.0 * std::max(std::min(x,width-1),-width+1) - width) / (float)width;
-	v.y = float(height - 2.0 * std::max(std::min(y,height-1),-height+1)) / (float)height;
-	v.z = 0;
+	PointCoordinateType xc = static_cast<PointCoordinateType>(width()/2);
+	PointCoordinateType yc = static_cast<PointCoordinateType>(height()/2);
+
+	GLdouble xp,yp;
+	if (m_params.objectCenteredView)
+	{
+		GLdouble zp;
+		
+		//project the current pivot point on screen
+		int VP[4];
+		getViewportArray(VP);
+		gluProject(m_params.pivotPoint.x,m_params.pivotPoint.y,m_params.pivotPoint.z,getModelViewMatd(),getProjectionMatd(),VP,&xp,&yp,&zp);
+
+		//we set the virtual rotation pivot closer to the actual one (but we always stay in the central part of the screen!)
+		xp = std::min<GLdouble>(xp,3*width()/4);
+		xp = std::max<GLdouble>(xp,  width()/4);
+
+		yp = std::min<GLdouble>(yp,3*height()/4);
+		yp = std::max<GLdouble>(yp,  height()/4);
+	}
+	else
+	{
+		xp = static_cast<GLdouble>(xc);
+		yp = static_cast<GLdouble>(yc);
+	}
+
+	//invert y
+	y = height()-1 - y;
+
+	//CCVector3 v(float(2 * std::max<int>(std::min<int>(x,width()-1),-(width()-1)) - width()) / (float)width(),
+	//			float(height() - 2 * std::max<int>(std::min<int>(y,height()-1),-(height()-1))) / (float)height(),
+	//			0.0f);
+	CCVector3 v((PointCoordinateType)x - (PointCoordinateType)xp,
+				(PointCoordinateType)y - (PointCoordinateType)yp,
+				0);
+
+	v.x = std::max<PointCoordinateType>(std::min<PointCoordinateType>(v.x/xc,1.0),-1.0);
+	v.y = std::max<PointCoordinateType>(std::min<PointCoordinateType>(v.y/yc,1.0),-1.0);
 
 	//square 'radius'
-	float d2 = v.x*v.x + v.y*v.y;
+	PointCoordinateType d2 = v.x*v.x + v.y*v.y;
 
 	//projection on the unit sphere
 	if (d2 > 1.0f)
 	{
-		float d = sqrt(d2);
+		PointCoordinateType d = sqrt(d2);
 		v.x /= d;
 		v.y /= d;
 	}
 	else
 	{
-		v.z = (PointCoordinateType)sqrt(1.0f-d2);
+		v.z = sqrt((PointCoordinateType)1.0 - d2);
 	}
+
+	return v;
 }
 
 void ccGLWindow::updateActiveItemsList(int x, int y, bool extendToSelectedLabels/*=false*/)
@@ -1761,7 +1813,7 @@ void ccGLWindow::mousePressEvent(QMouseEvent *event)
 		{
 			m_lastClickTime_ticks = ccTimer::Msec();
 
-			ProjectPointOnSphere(event->x(), event->y(), width(), height(), m_lastMouseOrientation);
+			m_lastMouseOrientation = convertMousePositionToOrientation(event->x(), event->y());
 			m_lastMousePos = event->pos();
 			m_lodActivated = true;
 
@@ -1785,7 +1837,7 @@ void ccGLWindow::mouseMoveEvent(QMouseEvent *event)
 {
 	if (m_interactionMode == SEGMENT_ENTITY)
 	{
-		if (event->buttons()!=Qt::NoButton || m_alwaysUseFBO) //fast!
+		if (event->buttons() != Qt::NoButton || m_alwaysUseFBO) //fast!
 			emit mouseMoved(event->x()-width()/2,height()/2-event->y(),event->buttons());
 		return;
 	}
@@ -1888,8 +1940,9 @@ void ccGLWindow::mouseMoveEvent(QMouseEvent *event)
 		}
 		else
 		{
-			//specific case: rectangular polyline drawing (selection mode)
-			if (   (m_pickingMode == ENTITY_PICKING || m_pickingMode == ENTITY_RECT_PICKING)
+			//specific case: rectangular polyline drawing (for rectangular area selection mode)
+			if (	m_allowRectangularEntityPicking
+				&& (m_pickingMode == ENTITY_PICKING || m_pickingMode == ENTITY_RECT_PICKING)
 				&& (m_rectPickingPoly || (QApplication::keyboardModifiers () & Qt::AltModifier)))
 			{
 				//first time: initialization of the rectangle
@@ -1937,7 +1990,7 @@ void ccGLWindow::mouseMoveEvent(QMouseEvent *event)
 			}
 			else //standard rotation around the current pivot
 			{
-				ProjectPointOnSphere(x, y, width(), height(), m_currentMouseOrientation);
+				m_currentMouseOrientation = convertMousePositionToOrientation(x, y);
 
 				ccGLMatrix rotMat = ccGLUtils::GenerateGLRotationMatrixFromVectors(m_lastMouseOrientation.u,m_currentMouseOrientation.u);
 				m_lastMouseOrientation = m_currentMouseOrientation;
@@ -1993,7 +2046,7 @@ void ccGLWindow::mouseReleaseEvent(QMouseEvent *event)
 	{
 		if (m_pivotVisibility == PIVOT_SHOW_ON_MOVE)
 			toBeRefreshed();
-		showPivotSymbol(false);
+		showPivotSymbol(m_pivotVisibility == PIVOT_ALWAYS_SHOW);
 	}
 
 #ifndef __APPLE__
@@ -2437,7 +2490,7 @@ void ccGLWindow::displayNewMessage(const QString& message,
 		}
 		else
 		{
-			ccLog::Warning("[ccGLWindow::displayNewMessage] Append is forced for custom messages!");
+			ccLog::WarningDebug("[ccGLWindow::displayNewMessage] Append is forced for custom messages!");
 		}
 	}
 	else
@@ -2914,6 +2967,39 @@ void ccGLWindow::updateZoom(float zoomFactor)
 
 	if (zoomFactor>0.0 && zoomFactor!=1.0)
 		setZoom(m_params.zoom*zoomFactor);
+}
+
+void ccGLWindow::setCustomView(const CCVector3& forward, const CCVector3& up, bool forceRedraw/*=true*/)
+{
+	makeCurrent();
+
+	bool wasViewerBased = !m_params.objectCenteredView;
+	if (wasViewerBased)
+		setPerspectiveState(m_params.perspectiveView,true);
+
+	CCVector3 uForward = forward; uForward.normalize();
+
+	CCVector3 uSide = uForward.cross(up);
+	uSide.normalize();
+	CCVector3 uUp = uSide.cross(uForward);
+	uUp.normalize();
+
+
+	float* mat = m_params.viewMat.data();
+	mat[0] = uSide.x; mat[4] = uSide.y; mat[8] = uSide.z;
+	mat[1] = uUp.x; mat[5] = uUp.y; mat[9] = uUp.z;
+	mat[2] = -uForward.x; mat[6] = -uForward.y; mat[10] = -uForward.z;
+
+	if (wasViewerBased)
+		setPerspectiveState(m_params.perspectiveView,false);
+
+	invalidateVisualization();
+
+	//we emit the 'baseViewMatChanged' signal
+	emit baseViewMatChanged(m_params.viewMat);
+
+	if (forceRedraw)
+		redraw();
 }
 
 void ccGLWindow::setView(CC_VIEW_ORIENTATION orientation, bool forceRedraw/*=true*/)
