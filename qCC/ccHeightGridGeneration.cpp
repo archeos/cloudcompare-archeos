@@ -33,6 +33,10 @@
 //Qt
 #include <QImage>
 #include <QDir>
+#include <QFileDialog>
+#include <QApplication>
+#include <QImageWriter>
+#include <QSettings>
 
 using namespace std;
 
@@ -327,6 +331,10 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
         }
     }
 
+	//persistent settings
+	QSettings settings;
+	settings.beginGroup("HeightGridGeneration");
+
 	//default output
 	ccPointCloud* cloudGrid(0);
 
@@ -383,36 +391,45 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 				ccLog::Print("\tempty_cell_value = %f",minHeight);
 			}
 
-			QString outputFilePath = QDir::currentPath()+QString("/");
-
 			//=========================================================================================================
 			if (generateASCII)
 			{
 				ccLog::Print("[ccHeightGridGeneration] Saving the height grid as a text file...");
 
-				const char gridFilenameTXT[] = "height_grid_text_file.txt";
-				FILE* pFile = fopen(gridFilenameTXT,"wt");
-				if (pFile)
-				{
-					ccLog::Print(QString("\tOutput file: %1").arg(outputFilePath+QString(gridFilenameTXT)));
+				QString asciiGridSavePath = settings.value("savePathASCIIGrid",QApplication::applicationDirPath()).toString();
 
-					for (unsigned j=0; j<grid_size_Y; ++j)
+				//open file saving dialog
+				QString filter("ASCII file (*.txt)");
+				QString outputFilename = QFileDialog::getSaveFileName(0,"Save height grid as ASCII file",asciiGridSavePath+QString("/height_grid_text_file.txt"),filter);
+				if (!outputFilename.isNull())
+				{
+					FILE* pFile = fopen(qPrintable(outputFilename),"wt");
+					if (pFile)
 					{
-						if (progressCb)
-							progressCb->update(30.0 + 50.0*((float)j/(float)grid_size_Y));
+						ccLog::Print(QString("\tOutput file: ") + outputFilename);
 
-						const hgCell* aCell = grid[j];
-						for (unsigned i=0; i<grid_size_X; ++i,++aCell)
-							fprintf(pFile,"%.8f ", aCell->nbPoints ? aCell->height : empty_cell_height);
+						for (unsigned j=0; j<grid_size_Y; ++j)
+						{
+							if (progressCb)
+								progressCb->update(30.0 + 50.0*((float)j/(float)grid_size_Y));
 
-						fprintf(pFile,"\n");
+							const hgCell* aCell = grid[j];
+							for (unsigned i=0; i<grid_size_X; ++i,++aCell)
+								fprintf(pFile,"%.8f ", aCell->nbPoints ? aCell->height : empty_cell_height);
+
+							fprintf(pFile,"\n");
+						}
+
+						fclose(pFile);
+						pFile = 0;
+
+						//save current export path to persistent settings
+						settings.setValue("savePathASCIIGrid",QFileInfo(outputFilename).absolutePath());
 					}
-
-					fclose (pFile);
-				}
-				else
-				{
-					ccLog::Warning(QString("[ccHeightGridGeneration] Failed to write '%1' file!").arg(outputFilePath+QString(gridFilenameTXT)));
+					else
+					{
+						ccLog::Warning(QString("[ccHeightGridGeneration] Failed to write '%1' file!").arg(outputFilename));
+					}
 				}
 			}
 
@@ -493,19 +510,41 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 							progressCb->update(80.0f + 10.0f*((float)j/(float)grid_size_Y));
 					}
 
-					static QString outputFilenameTIF("height_grid_image.tif");
-					if (bitmap8.save(outputFilenameTIF))
+					//open file saving dialog
 					{
-						ccLog::Print(QString("\tOutput file: ")+outputFilePath+outputFilenameTIF);
-					}
-					else
-					{
-						ccLog::Error("Failed to save TIF file! (check that 'qtiff4.dll' is in the 'imageformats' directory alongside CC executable)");
-						static QString outputFilenamePNG("height_grid_image.png");
-						if (bitmap8.save(outputFilenamePNG))
-							ccLog::Print(QString("\tOutput file: ")+outputFilePath+outputFilenamePNG);
+						//add images output file filters
+						QString filters;
+						
+						//we grab the list of supported image file formats (writing)
+						QList<QByteArray> formats = QImageWriter::supportedImageFormats();
+						if (formats.empty())
+						{
+							ccLog::Warning("No image format supported by your system?!\n(check that the 'imageformats' directory is alongside CC executable)");
+						}
 						else
-							ccLog::Error("Failed to save PNG file as well! (hum, the problem must be more serious;)");
+						{
+							//we convert this list into a proper "filters" string
+							for (int i=0; i<formats.size(); ++i)
+								filters.append(QString("%1 image (*.%2)\n").arg(QString(formats[i].data()).toUpper()).arg(formats[i].data()));
+
+							QString imageSavePath = settings.value("savePathImage",QApplication::applicationDirPath()).toString();
+							QString outputFilename = QFileDialog::getSaveFileName(0,"Save height grid image",imageSavePath+QString("/height_grid_image.%1").arg(formats[0].data()),filters);
+
+							if (!outputFilename.isNull())
+							{
+								if (bitmap8.save(outputFilename))
+								{
+									ccLog::Print(QString("\tOutput file: ")+outputFilename);
+						
+									//save current export path to persistent settings
+									settings.setValue("savePathImage",QFileInfo(outputFilename).absolutePath());
+								}
+								else
+								{
+									ccLog::Error("Failed to save image file! (check the access permissions\nand make sure that the 'imageformats' directory alongside CC executable contains the right DLL)");
+								}
+							}
+						}
 					}
 				}
 				else
@@ -556,7 +595,7 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 				unsigned pointsCount = (fillEmptyCells != LEAVE_EMPTY ? grid_size_X*grid_size_Y : nonEmptyCells);
 				if (cloudGrid->reserve(pointsCount))
 				{
-					CCVector3d P(0.0);
+					//we work with doubles as grid step can be much smaller than the cloud coordinates!
 					double Py = (double)box.minCorner().u[Y];
 	                
 					unsigned n = 0;
@@ -572,29 +611,30 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 
 								CCVector3 Pf((PointCoordinateType)Px,(PointCoordinateType)Py,(PointCoordinateType)Pz);
 								cloudGrid->addPoint(Pf);
-								++n;
 
 								//if a SF is available, we set the point height as its associated scalar
 								if (heightSF)
-									heightSF->addElement(aCell->height);
+									heightSF->setValue(n,aCell->height);
+
 								//per-cell population SF
 								if (countSF)
 								{
 									ScalarType pop = aCell->nbPoints;
-									countSF->addElement(pop);
+									countSF->setValue(n,pop);
 								}
+								++n;
 							}
 							else if (fillEmptyCells != LEAVE_EMPTY) //empty cell
 							{
 								CCVector3 Pf((PointCoordinateType)Px,(PointCoordinateType)Py,empty_cell_height);
-								cloudGrid->addPoint(P);
-								++n;
+								cloudGrid->addPoint(Pf);
 
 								//if a SF is available, we set the point height as the default one
 								if (heightSF)
-									heightSF->addElement(empty_cell_height);
+									heightSF->setValue(n,empty_cell_height);
 								if (countSF)
-									countSF->addElement(NAN_VALUE);
+									countSF->setValue(n,NAN_VALUE);
+								++n;
 							}
 	                        
 							Px += grid_step;
@@ -617,13 +657,13 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 					cloudGrid->showSF(heightSF || countSF);
 
 					//former scalar fields
-					for (unsigned k=0;k<gridScalarFields.size(); ++k)
+					for (size_t k=0; k<gridScalarFields.size(); ++k)
 					{
 						double* _sfGrid = gridScalarFields[k];
 						if (_sfGrid) //valid SF grid
 						{
 							//the input point cloud should be empty!
-							CCLib::ScalarField* formerSf = pc->getScalarField(k);
+							CCLib::ScalarField* formerSf = pc->getScalarField((int)k);
 							assert(formerSf);
 
 							//we try to create an equivalent SF on the output grid
@@ -638,15 +678,18 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 								CCLib::ScalarField* sf = cloudGrid->getScalarField(sfIdx);
 								assert(sf);
 								//set sf values
+								unsigned n=0;
 								const ScalarType emptyCellSFValue = formerSf->NaN();
 								for (unsigned j=0; j<grid_size_Y; ++j)
 								{
 									const hgCell* aCell = grid[j];
-									for (unsigned i=0; i<grid_size_X; ++i, ++_sfGrid, ++aCell)
+									for (unsigned i=0; i<grid_size_X; ++i, ++_sfGrid, ++aCell, ++n)
+									{
 										if (aCell->nbPoints)
-											sf->addElement(*_sfGrid);
+											sf->setValue(n,*_sfGrid);
 										else if (fillEmptyCells != LEAVE_EMPTY)
-											sf->addElement(emptyCellSFValue);
+											sf->setValue(n,emptyCellSFValue);
+									}
 								}
 								sf->computeMinAndMax();
 								assert(sf->currentSize()==pointsCount);

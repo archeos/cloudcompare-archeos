@@ -28,7 +28,12 @@ namespace CCLib
 class GenericIndexedCloud;
 
 //! A class to compute and handle a Delaunay 2D mesh on a subset of points
+#ifdef CC_USE_AS_DLL
+#include "CloudCompareDll.h"
+class CC_DLL_API Delaunay2dMesh : public GenericIndexedMesh
+#else
 class Delaunay2dMesh : public GenericIndexedMesh
+#endif
 {
 public:
 
@@ -53,7 +58,7 @@ public:
 	/** \param the2dPoints a set of 2D points
 		\return success
 	**/
-	virtual bool build(CC2DPointsConainer &the2dPoints);
+	virtual bool build(CC2DPointsContainer &the2dPoints);
 
 	//inherited methods (see GenericMesh)
 	virtual unsigned size() const {return numberOfTriangles;};

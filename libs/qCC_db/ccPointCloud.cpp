@@ -28,6 +28,7 @@
 #include "ccNormalVectors.h"
 #include "ccColorScalesManager.h"
 #include "ccOctree.h"
+#include "ccKdTree.h"
 #include "ccGenericMesh.h"
 #include "ccMesh.h"
 #include "ccMeshGroup.h"
@@ -39,7 +40,7 @@
 //system
 #include <assert.h>
 
-ccPointCloud::ccPointCloud(QString name)
+ccPointCloud::ccPointCloud(QString name) throw()
 	: ChunkedPointCloud()
 	, ccGenericPointCloud(name)
 	, m_rgbColors(0)
@@ -50,143 +51,152 @@ ccPointCloud::ccPointCloud(QString name)
 	init();
 }
 
-ccPointCloud::ccPointCloud(CCLib::GenericCloud* cloud)
-	: ChunkedPointCloud()
-	, ccGenericPointCloud("Cloud")
-	, m_rgbColors(0)
-	, m_normals(0)
-	, m_currentDisplayedScalarField(0)
-	, m_currentDisplayedScalarFieldIndex(-1)
+ccPointCloud* ccPointCloud::From(CCLib::GenericCloud* cloud)
 {
-	init();
+	ccPointCloud* pc = new ccPointCloud("Cloud");
 
 	unsigned n = cloud->size();
-	if (n==0)
-		return;
-
-	if (!reserveThePointsTable(n))
+	if (n == 0)
 	{
-		ccLog::Error("[ccPointCloud] Not enough memory to duplicate cloud!");
-		return;
+		ccLog::Warning("[ccPointCloud::From] Input cloud is empty!");
+	}
+	else
+	{
+		if (!pc->reserveThePointsTable(n))
+		{
+			ccLog::Error("[ccPointCloud::From] Not enough memory to duplicate cloud!");
+			delete pc;
+			pc = 0;
+		}
+		else
+		{
+			//import points
+			cloud->placeIteratorAtBegining();
+			for (unsigned i=0; i<n; i++)
+				pc->addPoint(*cloud->getNextPoint());
+		}
 	}
 
-	//import points
-	cloud->placeIteratorAtBegining();
-	for (unsigned i=0; i<n; i++)
-		addPoint(*cloud->getNextPoint());
+	return pc;
 }
 
-ccPointCloud::ccPointCloud(const CCLib::GenericIndexedCloud* cloud)
-	: ChunkedPointCloud()
-	, ccGenericPointCloud("Cloud")
-	, m_rgbColors(0)
-	, m_normals(0)
-	, m_currentDisplayedScalarField(0)
-	, m_currentDisplayedScalarFieldIndex(-1)
+ccPointCloud* ccPointCloud::From(const CCLib::GenericIndexedCloud* cloud)
 {
-	init();
+	ccPointCloud* pc = new ccPointCloud("Cloud");
 
 	unsigned n = cloud->size();
-	if (n==0)
-		return;
-
-	if (!reserveThePointsTable(n))
+	if (n == 0)
 	{
-		ccLog::Error("[ccPointCloud] Not enough memory to duplicate cloud!");
-		return;
+		ccLog::Warning("[ccPointCloud::From] Input cloud is empty!");
+	}
+	else
+	{
+		if (!pc->reserveThePointsTable(n))
+		{
+			ccLog::Error("[ccPointCloud] Not enough memory to duplicate cloud!");
+			delete pc;
+			pc = 0;
+		}
+		else
+		{
+			//import points
+			for (unsigned i=0; i<n; i++)
+			{
+				CCVector3 P;
+				cloud->getPoint(i,P);
+				pc->addPoint(P);
+			}
+		}
 	}
 
-	//import points
-	for (unsigned i=0; i<n; i++)
-	{
-		CCVector3 P;
-		cloud->getPoint(i,P);
-		addPoint(P);
-	}
+	return pc;
 }
 
-ccPointCloud::ccPointCloud(const CCLib::ReferenceCloud* selection, const ccPointCloud* source)
-	: ChunkedPointCloud()
-	, ccGenericPointCloud(source ? source->getName() : QString())
-	, m_rgbColors(0)
-	, m_normals(0)
-	, m_currentDisplayedScalarField(0)
-	, m_currentDisplayedScalarFieldIndex(-1)
+ccPointCloud* ccPointCloud::partialClone(const CCLib::ReferenceCloud* selection, int* warnings/*=0*/) const
 {
-	assert(source);
-	if (!source)
-	{
-		ccLog::Warning("[ccPointCloud::copy] Internal error: invalid 'source' cloud!");
-		return;
-	}
-	assert(selection->getAssociatedCloud()==static_cast<const GenericIndexedCloud*>(source));
+	if (warnings)
+		*warnings = 0;
 
-	init();
+	if (!selection || selection->getAssociatedCloud() != static_cast<const GenericIndexedCloud*>(this))
+	{
+		ccLog::Error("[ccPointCloud::partialClone] Invalid parameters");
+		return 0;
+	}
 
 	unsigned n = selection->size();
-	if (n==0)
-		return;
-
-	if (!reserveThePointsTable(n))
+	if (n == 0)
 	{
-		ccLog::Warning("[ccPointCloud::copy] Not enough memory!");
-		return;
+		ccLog::Warning("[ccPointCloud::partialClone] Selection is empty");
+		return 0;
+	}
+
+	ccPointCloud* result = new ccPointCloud(getName()+QString(".extract"));
+
+	if (!result->reserveThePointsTable(n))
+	{
+		ccLog::Error("[ccPointCloud::partialClone] Not enough memory to duplicate cloud!");
+		delete result;
+		return 0;
 	}
 
 	//import points
 	{
 		for (unsigned i=0; i<n; i++)
-			addPoint(*source->getPointPersistentPtr(selection->getPointGlobalIndex(i)));
+			result->addPoint(*getPointPersistentPtr(selection->getPointGlobalIndex(i)));
 	}
 
 	//visibility
-	setVisible(source->isVisible());
+	result->setVisible(isVisible());
 
 	//RGB colors
-	if (source->hasColors())
+	if (hasColors())
 	{
-		if (reserveTheRGBTable())
+		if (result->reserveTheRGBTable())
 		{
 			for (unsigned i=0; i<n; i++)
-				addRGBColor(source->getPointColor(selection->getPointGlobalIndex(i)));
-			showColors(source->colorsShown());
+				result->addRGBColor(getPointColor(selection->getPointGlobalIndex(i)));
+			result->showColors(colorsShown());
 		}
 		else
 		{
-			ccLog::Warning("[ccPointCloud::copy] Not enough memory to copy RGB colors!");
+			ccLog::Warning("[ccPointCloud::partialClone] Not enough memory to copy RGB colors!");
+			if (warnings)
+				*warnings |= WRN_OUT_OF_MEM_FOR_COLORS;
 		}
 	}
 
 	//normals
-	if (source->hasNormals())
+	if (hasNormals())
 	{
-		if (reserveTheNormsTable())
+		if (result->reserveTheNormsTable())
 		{
 			for (unsigned i=0; i<n; i++)
-				addNormIndex(source->getPointNormalIndex(selection->getPointGlobalIndex(i)));
-			showNormals(source->normalsShown());
+				result->addNormIndex(getPointNormalIndex(selection->getPointGlobalIndex(i)));
+			result->showNormals(normalsShown());
 		}
 		else
 		{
-			ccLog::Warning("[ccPointCloud::copy] Not enough memory to copy normals!");
+			ccLog::Warning("[ccPointCloud::partialClone] Not enough memory to copy normals!");
+			if (warnings)
+				*warnings |= WRN_OUT_OF_MEM_FOR_NORMALS;
 		}
 	}
 
 	//scalar fields
-	unsigned sfCount = source->getNumberOfScalarFields();
+	unsigned sfCount = getNumberOfScalarFields();
 	if (sfCount != 0)
 	{
 		for (unsigned k=0; k<sfCount; ++k)
 		{
-			ccScalarField* sf = static_cast<ccScalarField*>(source->getScalarField(k));
+			const ccScalarField* sf = static_cast<ccScalarField*>(getScalarField(k));
 			assert(sf);
 			if (sf)
 			{
 				//we create a new scalar field with same name
-				int sfIdx = addScalarField(sf->getName());
+				int sfIdx = result->addScalarField(sf->getName());
 				if (sfIdx>=0) //success
 				{
-					ccScalarField* currentScalarField = static_cast<ccScalarField*>(getScalarField(sfIdx));
+					ccScalarField* currentScalarField = static_cast<ccScalarField*>(result->getScalarField(sfIdx));
 					assert(currentScalarField);
 					if (currentScalarField->resize(n))
 					{
@@ -210,8 +220,10 @@ ccPointCloud::ccPointCloud(const CCLib::ReferenceCloud* selection, const ccPoint
 					else
 					{
 						//if we don't have enough memory, we cancel SF creation
-						deleteScalarField(sfIdx);
-						ccLog::Warning(QString("[ccPointCloud::copy] Not enough memory to copy scalar field '%1'!").arg(sf->getName()));
+						result->deleteScalarField(sfIdx);
+						ccLog::Warning(QString("[ccPointCloud::partialClone] Not enough memory to copy scalar field '%1'!").arg(sf->getName()));
+						if (warnings)
+							*warnings |= WRN_OUT_OF_MEM_FOR_SFS;
 					}
 				}
 			}
@@ -221,16 +233,16 @@ ccPointCloud::ccPointCloud(const CCLib::ReferenceCloud* selection, const ccPoint
 		if (copiedSFCount)
 		{
 			//we display the same scalar field as the source (if we managed to copy it!)
-			if (source->getCurrentDisplayedScalarField())
+			if (getCurrentDisplayedScalarField())
 			{
-				int sfIdx = getScalarFieldIndexByName(source->getCurrentDisplayedScalarField()->getName());
+				int sfIdx = result->getScalarFieldIndexByName(getCurrentDisplayedScalarField()->getName());
 				if (sfIdx)
-					setCurrentDisplayedScalarField(sfIdx);
+					result->setCurrentDisplayedScalarField(sfIdx);
 				else
-					setCurrentDisplayedScalarField((int)copiedSFCount-1);
+					result->setCurrentDisplayedScalarField((int)copiedSFCount-1);
 			}
 			//copy visibility
-			showSF(source->sfShown());
+			result->showSF(sfShown());
 		}
 	}
 
@@ -263,13 +275,14 @@ ccPointCloud::ccPointCloud(const CCLib::ReferenceCloud* selection, const ccPoint
 	*/
 
 	//original center
-	const double* shift = source->getOriginalShift();
-	setOriginalShift(shift[0],shift[1],shift[2]);
+	const double* shift = getOriginalShift();
+	if (shift)
+		result->setOriginalShift(shift[0],shift[1],shift[2]);
 
 	//custom point size
-	setPointSize(source->getPointSize());
+	result->setPointSize(getPointSize());
 
-	setName(source->getName()+QString(".extract"));
+	return result;
 }
 
 ccPointCloud::~ccPointCloud()
@@ -277,7 +290,7 @@ ccPointCloud::~ccPointCloud()
 	clear();
 }
 
-void ccPointCloud::init()
+void ccPointCloud::init() throw()
 {
 	showSFColorsScale(false);
 	setCurrentDisplayedScalarField(-1);
@@ -1189,6 +1202,14 @@ void ccPointCloud::translate(const CCVector3& T)
 	ccOctree* oct = getOctree();
 	if (oct)
 		oct->translateBoundingBox(T);
+
+	//and same thing for the Kd-tree(s)!
+	ccHObject::Container kdtrees;
+	filterChildren(kdtrees, false, CC_POINT_KDTREE);
+	{
+		for (size_t i=0; i<kdtrees.size(); ++i)
+			static_cast<ccKdTree*>(kdtrees[i])->translateBoundingBox(T);
+	}
 }
 
 void ccPointCloud::multiply(PointCoordinateType fx, PointCoordinateType fy, PointCoordinateType fz)
@@ -1221,13 +1242,22 @@ void ccPointCloud::multiply(PointCoordinateType fx, PointCoordinateType fy, Poin
 	if (fz<0.0)
 		std::swap(bbMin[2],bbMax[2]);
 
+	//same thing for the octree
 	ccOctree* oct = getOctree();
 	if (oct)
 	{
-		if (fx==fy && fx==fz && fx>0.0 && fy>0.0 && fz>0.0)
+		if (fx==fy && fx==fz && fx>0 && fy>0 && fz>0)
 			oct->multiplyBoundingBox(fx);
 		else
 			deleteOctree();
+	}
+
+	//and same thing for the Kd-tree(s)!
+	ccHObject::Container kdtrees;
+	filterChildren(kdtrees, false, CC_POINT_KDTREE);
+	{
+		for (size_t i=0; i<kdtrees.size(); ++i)
+			static_cast<ccKdTree*>(kdtrees[i])->multiplyBoundingBox(fx);
 	}
 }
 
@@ -1918,16 +1948,9 @@ void ccPointCloud::addColorRampInfo(CC_DRAW_CONTEXT& context)
 
 ccPointCloud* ccPointCloud::filterPointsByScalarValue(ScalarType minVal, ScalarType maxVal)
 {
-	CCLib::ReferenceCloud* c = CCLib::ManualSegmentationTools::segment(this,minVal,maxVal);
+	QSharedPointer<CCLib::ReferenceCloud> c(CCLib::ManualSegmentationTools::segment(this,minVal,maxVal));
 
-	ccPointCloud* newList = NULL;
-	if (c)
-	{
-		newList = new ccPointCloud(c,this);
-		delete c;
-	}
-
-	return newList;
+	return (c ? partialClone(c.data()) : 0);
 }
 
 void ccPointCloud::hidePointsByScalarValue(ScalarType minVal, ScalarType maxVal)
@@ -1970,19 +1993,24 @@ ccGenericPointCloud* ccPointCloud::createNewCloudFromVisibilitySelection(bool re
 		CCLib::ReferenceCloud* rc = getTheVisiblePoints();
 		if (!rc)
 		{
-			ccLog::Warning("[ccPointCloud::createNewCloudFromVisibilitySelection] An error occured during selection!");
+			ccLog::Warning("[ccPointCloud::createNewCloudFromVisibilitySelection] An error occured during points selection!");
 			return 0;
 		}
 		assert(rc->size() != 0);
 
 		//convert selection to cloud
-		result = new ccPointCloud(rc,this);
+		result = partialClone(rc);
 
 		//don't need this one anymore
 		delete rc;
 		rc=0;
 	}
-	assert(result);
+
+	if (!result)
+	{
+		ccLog::Warning("[ccPointCloud::createNewCloudFromVisibilitySelection] An error occured during points duplication!");
+		return 0;
+	}
 
 	result->setName(getName()+QString(".segmented"));
 
@@ -2060,6 +2088,9 @@ void ccPointCloud::deleteScalarField(int index)
 	ChunkedPointCloud::deleteScalarField(index);
 
 	//current SF should still be up-to-date!
+	if (m_currentInScalarFieldIndex < 0 && getNumberOfScalarFields() > 0)
+		setCurrentInScalarField((int)getNumberOfScalarFields()-1);
+
 	setCurrentDisplayedScalarField(m_currentInScalarFieldIndex);
 	showSF(m_currentInScalarFieldIndex>=0);
 }
@@ -2224,7 +2255,6 @@ void ccPointCloud::unrollOnCone(double baseRadius, double alpha_deg, const CCVec
 		PointCoordinateType radialDist = (u+P2*tan_alpha);
 		PointCoordinateType orthoDist = radialDist * cos_alpha;
 		PointCoordinateType z2 = P2 - orthoDist*sin_alpha;//(P2+u*tan_alpha)*q;
-		PointCoordinateType x2 = z2*tan_alpha;
 
 		//we project point
 		P->u[dim1] = lon*baseRadius;
@@ -2273,18 +2303,17 @@ int ccPointCloud::addScalarField(const char* uniqueName)
 
 	//Nouveau champ scalaire
 	ccScalarField* sf = new ccScalarField(uniqueName);
-	if (size()>0)
-		if (!sf->reserve(size()))
-		{
-			sf->release();
-			ccLog::Warning("[ccPointCloud::addScalarField] Not enough memory!");
-			return -1;
-		}
+	if (size() && !sf->resize(size()))
+	{
+		sf->release();
+		ccLog::Warning("[ccPointCloud::addScalarField] Not enough memory!");
+		return -1;
+	}
 
-		m_scalarFields.push_back(sf);
-		sf->link();
+	m_scalarFields.push_back(sf);
+	sf->link();
 
-		return (int)m_scalarFields.size()-1;
+	return (int)m_scalarFields.size()-1;
 }
 
 int ccPointCloud::addScalarField(ccScalarField* sf)
@@ -2474,7 +2503,7 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion)
 			return ReadError();
 
 		//Displayed scalar field index (dataVersion>=20)
-		int32_t displayedScalarFieldIndex = 0;(int32_t)m_currentDisplayedScalarFieldIndex;
+		int32_t displayedScalarFieldIndex = 0;
 		if (in.read((char*)&displayedScalarFieldIndex,4)<0)
 			return ReadError();
 		if (displayedScalarFieldIndex<(int32_t)sfCount)
