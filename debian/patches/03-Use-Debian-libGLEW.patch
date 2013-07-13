@@ -11,7 +11,7 @@ Subject: Use debian libGLEW
 
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -38,7 +38,7 @@ endif()
+@@ -37,7 +37,7 @@ endif()
  # Load plugins
  add_subdirectory( plugins )
  
@@ -20,7 +20,7 @@ Subject: Use debian libGLEW
  include_directories( ${CC_FBO_SOURCE_DIR}/include )
  include_directories( ${CC_DLL_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_DLL_SOURCE_DIR} )
-@@ -123,7 +123,8 @@ target_link_3DXWARE( ${PROJECT_NAME} )
+@@ -121,7 +121,8 @@ target_link_3DXWARE( ${PROJECT_NAME} )
  set_default_cc_preproc( ${PROJECT_NAME} )
  
  # Add custom prepocessor definitions
@@ -83,7 +83,7 @@ Subject: Use debian libGLEW
  include_directories( ${CC_FBO_SOURCE_DIR}/include )
  include_directories( ${CC_DLL_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_DLL_SOURCE_DIR} )
-@@ -83,7 +83,8 @@ target_link_LIBE57( ${PROJECT_NAME} )
+@@ -93,7 +93,8 @@ target_link_3DXWARE( ${PROJECT_NAME} )
  set_default_cc_preproc( ${PROJECT_NAME} )
  
  # Add custom prepocessor definitions

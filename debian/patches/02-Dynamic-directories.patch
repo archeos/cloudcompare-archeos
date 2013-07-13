@@ -21,7 +21,7 @@ Subject: Dynamic directies
  //qCC_db
  #include <ccHObject.h>
  #include <ccBBox.h>
-@@ -313,7 +316,7 @@ void ccGLWindow::initializeGL()
+@@ -314,7 +317,7 @@ void ccGLWindow::initializeGL()
  			else
  			{
  				ccColorRampShader* colorRampShader = new ccColorRampShader();
@@ -30,7 +30,7 @@ Subject: Dynamic directies
  				if (!colorRampShader->loadProgram(0,qPrintable(shadersPath+QString("/ColorRamp/color_ramp.frag"))))
  				{
  					ccConsole::Warning("[3D View %i] Failed to load color ramp shader!",m_uniqueID);
-@@ -3011,7 +3014,7 @@ bool ccGLWindow::renderToFile(const char
+@@ -3097,7 +3100,7 @@ bool ccGLWindow::renderToFile(const char
  
  			if (m_activeGLFilter && !filter)
  			{
@@ -39,7 +39,7 @@ Subject: Dynamic directies
  
  				if (!m_activeGLFilter->init(Wp,Hp,qPrintable(shadersPath)))
  				{
-@@ -3212,7 +3215,7 @@ bool ccGLWindow::initGLFilter(int w, int
+@@ -3298,7 +3301,7 @@ bool ccGLWindow::initGLFilter(int w, int
  	ccGlFilter* _filter = m_activeGLFilter;
  	m_activeGLFilter=0;
  
@@ -65,7 +65,7 @@ Subject: Dynamic directies
  //CCLib Includes
  #include <GenericChunkedArray.h>
  #include <CloudSamplingTools.h>
-@@ -334,7 +337,7 @@ void MainWindow::loadPlugins()
+@@ -335,7 +338,7 @@ void MainWindow::loadPlugins()
      m_pluginsPath = path + "Plugins/ccPlugins";
  #else
      //plugins are in bin/plugins
@@ -76,8 +76,8 @@ Subject: Dynamic directies
      ccConsole::Print(QString("Plugins lookup dir.: %1").arg(m_pluginsPath));
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -8,13 +8,23 @@ set( VERSION_PATCH 0 )
- 
+@@ -7,13 +7,23 @@ set( VERSION_MINOR 5 )
+ set( VERSION_PATCH 0 )
  
  if ( UNIX )
 -	set( CloudCompare_dest_release bin ) #default destination: /usr/bin
@@ -101,7 +101,7 @@ Subject: Dynamic directies
  if( APPLE )
     set( MAC_APP_NAME ${PROJECT_NAME}.app )
     set( MAC_BUNDLE_MACOS_DIR ${CMAKE_INSTALL_PREFIX}/${CloudCompare_dest_release}/${MAC_APP_NAME}/Contents/MacOS )
-@@ -142,9 +152,9 @@ if( APPLE )
+@@ -140,9 +150,9 @@ if( APPLE )
     install( FILES ${CC_FBO_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION ${MAC_BUNDLE_SHADERS_DIR} )
     install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag DESTINATION ${MAC_BUNDLE_SHADERS_DIR}/ColorRamp )
  else()
@@ -136,7 +136,7 @@ Subject: Dynamic directies
  endif()
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
-@@ -135,8 +135,8 @@ if( APPLE )
+@@ -150,8 +150,8 @@ if( APPLE )
  endif( APPLE )
  
  # Export common shader files to all install destinations
