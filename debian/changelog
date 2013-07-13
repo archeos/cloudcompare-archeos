@@ -1,11 +1,12 @@
-cloudcompare (2.4+git20130615-0archeos1) UNRELEASED; urgency=low
+cloudcompare (2.5.0-0archeos1) UNRELEASED; urgency=low
 
-  * New upstream version 2.4+git20130615-0archeos1
-    as usual, upstream changes are in the history.txt file
+  * New upstream version 2.5.0
+    upstream changes are in the history.txt file
   * Removed patch 04 for hardening (fixed upstream)
   * Removed StyleSheet in ccViewer (patch 06)
+   
 
- -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 15 Jun 2013 15:12:02 +0200
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 13 Jul 2013 10:36:30 +0200
 
 cloudcompare (2.4+git20130310-0archeos1) theodoric; urgency=low
 
