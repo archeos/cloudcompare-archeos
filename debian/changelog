@@ -1,4 +1,4 @@
-cloudcompare (2.5.0-0archeos1) UNRELEASED; urgency=low
+cloudcompare (2.5.0-0archeos1) theodoric; urgency=low
 
   * New upstream version 2.5.0
     upstream changes are in the history.txt file
