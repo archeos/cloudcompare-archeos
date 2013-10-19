@@ -176,7 +176,7 @@ void ccViewer::doActionDeleteSelectedEntity()
 			if (obj->getParent())
 			{
 				//Warning: we must ask the object if it is fatehr dependant BEFORE removing it ;)
-				fatherDependant = obj->getFlagState(CC_FATHER_DEPENDANT);
+				fatherDependant = obj->getFlagState(CC_FATHER_DEPENDENT);
 				obj->getParent()->removeChild(obj);
 			}
 			if (!fatherDependant)
@@ -222,7 +222,7 @@ void ccViewer::selectEntity(int uniqueID)
 		ui.actionShowScalarField->setEnabled(hasSF);
 		ui.actionShowScalarField->setChecked(toSelect->sfShown());
 		ui.actionShowColorRamp->setEnabled(hasSF);
-		ui.actionShowColorRamp->setChecked(cloud ? cloud->sfColorScaleShown() : false);
+		ui.actionShowColorRamp->setChecked(cloud ? cloud->sfColorScaleShown() && cloud->sfShown() : false);
 
 		unsigned sfCount = (cloud ? cloud->getNumberOfScalarFields() : 0);
 		ui.menuSelectSF->setEnabled(hasSF && sfCount>1);
@@ -300,11 +300,11 @@ bool ccViewer::checkForLoadedEntities()
         loadedEntities = false;
     }
 
-    if (ccGui::Parameters().displayCross != loadedEntities)
+	if (m_glWindow->getDisplayParameters().displayCross != loadedEntities)
     {
-        ccGui::ParamStruct params = ccGui::Parameters();
+        ccGui::ParamStruct params = m_glWindow->getDisplayParameters();
         params.displayCross = loadedEntities;
-        ccGui::Set(params);
+		m_glWindow->setDisplayParameters(params);
     }
 
     return loadedEntities;
@@ -320,8 +320,8 @@ void ccViewer::updateDisplay()
 void ccViewer::updateGLFrameGradient()
 {
 	//display parameters
-    const unsigned char* bkgCol = ccGui::Parameters().backgroundCol;
-    const unsigned char* forCol = ccGui::Parameters().pointsDefaultCol;
+	const unsigned char* bkgCol = m_glWindow->getDisplayParameters().backgroundCol;
+	const unsigned char* forCol = m_glWindow->getDisplayParameters().pointsDefaultCol;
 
     glColor3ubv(bkgCol);
     glColor3ub(255-forCol[0],255-forCol[1],255-forCol[2]);

@@ -20,9 +20,6 @@
 
 #include "ccGenericPrimitive.h"
 
-//CCLib
-#include <CCGeom.h>
-
 //system
 #include <vector>
 

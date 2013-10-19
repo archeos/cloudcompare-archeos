@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2242                                                              $
-//$LastChangedDate:: 2012-09-22 18:54:21 +0200 (sam., 22 sept. 2012)       $
-//**************************************************************************
-//
 
 #include "ccPointListPickingDlg.h"
 
@@ -32,12 +25,13 @@
 #include <QApplication>
 
 //qCC_db
+#include <ccLog.h>
 #include <ccPointCloud.h>
 #include <cc2DLabel.h>
+#include <ccPolyline.h>
 
 //local
 #include "ccGLWindow.h"
-#include "ccGuiParameters.h"
 #include "fileIO/FileIOFilter.h"
 #include "mainwindow.h"
 #include "db_tree/ccDBRoot.h"
@@ -65,6 +59,7 @@ ccPointListPickingDlg::ccPointListPickingDlg(QWidget* parent)
 	QAction* exportASCII_xyz = menu->addAction("x,y,z");
 	QAction* exportASCII_ixyz = menu->addAction("local index,x,y,z");
 	QAction* exportToNewCloud = menu->addAction("new cloud");
+	QAction* exportToNewPolyline = menu->addAction("new polyline");
 	exportToolButton->setMenu(menu);
 
 	tableWidget->verticalHeader()->setResizeMode(QHeaderView::ResizeToContents);
@@ -78,6 +73,7 @@ ccPointListPickingDlg::ccPointListPickingDlg(QWidget* parent)
 	connect(exportASCII_xyz,        SIGNAL(triggered()),        this,				SLOT(exportToASCII_xyz()));
 	connect(exportASCII_ixyz,       SIGNAL(triggered()),        this,				SLOT(exportToASCII_ixyz()));
 	connect(exportToNewCloud,		SIGNAL(triggered()),        this,				SLOT(exportToNewCloud()));
+	connect(exportToNewPolyline,	SIGNAL(triggered()),        this,				SLOT(exportToNewPolyline()));
 	connect(markerSizeSpinBox,      SIGNAL(valueChanged(int)),  this,				SLOT(markerSizeChanged(int)));
 	connect(startIndexSpinBox,      SIGNAL(valueChanged(int)),  this,				SLOT(startIndexChanged(int)));
 
@@ -99,11 +95,12 @@ unsigned ccPointListPickingDlg::getPickedPoints(std::vector<cc2DLabel*>& pickedP
 		//find highest unique ID among the VISIBLE labels
 		pickedPoints.reserve(count);
 		for (unsigned i=0;i<count;++i)
-		{
-			cc2DLabel* label = static_cast<cc2DLabel*>(labels[i]);
-			if (label->isVisible() && label->size()==1)
-				pickedPoints.push_back(label);
-		}
+			if (labels[i]->isA(CC_2D_LABEL)) //Warning: cc2DViewportLabel is also a kind of 'CC_2D_LABEL'!
+			{
+				cc2DLabel* label = static_cast<cc2DLabel*>(labels[i]);
+				if (label->isVisible() && label->size()==1)
+					pickedPoints.push_back(label);
+			}
 	}
 
 	return (unsigned)pickedPoints.size();
@@ -192,15 +189,57 @@ void ccPointListPickingDlg::exportToNewCloud()
 		}
 		else
 		{
-			ccConsole::Error("Couldn't export picked points as point cloud: not enough memory!");
+			ccLog::Error("Couldn't export picked points as point cloud: not enough memory!");
 			delete cloud;
 			cloud=0;
 		}
 	}
 	else
 	{
-		ccConsole::Error("Pick some points first!");
+		ccLog::Error("Pick some points first!");
 	}
+}
+
+void ccPointListPickingDlg::exportToNewPolyline()
+{
+    if (!m_associatedCloud)
+        return;
+
+    //get all labels
+    std::vector<cc2DLabel*> labels;
+    unsigned count = getPickedPoints(labels);
+    if (count > 1)
+    {
+		//we create an "independent" polyline
+		ccPointCloud* vertices = new ccPointCloud("vertices");
+        ccPolyline* pline = new ccPolyline(m_associatedCloud);
+
+        if (!vertices->reserve(count) || !pline->reserve(count))
+        {
+            ccLog::Error("Not enough memory!");
+			delete vertices;
+            delete pline;
+            return;
+        }
+
+        for (unsigned i=0; i<count; ++i)
+        {
+            const cc2DLabel::PickedPoint& PP = labels[i]->getPoint(0);
+			vertices->addPoint(*PP.cloud->getPoint(PP.index));
+        }
+		pline->addPointIndex(0,count);
+		pline->setVisible(true);
+		vertices->setVisible(false);
+		pline->addChild(vertices);
+		pline->setDisplay_recursive(m_associatedCloud->getDisplay());
+        
+		MainWindow::TheInstance()->db()->addElement(pline,true);
+
+    }
+    else
+    {
+        ccLog::Error("Pick at least two points!");
+    }
 }
 
 void ccPointListPickingDlg::applyAndExit()
@@ -244,7 +283,7 @@ void ccPointListPickingDlg::removeLastEntry()
 	}
 	else
 	{
-		lastVisibleLabel->setFlagState(CC_FATHER_DEPENDANT,false);
+		lastVisibleLabel->setFlagState(CC_FATHER_DEPENDENT,false);
 		if (m_toBeAdded && m_toBeAdded->getChildrenNumber() != 0)
 		{
 			unsigned lastIndex = m_toBeAdded->getChildrenNumber()-1;
@@ -279,17 +318,17 @@ void ccPointListPickingDlg::startIndexChanged(int value)
 
 void ccPointListPickingDlg::markerSizeChanged(int size)
 {
-	if (size<1)
+	if (size<1 || !m_associatedWin)
 		return;
 
-	ccGui::ParamStruct guiParams = ccGui::Parameters();
+	//display parameters
+	ccGui::ParamStruct guiParams = m_associatedWin->getDisplayParameters();
 
 	if (guiParams.pickedPointsSize != (unsigned)size)
 	{
 		guiParams.pickedPointsSize = (unsigned)size;
-		ccGui::Set(guiParams);
-		if (m_associatedWin)
-			m_associatedWin->redraw();
+		m_associatedWin->setDisplayParameters(guiParams,m_associatedWin->hasOverridenDisplayParameters());
+		m_associatedWin->redraw();
 	}
 }
 
@@ -310,8 +349,8 @@ void ccPointListPickingDlg::exportToASCII(ExportFormat format)
 
 	//get all labels
 	std::vector<cc2DLabel*> labels;
-	unsigned i,count = getPickedPoints(labels);
-	if (count==0)
+	unsigned count = getPickedPoints(labels);
+	if (count == 0)
 		return;
 
 	QSettings settings;
@@ -334,14 +373,14 @@ void ccPointListPickingDlg::exportToASCII(ExportFormat format)
 	FILE* fp = fopen(qPrintable(filename),"wt");
 	if (!fp)
 	{
-		ccConsole::Error(QString("Failed to open file '%1' for saving!").arg(filename));
+		ccLog::Error(QString("Failed to open file '%1' for saving!").arg(filename));
 		return;
 	}
 
 	//starting index
 	int startIndex = startIndexSpinBox->value();
 
-	for (i=0;i<count;++i)
+	for (unsigned i=0; i<count; ++i)
 	{
 		const cc2DLabel::PickedPoint& PP = labels[i]->getPoint(0);
 		const CCVector3* P = PP.cloud->getPoint(PP.index);
@@ -358,7 +397,7 @@ void ccPointListPickingDlg::exportToASCII(ExportFormat format)
 
 	fclose(fp);
 
-	ccConsole::Print(QString("File '%1' successfully saved!").arg(filename));
+	ccLog::Print(QString("File '%1' successfully saved!").arg(filename));
 }
 
 void ccPointListPickingDlg::updateList()
@@ -378,9 +417,9 @@ void ccPointListPickingDlg::updateList()
 
 	//starting index
 	int startIndex = startIndexSpinBox->value();
-	int precision = ccGui::Parameters().displayedNumPrecision;
+	int precision = m_associatedWin ? m_associatedWin->getDisplayParameters().displayedNumPrecision : 6;
 
-	for (unsigned i=0;i<count;++i)
+	for (unsigned i=0; i<count; ++i)
 	{
 		const cc2DLabel::PickedPoint& PP = labels[i]->getPoint(0);
 		const CCVector3* P = PP.cloud->getPoint(PP.index);
@@ -392,7 +431,7 @@ void ccPointListPickingDlg::updateList()
 		//point absolute index (in cloud)
 		tableWidget->setItem(i,0,new QTableWidgetItem(QString("%1").arg(PP.index)));
 
-		for (unsigned j=0;j<3;++j)
+		for (unsigned j=0; j<3; ++j)
 			tableWidget->setItem(i,j+1,new QTableWidgetItem(QString("%1").arg(P->u[j],0,'f',precision)));
 	}
 
@@ -435,7 +474,7 @@ void ccPointListPickingDlg::processPickedPoint(ccPointCloud* cloud, unsigned poi
 	if (clipboard)
 	{
 		const CCVector3* P = cloud->getPoint(pointIndex);
-		int precision = ccGui::Parameters().displayedNumPrecision;
+		int precision = m_associatedWin ? m_associatedWin->getDisplayParameters().displayedNumPrecision : 6;
 		int indexInList = startIndexSpinBox->value()+(int)m_orderedLabelsContainer->getChildrenNumber()-1;
 		clipboard->setText(QString("CC_POINT_#%0(%1;%2;%3)").arg(indexInList).arg(P->x,0,'f',precision).arg(P->y,0,'f',precision).arg(P->z,0,'f',precision));
 	}

@@ -23,10 +23,11 @@
 
 //Qt
 #include <QString>
+#include <QVariant>
 
 //! Object state flag
 enum CC_OBJECT_FLAG {
-    CC_FATHER_DEPENDANT     =   1,
+    CC_FATHER_DEPENDENT     =   1,
     CC_ENABLED              =   2,
     CC_LOCKED               =   4,
 };
@@ -55,7 +56,7 @@ enum CC_OBJECT_FLAG {
 #define CC_DISH_BIT						0x00100000		//Dish (primitive)
 #define CC_EXTRU_BIT					0x00200000		//Extrusion (primitive)
 #define CC_KDTREE_BIT					0x00400000		//Kd-tree
-//#define CC_FREE_BIT					0x00800000
+#define CC_FACET_BIT					0x00800000		//Facet (composite object: cloud + 2D1/2 mesh + 2D1/2 polyline)
 #define CC_MATERIAL_BIT					0x01000000		//Material
 #define CC_CLIP_BOX_BIT					0x02000000		//Clipping box
 //#define CC_FREE_BIT					0x04000000
@@ -71,10 +72,12 @@ enum CC_CLASS_ENUM {
     CC_HIERARCHY_OBJECT     =   CC_HIERARCH_BIT,
     CC_POINT_CLOUD          =   CC_HIERARCHY_OBJECT | CC_CLOUD_BIT,
     CC_MESH                 =   CC_HIERARCHY_OBJECT | CC_MESH_BIT,
-    CC_MESH_GROUP           =   CC_MESH | CC_GROUP_BIT,
+    CC_SUB_MESH             =   CC_HIERARCHY_OBJECT | CC_MESH_BIT | CC_LEAF_BIT,
+    CC_MESH_GROUP           =   CC_MESH | CC_GROUP_BIT, //DEPRECATED, DEFINITION REMAINS FOR BACKWARD COMPATIBILITY ONLY!
+	CC_FACET				=   CC_HIERARCHY_OBJECT | CC_FACET_BIT,
     CC_POINT_OCTREE         =   CC_HIERARCHY_OBJECT | CC_OCTREE_BIT | CC_LEAF_BIT,
     CC_POINT_KDTREE         =   CC_HIERARCHY_OBJECT | CC_KDTREE_BIT | CC_LEAF_BIT,
-    CC_POLY_LINE            =   CC_HIERARCHY_OBJECT | CC_POLYLINE_BIT | CC_LEAF_BIT,
+    CC_POLY_LINE            =   CC_HIERARCHY_OBJECT | CC_POLYLINE_BIT,
     CC_IMAGE				=   CC_HIERARCH_BIT | CC_IMAGE_BIT,
     CC_CALIBRATED_IMAGE		=   CC_IMAGE  | CC_LEAF_BIT,
     CC_SENSOR				=   CC_HIERARCH_BIT | CC_SENSOR_BIT,
@@ -95,7 +98,7 @@ enum CC_CLASS_ENUM {
 	CC_RGB_COLOR_ARRAY		=	CC_ARRAY_BIT | CC_RGB_COLOR_BIT | CC_LEAF_BIT,
 	CC_TEX_COORDS_ARRAY		=	CC_ARRAY_BIT | CC_TEX_COORDS_BIT | CC_LEAF_BIT,
 	CC_2D_LABEL				=	CC_HIERARCHY_OBJECT | CC_LABEL_BIT | CC_LEAF_BIT,
-	CC_2D_VIEWPORT_OBJECT	=	CC_HIERARCH_BIT | CC_VIEWPORT_BIT | CC_LEAF_BIT,
+	CC_2D_VIEWPORT_OBJECT	=	CC_HIERARCHY_OBJECT | CC_VIEWPORT_BIT | CC_LEAF_BIT,
 	CC_2D_VIEWPORT_LABEL	=	CC_2D_VIEWPORT_OBJECT | CC_LABEL_BIT,
 	CC_CLIPPING_BOX			=	CC_CLIP_BOX_BIT | CC_LEAF_BIT,
 };
@@ -197,6 +200,27 @@ public:
 	**/
 	static bool ReadClassIDFromFile(unsigned& classID, QFile& in, short dataVersion);
 
+	//! Returns a given associated meta data
+	/** \param key meta data unique identifier (case sensitive!)
+		\return meta data (if any) or an invalid QVariant
+	**/
+	QVariant getMetaData(QString key) const;
+
+	//! Removes a given associated meta data
+	/** \param key meta data unique identifier (case sensitive!)
+		\return success
+	**/
+	bool removeMetaData(QString key);
+
+	//! Sets a meta data element
+	/** \param key meta data unique identifier (case sensitive!)
+		\param data data
+	**/
+	void setMetaData(QString key, QVariant& data);
+
+	//! Returns meta-data map (const only)
+	const QVariantMap& metaData() const { return m_metaData; }
+
 protected:
 
 	//inherited from ccSerializableObject
@@ -222,6 +246,9 @@ protected:
 
     //! Object flags
     unsigned m_flags;
+
+	//! Associated meta-data
+	QVariantMap m_metaData;
 
 private:
 

@@ -35,8 +35,13 @@
    v2.5 - 03/16/2013 - ccViewportParameters structure modified
    v2.6 - 04/03/2013 - strictly positive scalar field removed and 'hidden' values marker is now NaN
    v2.7 - 04/12/2013 - Customizable color scales
+   v2.8 - 07/12/2013 - Poylines are now supported
+   v2.9 - 08/14/2013 - ccMeshGroup removed, ccSubMesh added
+   v3.0 - 08/30/2013 - QObject's meta data structure added
+   v3.1 - 09/25/2013 - ccPolyline width added
+   v3.2 - 10/11/2013 - ccFacet (2D polygons) are now supported
 **/
-const unsigned c_currentDBVersion = 27; //2.7
+const unsigned c_currentDBVersion = 32; //3.2
 
 unsigned ccObject::GetCurrentDBVersion()
 {
@@ -160,6 +165,22 @@ bool ccObject::toFile(QFile& out) const
 	if (out.write((const char*)&flags,4)<0)
 		return WriteError();
 
+	//meta data (dataVersion>=30)
+	{
+		//count
+		uint32_t metaDataCount = (uint32_t)m_metaData.size();
+		if (out.write((const char*)&metaDataCount,4)<0)
+			return WriteError();
+
+		//"key + value" pairs
+		QDataStream outStream(&out);
+		for (QVariantMap::const_iterator it = m_metaData.begin(); it != m_metaData.end(); ++it)
+		{
+			outStream << it.key();
+			outStream << it.value();
+		}
+	}	
+
 	return true;
 }
 
@@ -175,6 +196,21 @@ bool ccObject::ReadClassIDFromFile(unsigned& classID, QFile& in, short dataVersi
 	classID = (unsigned)_classID;
 	
 	return true;
+}
+
+QVariant ccObject::getMetaData(QString key) const
+{
+	return m_metaData.value(key,QVariant());
+}
+
+bool ccObject::removeMetaData(QString key)
+{
+	return m_metaData.remove(key) != 0;
+}
+
+void ccObject::setMetaData(QString key, QVariant& data)
+{
+	m_metaData.insert(key,data);
 }
 
 bool ccObject::fromFile(QFile& in, short dataVersion)
@@ -217,6 +253,26 @@ bool ccObject::fromFile(QFile& in, short dataVersion)
 	if (in.read((char*)&flags,4)<0)
 		return ReadError();
 	m_flags = (unsigned)flags;
+
+	//meta data (dataVersion>=30)
+	if (dataVersion >= 30)
+	{
+		//count
+		uint32_t metaDataCount = 0;
+		if (in.read((char*)&metaDataCount,4)<0)
+			return ReadError();
+
+		//"key + value" pairs
+		for (uint32_t i=0; i<metaDataCount; ++i)
+		{
+			QDataStream inStream(&in);
+			QString key;
+			QVariant value;
+			inStream >> key;
+			inStream >> value;
+			setMetaData(key,value);
+		}
+	}	
 
 	return true;
 }

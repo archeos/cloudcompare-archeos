@@ -20,7 +20,6 @@
 //Local
 #include "PlyOpenDlg.h"
 #include "../ccCoordinatesShiftManager.h"
-#include "../ccConsole.h"
 
 //Qt
 #include <QProgressDialog>
@@ -33,6 +32,7 @@
 #include <ScalarField.h>
 
 //qCC_db
+#include <ccLog.h>
 #include <ccMesh.h>
 #include <ccPointCloud.h>
 #include <ccMaterial.h>
@@ -64,12 +64,12 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, const char* filename, e_p
     ccGenericMesh* mesh = NULL;
     if (entity->isKindOf(CC_MESH))
     {
-        mesh = static_cast<ccGenericMesh*>(entity);
+        mesh = ccHObjectCaster::ToGenericMesh(entity);
         vertices = mesh->getAssociatedCloud();
     }
     else if (entity->isKindOf(CC_POINT_CLOUD))
     {
-        vertices = static_cast<ccGenericPointCloud*>(entity);
+        vertices = ccHObjectCaster::ToGenericPointCloud(entity);
     }
 
     if (!vertices)
@@ -102,19 +102,21 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, const char* filename, e_p
 		//look for textures/materials in case there's no color
 		//if (!mesh->hasColors())
 		{
+			unsigned textureCount = 0;
 			const ccMaterialSet* materials = mesh->getMaterialSet();
 			assert(materials);
-
-			unsigned textureCount = 0;
-			for (size_t i=0; i < materials->size(); ++i)
+			if (materials)
 			{
-				//texture?
-				if (materials->at(i).texID != 0)
+				for (size_t i=0; i < materials->size(); ++i)
 				{
-					//save first encountered texture
-					if (!material)
-						material = &materials->at(i);
-					++textureCount;
+					//texture?
+					if (materials->at(i).texID != 0)
+					{
+						//save first encountered texture
+						if (!material)
+							material = &materials->at(i);
+						++textureCount;
+					}
 				}
 			}
 
@@ -125,7 +127,7 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, const char* filename, e_p
 				{
 					//just one texture/material --> we can handle it 
 				}
-				else /*if (materials->size() > 1)*/
+				else if (materials->size() > 1)
 				{
 					if (mesh->hasColors())
 					{
@@ -133,24 +135,41 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, const char* filename, e_p
 					}
 					else
 					{
-						if (QMessageBox::question(	0,
-													"Multiple materials, one texture",
-													"This mesh has only one texture but multiple materials. PLY files can only handle one texture.\nShall we drop the materials (yes) or convert all materials and texture to per-vertex RGB colors? (no)",
-													QMessageBox::Yes | QMessageBox::No,
-													QMessageBox::Yes) == QMessageBox::No)
+						if (mesh->isA(CC_MESH))
+						{
+							if (QMessageBox::question(	0,
+														"Multiple materials, one texture",
+														"This mesh has only one texture but multiple materials. PLY files can only handle one texture.\nShall we drop the materials (yes) or convert all materials and texture to per-vertex RGB colors? (no)",
+														QMessageBox::Yes | QMessageBox::No,
+														QMessageBox::Yes) == QMessageBox::No)
+							{
+								//we can forget the texture
+								material = 0;
+								//try to convert materials to RGB
+								if (!static_cast<ccMesh*>(mesh)->convertMaterialsToVertexColors())
+								{
+									ccLog::Error("Conversion failed! (not enough memory?)");
+								}
+							}
+						}
+						else if (mesh->isA(CC_SUB_MESH))
 						{
 							//we can forget the texture
 							material = 0;
-							//try to convert materials to RGB
-							if (!mesh->convertMaterialsToVertexColors())
-							{
-								ccLog::Error("Conversion failed! (not enough memory?)");
-							}
+							ccLog::Warning("This sub-mesh has one texture and multiple materials. As this is a sub-mesh, we will ignore them...  you should convert the parent mesh textures/materials to RGB colors first");
+						}
+						else
+						{
+							assert(false);
 						}
 					}
 				}
+				else
+				{
+					assert(false);
+				}
 			}
-			else //multiple materials
+			else if (textureCount > 1) //multiple materials
 			{
 				assert(materials->size() != 0);
 				//we can forget the (first) texture (if any)
@@ -162,17 +181,28 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, const char* filename, e_p
 				}
 				else
 				{
-					//we ask the user if he wants to convert them to RGB
-					if (QMessageBox::question(	0,
-												"Multiple textures/materials",
-												"PLY files can't handle multiple textures/materials!\nDo you want to convert them to per-vertex RGB colors?",
-												QMessageBox::Yes | QMessageBox::No,
-												QMessageBox::No ) == QMessageBox::Yes)
+					if (mesh->isA(CC_MESH))
 					{
-						if (!mesh->convertMaterialsToVertexColors())
+						//we ask the user if he wants to convert them to RGB
+						if (QMessageBox::question(	0,
+													"Multiple textures/materials",
+													"PLY files can't handle multiple textures/materials!\nDo you want to convert them to per-vertex RGB colors?",
+													QMessageBox::Yes | QMessageBox::No,
+													QMessageBox::No ) == QMessageBox::Yes)
 						{
-							ccLog::Error("Conversion failed! (not enough memory?)");
+							if (!static_cast<ccMesh*>(mesh)->convertMaterialsToVertexColors())
+							{
+								ccLog::Error("Conversion failed! (not enough memory?)");
+							}
 						}
+					}
+					else if (mesh->isA(CC_SUB_MESH))
+					{
+						ccLog::Warning("This sub-mesh has multiple textures/materials. PLY files can't handle them.\nAs this is a sub-mesh, we will have to ignore them... you should convert the parent mesh textures/materials to RGB colors first");
+					}
+					else
+					{
+						assert(false);
 					}
 				}
 			}
@@ -422,7 +452,7 @@ static int vertex_cb(p_ply_argument argument)
 			if (ccCoordinatesShiftManager::Handle(s_Point,0,s_AlwaysDisplayLoadDialog,s_ShiftAlreadyEnabled,s_Pshift,0,s_ShiftApplyAll))
 			{
 				cloud->setOriginalShift(s_Pshift[0],s_Pshift[1],s_Pshift[2]);
-				ccConsole::Warning("[PLYFilter::loadFile] Cloud (vertices) has been recentered! Translation: (%.2f,%.2f,%.2f)",s_Pshift[0],s_Pshift[1],s_Pshift[2]);
+				ccLog::Warning("[PLYFilter::loadFile] Cloud (vertices) has been recentered! Translation: (%.2f,%.2f,%.2f)",s_Pshift[0],s_Pshift[1],s_Pshift[2]);
 			}
 		}
 
@@ -663,7 +693,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 	if (!ply)
         return CC_FERR_READING;
 
-	ccConsole::PrintDebug("[PLY] Opening file '%s' ...",filename);
+	ccLog::PrintDebug("[PLY] Opening file '%s' ...",filename);
 
 	if (!ply_read_header(ply))
 	{
@@ -692,7 +722,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 		//display comments
 		while ((lastComment = ply_get_next_comment(ply, lastComment)))
 		{
-			ccConsole::Print("[PLY][Comment] %s",lastComment);
+			ccLog::Print("[PLY][Comment] %s",lastComment);
 
 			//specific case: TextureFile 'filename.ext'
 			if (QString(lastComment).toUpper().startsWith("TEXTUREFILE "))
@@ -726,7 +756,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 
 		if (lastElement.elementInstances == 0)
 		{
-			ccConsole::Warning("[PLY] Element '%s' was ignored as it has 0 instance!",lastElement.elementName);
+			ccLog::Warning("[PLY] Element '%s' was ignored as it has 0 instance!",lastElement.elementName);
 			continue;
 		}
 
@@ -767,7 +797,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
                     listProperties.push_back(prop);
                 else
                 {
-                    ccConsole::Warning("[PLY] Unhandled property: [%s:%s] (%s)",
+                    ccLog::Warning("[PLY] Unhandled property: [%s:%s] (%s)",
                                     lastElement.elementName,
                                     prop.propName,
                                     e_ply_type_names[prop.type]);
@@ -801,7 +831,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 	{
 		const char* lastObjInfo = NULL;
 		while ((lastObjInfo = ply_get_next_obj_info(ply, lastObjInfo)))
-			ccConsole::Print("[PLY][Info] %s",lastObjInfo);
+			ccLog::Print("[PLY][Info] %s",lastObjInfo);
 	}
 
     /****************/
@@ -1044,7 +1074,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 		{
             if ((long)numberOfPoints != pointElements[pp.elemIndex].elementInstances)
             {
-                ccConsole::Warning("[PLY] Bad/uncompatible assignation of point properties!");
+                ccLog::Warning("[PLY] Bad/uncompatible assignation of point properties!");
                 delete cloud;
                 ply_close(ply);
                 return CC_FERR_BAD_ENTITY_TYPE;
@@ -1067,7 +1097,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 		{
             if ((long)numberOfPoints != pointElements[pp.elemIndex].elementInstances)
             {
-                ccConsole::Warning("[PLY] Bad/uncompatible assignation of point properties!");
+                ccLog::Warning("[PLY] Bad/uncompatible assignation of point properties!");
                 delete cloud;
                 ply_close(ply);
                 return CC_FERR_BAD_ENTITY_TYPE;
@@ -1135,7 +1165,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 	{
         if (numberOfPoints != numberOfNormals)
         {
-            ccConsole::Warning("[PLY] The number of normals doesn't match the number of points!");
+            ccLog::Warning("[PLY] The number of normals doesn't match the number of points!");
             delete cloud;
             ply_close(ply);
             return CC_FERR_BAD_ENTITY_TYPE;
@@ -1200,8 +1230,8 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 	{
         if (numberOfColors>0)
         {
-            ccConsole::Error("Can't import colors AND intensity (intensities will be ignored)!");
-            ccConsole::Warning("[PLY] intensities will be ignored");
+            ccLog::Error("Can't import colors AND intensity (intensities will be ignored)!");
+            ccLog::Warning("[PLY] intensities will be ignored");
         }
         else
         {
@@ -1217,7 +1247,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
     {
         if (numberOfPoints != numberOfColors)
         {
-            ccConsole::Warning("The number of colors doesn't match the number of points!");
+            ccLog::Warning("The number of colors doesn't match the number of points!");
             delete cloud;
             ply_close(ply);
             return CC_FERR_BAD_ENTITY_TYPE;
@@ -1241,14 +1271,14 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 		//does the number of scalars matches the number of points?
 		if (numberOfPoints != numberOfScalars)
 		{
-            ccConsole::Error("The number of scalars doesn't match the number of points (they will be ignored)!");
-            ccConsole::Warning("[PLY] Scalar field ignored!");
+            ccLog::Error("The number of scalars doesn't match the number of points (they will be ignored)!");
+            ccLog::Warning("[PLY] Scalar field ignored!");
             numberOfScalars = 0;
         }
         else if (!cloud->enableScalarField())
         {
-            ccConsole::Error("Not enough memory to load scalar field (they will be ignored)!");
-            ccConsole::Warning("[PLY] Scalar field ignored!");
+            ccLog::Error("Not enough memory to load scalar field (they will be ignored)!");
+            ccLog::Warning("[PLY] Scalar field ignored!");
             numberOfScalars = 0;
         }
         else
@@ -1289,8 +1319,8 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 
         if (!mesh->reserve(numberOfFacets))
         {
-            ccConsole::Error("Not enough memory to load facets (they will be ignored)!");
-            ccConsole::Warning("[PLY] Mesh ignored!");
+            ccLog::Error("Not enough memory to load facets (they will be ignored)!");
+            ccLog::Warning("[PLY] Mesh ignored!");
             delete mesh;
             mesh = 0;
             numberOfFacets = 0;
@@ -1314,8 +1344,8 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 
         if (!texCoords->reserve(numberOfCoordinates*3))
         {
-            ccConsole::Error("Not enough memory to load texture coordinates (they will be ignored)!");
-            ccConsole::Warning("[PLY] Texture coordinates ignored!");
+            ccLog::Error("Not enough memory to load texture coordinates (they will be ignored)!");
+            ccLog::Warning("[PLY] Texture coordinates ignored!");
 			texCoords->release();
             texCoords = 0;
         }
@@ -1349,16 +1379,16 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
     if (mesh && mesh->size()==0)
     {
 		if (s_unsupportedPolygonType)
-			ccConsole::Error("Mesh is not triangular! (unsupported)");
+			ccLog::Error("Mesh is not triangular! (unsupported)");
 		else
-	        ccConsole::Error("Mesh is empty!");
+	        ccLog::Error("Mesh is empty!");
 		delete mesh;
 		mesh=0;
     }
 
 	if (texCoords && (s_invalidTexCoordinates || s_texCoordCount != 3*mesh->size()))
 	{
-		ccConsole::Error("Invalid texture coordinates! (they will be ignored)");
+		ccLog::Error("Invalid texture coordinates! (they will be ignored)");
 		texCoords->release();
 		texCoords=0;
 	}
@@ -1389,7 +1419,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 		if (s_triCount<numberOfFacets)
 		{
 			mesh->resize(s_triCount);
-			ccConsole::Warning("[PLY] Missing vertex indexes!");
+			ccLog::Warning("[PLY] Missing vertex indexes!");
 		}
 
 		//check that vertex indices start at 0
@@ -1449,7 +1479,7 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 				{
 					if (mesh->reservePerTriangleTexCoordIndexes() && mesh->reservePerTriangleMtlIndexes())
 					{
-						ccConsole::Print(QString("[PLY][Texture] Successfully loaded texture '%1' (%2x%3 pixels)").arg(textureFileName).arg(texture.width()).arg(texture.height()));
+						ccLog::Print(QString("[PLY][Texture] Successfully loaded texture '%1' (%2x%3 pixels)").arg(textureFileName).arg(texture.width()).arg(texture.height()));
 						//materials
 						ccMaterialSet* materials = new ccMaterialSet("materials");
 						ccMaterial material(textureFileName);
@@ -1470,17 +1500,17 @@ CC_FILE_ERROR PlyFilter::loadFile(const char* filename, ccHObject& container, bo
 					}
 					else
 					{
-						ccConsole::Warning("[PLY][Texture] Failed to reserve per-triangle texture coordinates! (not enough memory?)");
+						ccLog::Warning("[PLY][Texture] Failed to reserve per-triangle texture coordinates! (not enough memory?)");
 					}
 				}
 				else
 				{
-					ccConsole::Warning(QString("[PLY][Texture] Failed to load texture '%1'").arg(textureFilePath));
+					ccLog::Warning(QString("[PLY][Texture] Failed to load texture '%1'").arg(textureFilePath));
 				}
 			}
 			else
 			{
-				ccConsole::Warning("[PLY][Texture] Texture coordinates loaded without an associated image! (we look for the 'TextureFile' keyword in comments)");
+				ccLog::Warning("[PLY][Texture] Texture coordinates loaded without an associated image! (we look for the 'TextureFile' keyword in comments)");
 			}
 		}
 

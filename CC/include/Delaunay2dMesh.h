@@ -56,12 +56,16 @@ public:
 
 	//! Build the Delaunay mesh on top a set of 2D points
 	/** \param the2dPoints a set of 2D points
+		\param pointCountToUse number of points to use from the input set (0 = all)
+		\param forceInputPointsAsBorder if true, the input points are considered as ordered polyon vertices and 'outside' triangles will be removed
 		\return success
 	**/
-	virtual bool build(CC2DPointsContainer &the2dPoints);
+	virtual bool build(	const std::vector<CCVector2>& the2dPoints,
+						size_t pointCountToUse = 0,
+						bool forceInputPointsAsBorder = false);
 
 	//inherited methods (see GenericMesh)
-	virtual unsigned size() const {return numberOfTriangles;};
+	virtual unsigned size() const { return m_numberOfTriangles; }
 	virtual void forEach(genericTriangleAction& anAction);
 	virtual void getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[]);
 	virtual void placeIteratorAtBegining();
@@ -70,6 +74,17 @@ public:
 	virtual TriangleSummitsIndexes* getNextTriangleIndexes();
 	virtual TriangleSummitsIndexes* getTriangleIndexes(unsigned triangleIndex);
 	virtual void getTriangleSummits(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C);
+
+	//! Returns triangles indexes array (pointer to)
+	/** Handle with care!
+	**/
+	int* getTriangleIndexesArray() { return m_triIndexes; }
+
+	//! Filters out the triangles based on their edge length
+	/** Warning: may remove ALL triangles!
+		Check the resulting size afterwards.
+	**/
+	bool removeTrianglesLongerThan(PointCoordinateType maxEdgeLength);
 
 protected:
 
@@ -83,19 +98,19 @@ protected:
 	int* m_globalIterator;
 
 	//! End position of global iterator
-	int* globalIteratorEnd;
+	int* m_globalIteratorEnd;
 
 	//! The number of triangles
-	unsigned numberOfTriangles;
+	unsigned m_numberOfTriangles;
 
 	//! Specifies if the associated cloud should be deleted when the mesh is deleted
-	bool cloudIsOwnedByMesh;
+	bool m_cloudIsOwnedByMesh;
 
 	//! Dump triangle structure to transmit temporary data
-	SimpleTriangle dumpTriangle;
+	SimpleTriangle m_dumpTriangle;
 
 	//! Dump triangle index structure to transmit temporary data
-    TriangleSummitsIndexes dumpTriangleIndexes;
+    TriangleSummitsIndexes m_dumpTriangleIndexes;
 
 };
 

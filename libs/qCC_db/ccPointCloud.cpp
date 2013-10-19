@@ -31,7 +31,6 @@
 #include "ccKdTree.h"
 #include "ccGenericMesh.h"
 #include "ccMesh.h"
-#include "ccMeshGroup.h"
 #include "ccImage.h"
 #include "cc2DLabel.h"
 #include "ccGLUtils.h"
@@ -147,6 +146,7 @@ ccPointCloud* ccPointCloud::partialClone(const CCLib::ReferenceCloud* selection,
 
 	//visibility
 	result->setVisible(isVisible());
+	result->setDisplay(getDisplay());
 
 	//RGB colors
 	if (hasColors())
@@ -236,7 +236,7 @@ ccPointCloud* ccPointCloud::partialClone(const CCLib::ReferenceCloud* selection,
 			if (getCurrentDisplayedScalarField())
 			{
 				int sfIdx = result->getScalarFieldIndexByName(getCurrentDisplayedScalarField()->getName());
-				if (sfIdx)
+				if (sfIdx >= 0)
 					result->setCurrentDisplayedScalarField(sfIdx);
 				else
 					result->setCurrentDisplayedScalarField((int)copiedSFCount-1);
@@ -478,7 +478,7 @@ const ccPointCloud& ccPointCloud::append(ccPointCloud* addedCloud, unsigned poin
 		//first we fuse the new SF with the existing one
 		for (unsigned k=0;k<newSFCount;++k)
 		{
-			const CCLib::ScalarField* sf = addedCloud->getScalarField((int)k);
+			const ccScalarField* sf = static_cast<ccScalarField*>(addedCloud->getScalarField((int)k));
 			if (sf)
 			{
 				//does this field already exist (same name)?
@@ -507,6 +507,17 @@ const ccPointCloud& ccPointCloud::append(ccPointCloud* addedCloud, unsigned poin
 						for (unsigned i=0; i<addedPoints; i++)
 							newSF->setValue(pointCountBefore+i,sf->getValue(i));
 						newSF->computeMinAndMax();
+						//copy color ramp parameters
+						newSF->setColorRampSteps(sf->getColorRampSteps());
+						newSF->setColorScale(sf->getColorScale());
+						newSF->showNaNValuesInGrey(sf->areNaNValuesShownInGrey());
+						newSF->setLogScale(sf->logScale());
+						newSF->setSymmetricalScale(sf->symmetricalScale());
+						newSF->alwaysShowZero(sf->isZeroAlwaysShown());
+						newSF->setMinDisplayed(sf->displayRange().start());
+						newSF->setMaxDisplayed(sf->displayRange().stop());
+						newSF->setSaturationStart(sf->saturationRange().start());
+						newSF->setSaturationStop(sf->saturationRange().stop());
 
 						//add scalar field to this cloud
 						sfIdx = addScalarField(newSF);
@@ -572,21 +583,21 @@ const ccPointCloud& ccPointCloud::append(ccPointCloud* addedCloud, unsigned poin
 		ccLog::Warning(QString("[ccPointCloud::fusion] Global shift information for cloud '%1' will be lost!").arg(addedCloud->getName()));
 
 	//children (not yet reserved)
-	unsigned c,childrenCount = addedCloud->getChildrenNumber();
-	for (c=0;c<childrenCount;++c)
+	unsigned childrenCount = addedCloud->getChildrenNumber();
+	for (unsigned c=0; c<childrenCount; ++c)
 	{
 		ccHObject* child = addedCloud->getChild(c);
-		if (child->isKindOf(CC_MESH)) //mesh
+		if (child->isA(CC_MESH)) //mesh --> FIXME: what for the other types of MESH?
 		{
-			ccGenericMesh* mesh = static_cast<ccGenericMesh*>(child);
+			ccMesh* mesh = static_cast<ccMesh*>(child);
 
 			//detach from father?
-			//mesh->setFlagState(CC_FATHER_DEPENDANT,false);
+			//mesh->setFlagState(CC_FATHER_DEPENDENT,false);
 			//addedCloud->removeChild(mesh);
 			//ccGenericMesh* addedTri = mesh;
 
 			//or clone?
-			ccGenericMesh* cloneMesh = mesh->clone(mesh->getAssociatedCloud()==addedCloud ? this : 0);
+			ccMesh* cloneMesh = mesh->clone(mesh->getAssociatedCloud()==addedCloud ? this : 0);
 			if (cloneMesh)
 			{
 				//change mesh vertices
@@ -604,7 +615,7 @@ const ccPointCloud& ccPointCloud::append(ccPointCloud* addedCloud, unsigned poin
 			//ccImage* image = static_cast<ccImage*>(child);
 
 			//DGM FIXME: take image ownership! (dirty)
-			child->setFlagState(CC_FATHER_DEPENDANT,false);
+			child->setFlagState(CC_FATHER_DEPENDENT,false);
 			addedCloud->removeChild(child);
 			addChild(child,true);
 		}
@@ -830,7 +841,7 @@ void ccPointCloud::showSFColorsScale(bool state)
 
 bool ccPointCloud::sfColorScaleShown() const
 {
-	return m_sfColorScaleDisplayed && sfShown();
+	return m_sfColorScaleDisplayed;
 }
 
 const colorType* ccPointCloud::getPointScalarValueColor(unsigned pointIndex) const
@@ -1119,8 +1130,8 @@ void ccPointCloud::applyGLTransformation(const ccGLMatrix& trans)
 
 void ccPointCloud::applyRigidTransformation(const ccGLMatrix& trans)
 {
-	unsigned i,count=size();
-	for (i=0;i<count;i++)
+	unsigned count = size();
+	for (unsigned i=0; i<count; i++)
 		trans.apply(*point(i));
 
 	//we must also take care of the normals!
@@ -1135,7 +1146,7 @@ void ccPointCloud::applyRigidTransformation(const ccGLMatrix& trans)
 			NormsIndexesTableType* newNorms = new NormsIndexesTableType;
 			if (newNorms->reserve(ccNormalVectors::GetNumberOfVectors()))
 			{
-				for (i=0;i<ccNormalVectors::GetNumberOfVectors();i++)
+				for (unsigned i=0; i<ccNormalVectors::GetNumberOfVectors(); i++)
 				{
 					CCVector3 new_n(ccNormalVectors::GetNormal(i));
 					trans.applyRotation(new_n);
@@ -1144,9 +1155,9 @@ void ccPointCloud::applyRigidTransformation(const ccGLMatrix& trans)
 				}
 
 				m_normals->placeIteratorAtBegining();
-				for (i=0;i<count;i++)
+				for (unsigned j=0; j<count; j++)
 				{
-					m_normals->setValue(i,newNorms->getValue(m_normals->getCurrentValue()));
+					m_normals->setValue(j,newNorms->getValue(m_normals->getCurrentValue()));
 					m_normals->forwardIterator();
 				}
 				recoded=true;
@@ -1163,7 +1174,7 @@ void ccPointCloud::applyRigidTransformation(const ccGLMatrix& trans)
 		{
 			//on recode direct chaque normale
 			m_normals->placeIteratorAtBegining();
-			for (i=0;i<count;i++)
+			for (unsigned i=0; i<count; i++)
 			{
 				normsType* _theNormIndex = m_normals->getCurrentValuePtr();
 				CCVector3 new_n(ccNormalVectors::GetNormal(*_theNormIndex));
@@ -1928,7 +1939,7 @@ void ccPointCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 	{
 		if (MACRO_Foreground(context) && !context.sfColorScaleToDisplay)
 		{
-			if (sfColorScaleShown())
+			if (sfColorScaleShown() && sfShown())
 			{
 				//drawScale(context);
 				addColorRampInfo(context);
@@ -2081,7 +2092,7 @@ void ccPointCloud::setCurrentDisplayedScalarField(int index)
 
 void ccPointCloud::deleteScalarField(int index)
 {
-	//we 'store' the currently displayed SF, as the SF order maybe mixed up
+	//we 'store' the currently displayed SF, as the SF order may be mixed up
 	setCurrentInScalarField(m_currentDisplayedScalarFieldIndex);
 
 	//the father does all the work

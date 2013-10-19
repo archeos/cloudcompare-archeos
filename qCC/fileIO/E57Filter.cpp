@@ -32,6 +32,7 @@
 #include <ScalarField.h>
 
 //qCC_db
+#include <ccLog.h>
 #include <ccPointCloud.h>
 #include <ccProgressDialog.h>
 #include <ccImage.h>
@@ -236,17 +237,17 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 			assert(sf->getMin() >= 0);
 			{
 				//get min and max index
-				ScalarType minIndex = sf->getMin();
-				ScalarType maxIndex = sf->getMax();
+				double minIndex = static_cast<double>(sf->getMin());
+				double maxIndex = static_cast<double>(sf->getMax());
 
-				ScalarType intMin,intMax;
-				ScalarType fracMin = modf(minIndex,&intMin);
-				ScalarType fracMax = modf(maxIndex,&intMax);
+				double intMin,intMax;
+				double fracMin = modf(minIndex,&intMin);
+				double fracMax = modf(maxIndex,&intMax);
 
-				if (fracMin == 0 && fracMax == 0 && (int)(intMax-intMin)<256)
+				if (fracMin == 0 && fracMax == 0 && static_cast<int>(intMax-intMin) < 256)
 				{
-					int minScanIndex = (int)intMin;
-					int maxScanIndex = (int)intMax;
+					int minScanIndex = static_cast<int>(intMin);
+					int maxScanIndex = static_cast<int>(intMax);
 					
 					minReturnIndex = minScanIndex;
 					maxReturnIndex = maxScanIndex;
@@ -1658,7 +1659,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 				if (ccCoordinatesShiftManager::Handle(Pd,0,s_alwaysDisplayLoadDialog,s_coordinatesShiftEnabled,s_coordinatesShift,0,applyAll))
 				{
 					cloud->setOriginalShift(s_coordinatesShift[0],s_coordinatesShift[1],s_coordinatesShift[2]);
-					ccConsole::Warning("[E57Filter::loadFile] Cloud %s has been recentered! Translation: (%.2f,%.2f,%.2f)",qPrintable(guidStr),s_coordinatesShift[0],s_coordinatesShift[1],s_coordinatesShift[2]);
+					ccLog::Warning("[E57Filter::loadFile] Cloud %s has been recentered! Translation: (%.2f,%.2f,%.2f)",qPrintable(guidStr),s_coordinatesShift[0],s_coordinatesShift[1],s_coordinatesShift[2]);
 					if (applyAll)
 						s_coordinatesShiftEnabled = true;
 				}

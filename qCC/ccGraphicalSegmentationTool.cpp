@@ -19,13 +19,13 @@
 
 //Local
 #include "ccGLWindow.h"
-#include "ccConsole.h"
 
 //CCLib
 #include <ManualSegmentationTools.h>
 #include <Matrix.h>
 
 //qCC_db
+#include <ccLog.h>
 #include <ccPolyline.h>
 #include <ccGenericPointCloud.h>
 #include <ccPointCloud.h>
@@ -46,7 +46,7 @@ ccGraphicalSegmentationTool::ccGraphicalSegmentationTool(QWidget* parent)
 	, m_segmentationPoly(0)
 	, m_polyVertices(0)
 	, m_rectangularSelection(false)
-	, m_deleteHiddenPoints(false)
+	, m_deleteHiddenParts(false)
 {
     // Set QDialog background as transparent (DGM: doesn't work over an OpenGL context)
     //setAttribute(Qt::WA_NoSystemBackground);
@@ -131,7 +131,7 @@ bool ccGraphicalSegmentationTool::start()
 
     if (!m_associatedWin)
     {
-        ccConsole::Warning("[Graphical Segmentation Tool] No associated window!");
+        ccLog::Warning("[Graphical Segmentation Tool] No associated window!");
         return false;
     }
 
@@ -155,21 +155,18 @@ void ccGraphicalSegmentationTool::removeAllEntities(bool unallocateVisibilityArr
 {
 	if (unallocateVisibilityArrays)
 	{
-		while (!m_toSegment.empty())
+		for (std::set<ccHObject*>::iterator p = m_toSegment.begin(); p != m_toSegment.end(); ++p)
 		{
-			ccHObject* entity = m_toSegment.back();
-			m_toSegment.pop_back();
+			ccHObject* entity = *p;
 
 			if (entity->isKindOf(CC_POINT_CLOUD))
-				static_cast<ccGenericPointCloud*>(entity)->unallocateVisibilityArray();
+				ccHObjectCaster::ToGenericPointCloud(entity)->unallocateVisibilityArray();
 			else if (entity->isKindOf(CC_MESH))
-				static_cast<ccGenericMesh*>(entity)->getAssociatedCloud()->unallocateVisibilityArray();
+				ccHObjectCaster::ToGenericMesh(entity)->getAssociatedCloud()->unallocateVisibilityArray();
 		}
 	}
-	else
-	{
-		m_toSegment.clear();
-	}
+
+	m_toSegment.clear();
 }
 
 void ccGraphicalSegmentationTool::stop(bool accepted)
@@ -197,12 +194,12 @@ void ccGraphicalSegmentationTool::reset()
 {
     if (m_somethingHasChanged)
     {
-        for (ccHObject::Container::iterator p=m_toSegment.begin(); p!=m_toSegment.end(); ++p)
+        for (std::set<ccHObject*>::iterator p = m_toSegment.begin(); p != m_toSegment.end(); ++p)
         {
             if ((*p)->isKindOf(CC_POINT_CLOUD))
-                static_cast<ccGenericPointCloud*>(*p)->razVisibilityArray();
+                ccHObjectCaster::ToGenericPointCloud(*p)->razVisibilityArray();
             else if ((*p)->isKindOf(CC_MESH))
-                static_cast<ccGenericMesh*>(*p)->getAssociatedCloud()->razVisibilityArray();
+                ccHObjectCaster::ToGenericMesh(*p)->getAssociatedCloud()->razVisibilityArray();
         }
 
         if (m_associatedWin)
@@ -219,28 +216,48 @@ bool ccGraphicalSegmentationTool::addEntity(ccHObject* anObject)
 {
     //FIXME
     /*if (anObject->isLocked())
-        ccConsole::Warning(QString("Can't use entity [%1] cause it's locked!").arg(anObject->getName()));
+        ccLog::Warning(QString("Can't use entity [%1] cause it's locked!").arg(anObject->getName()));
     else */
     if (anObject->getDisplay() != m_associatedWin)
     {
-        ccConsole::Warning(QString("[Graphical Segmentation Tool] Can't use entity [%1] cause it's not displayed in the active 3D view!").arg(anObject->getName()));
+        ccLog::Warning(QString("[Graphical Segmentation Tool] Can't use entity [%1] cause it's not displayed in the active 3D view!").arg(anObject->getName()));
 		return false;
+    }
+	if (!anObject->isVisible() || !anObject->isBranchEnabled())
+    {
+        ccLog::Warning(QString("[Graphical Segmentation Tool] Entity [%1] is not visible in the active 3D view!").arg(anObject->getName()));
     }
 
 	bool result = false;
 	if (anObject->isKindOf(CC_POINT_CLOUD))
 	{
-		ccGenericPointCloud* cloud = static_cast<ccGenericPointCloud*>(anObject);
-		//detect vertices
-		if (cloud->getParent() && cloud->getParent()->isKindOf(CC_MESH) && static_cast<ccGenericMesh*>(cloud->getParent())->getAssociatedCloud() == cloud)
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(anObject);
+		//detect if this cloud is in fact a vertex set for at least one mesh
 		{
-			ccConsole::Warning(QString("[Graphical Segmentation Tool] Can't segment mesh vertices '%1' directly! Select its parent mesh instead!").arg(anObject->getName()));
-			return false;
+			//either the cloud is the child of its parent mesh
+			if (cloud->getParent() && cloud->getParent()->isKindOf(CC_MESH) && ccHObjectCaster::ToGenericMesh(cloud->getParent())->getAssociatedCloud() == cloud)
+			{
+				ccLog::Warning(QString("[Graphical Segmentation Tool] Can't segment mesh vertices '%1' directly! Select its parent mesh instead!").arg(anObject->getName()));
+				return false;
+			}
+			//or the parent of its child mesh!
+			ccHObject::Container meshes;
+			if (cloud->filterChildren(meshes,false,CC_MESH) != 0)
+			{
+				for (unsigned i=0; i<meshes.size(); ++i)
+					if (ccHObjectCaster::ToGenericMesh(meshes[i])->getAssociatedCloud() == cloud)
+					{
+						ccLog::Warning(QString("[Graphical Segmentation Tool] Can't segment mesh vertices '%1' directly! Select its child mesh instead!").arg(anObject->getName()));
+						return false;
+					}
+			}
 		}
-		cloud->razVisibilityArray();
-		m_toSegment.push_back(cloud);
 
-		for (unsigned i=0;i<anObject->getChildrenNumber();++i)
+		cloud->razVisibilityArray();
+		m_toSegment.insert(cloud);
+
+		//automatically add cloud's children
+		for (unsigned i=0; i<anObject->getChildrenNumber(); ++i)
 			result |= addEntity(anObject->getChild(i));
 	}
 	else if (anObject->isKindOf(CC_MESH))
@@ -248,17 +265,38 @@ bool ccGraphicalSegmentationTool::addEntity(ccHObject* anObject)
 		if (anObject->isKindOf(CC_PRIMITIVE))
 		{
 			ccLog::Warning("[ccGraphicalSegmentationTool] Can't segment primitives yet! Sorry...");
+			return false;
 		}
 		else
 		{
-			ccGenericMesh* mesh = static_cast<ccGenericMesh*>(anObject);
+			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(anObject);
+
+			//first, we must check that there's no mesh and at least one of its sub-mesh mixed in the current selection!
+			for (std::set<ccHObject*>::iterator p = m_toSegment.begin(); p != m_toSegment.end(); ++p)
+			{
+				if ((*p)->isKindOf(CC_MESH))
+				{
+					ccGenericMesh* otherMesh = ccHObjectCaster::ToGenericMesh(*p);
+					if (otherMesh->getAssociatedCloud() == mesh->getAssociatedCloud())
+					{
+						if (otherMesh->isA(CC_SUB_MESH) && mesh->isA(CC_MESH)
+							|| otherMesh->isA(CC_MESH) && mesh->isA(CC_SUB_MESH))
+						{
+							ccLog::Warning("[Graphical Segmentation Tool] Can't mix sub-meshes with their parent mesh!");
+							return false;
+						}
+					}
+				}
+			}
+
 			mesh->getAssociatedCloud()->razVisibilityArray();
-			m_toSegment.push_back(mesh);
+			m_toSegment.insert(mesh);
 			result = true;
 		}
 	}
 	else
 	{
+		//automatically add entity's children
 		for (unsigned i=0;i<anObject->getChildrenNumber();++i)
 			result |= addEntity(anObject->getChild(i));
 	}
@@ -269,11 +307,6 @@ bool ccGraphicalSegmentationTool::addEntity(ccHObject* anObject)
 unsigned ccGraphicalSegmentationTool::getNumberOfValidEntities()
 {
     return (unsigned)m_toSegment.size();
-}
-
-ccHObject* ccGraphicalSegmentationTool::getEntity(unsigned pos)
-{
-	return (pos<m_toSegment.size() ? m_toSegment[pos] : 0);
 }
 
 void ccGraphicalSegmentationTool::updatePolyLine(int x, int y, Qt::MouseButtons buttons)
@@ -312,7 +345,7 @@ void ccGraphicalSegmentationTool::updatePolyLine(int x, int y, Qt::MouseButtons 
 				ccLog::Error("Out of memory!");
 				return;
 			}
-			m_segmentationPoly->setClosingState(true);
+			m_segmentationPoly->setClosed(true);
 		}
 	}
 	else if (m_state & POLYLINE)
@@ -391,7 +424,7 @@ void ccGraphicalSegmentationTool::addPointToPolyline(int x, int y)
 				ccLog::Error("Out of memory!");
 				return;
 			}
-			m_segmentationPoly->setClosingState(true);
+			m_segmentationPoly->setClosed(true);
 		}
 		else //we must change mode
 		{
@@ -447,7 +480,7 @@ void ccGraphicalSegmentationTool::closePolyLine(int, int)
 	{
 		//remove last point!
 		m_segmentationPoly->resize(sz-1); //can't fail --> smaller
-		m_segmentationPoly->setClosingState(true);
+		m_segmentationPoly->setClosed(true);
 	}
 
 	//stop
@@ -474,13 +507,13 @@ void ccGraphicalSegmentationTool::segment(bool keepPointsInside)
 
     if (!m_segmentationPoly)
     {
-        ccConsole::Error("No polyline defined!");
+        ccLog::Error("No polyline defined!");
         return;
     }
 
-    if (!m_segmentationPoly->getClosingState())
+    if (!m_segmentationPoly->isClosed())
     {
-        ccConsole::Error("Define and/or close the segmentation border first! (right click to close)");
+        ccLog::Error("Define and/or close the segmentation border first! (right click to close)");
         return;
     }
 
@@ -494,7 +527,7 @@ void ccGraphicalSegmentationTool::segment(bool keepPointsInside)
 	m_associatedWin->getViewportArray(VP);
 
     //for each selected entity
-    for (ccHObject::Container::iterator p=m_toSegment.begin();p!=m_toSegment.end();++p)
+    for (std::set<ccHObject*>::iterator p = m_toSegment.begin(); p != m_toSegment.end(); ++p)
     {
         ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(*p);
         assert(cloud);
@@ -576,7 +609,7 @@ void ccGraphicalSegmentationTool::doSetPolylineSelection()
 	if (!m_rectangularSelection)
 		return;
 
-	QIcon icon(QString::fromUtf8(":/CC/images/ccPolygonSelect.png"));
+	QIcon icon(QString::fromUtf8(":/CC/images/smallPolygonSelect.png"));
 	selectionModelButton->setIcon(icon);
 
 	m_rectangularSelection=false;
@@ -596,7 +629,7 @@ void ccGraphicalSegmentationTool::doSetRectangularSelection()
 	if (m_rectangularSelection)
 		return;
 
-	QIcon icon(QString::fromUtf8(":/CC/images/ccRectangleSelect.png"));
+	QIcon icon(QString::fromUtf8(":/CC/images/smallRectangleSelect.png"));
 	selectionModelButton->setIcon(icon);
 
 	m_rectangularSelection=true;
@@ -613,19 +646,19 @@ void ccGraphicalSegmentationTool::doSetRectangularSelection()
 
 void ccGraphicalSegmentationTool::apply()
 {
-	m_deleteHiddenPoints = false;
+	m_deleteHiddenParts = false;
 	stop(true);
 }
 
 void ccGraphicalSegmentationTool::applyAndDelete()
 {
-	m_deleteHiddenPoints = true;
+	m_deleteHiddenParts = true;
 	stop(true);
 }
 
 void ccGraphicalSegmentationTool::cancel()
 {
 	reset();
-	m_deleteHiddenPoints = false;
+	m_deleteHiddenParts = false;
 	stop(false);
 }

@@ -24,6 +24,9 @@
 
 #include "Mouse3DParameters.h"
 
+//qCC_db
+#include <ccPlatform.h>
+
 //Qt
 #include <QWidget>
 
@@ -31,7 +34,7 @@
 #include <vector>
 #include <map>
 
-#if defined(_WIN32) || defined(WIN32)
+#ifdef CC_WINDOWS
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0501  //target at least windows XP
@@ -149,7 +152,7 @@ protected:
 	{
 	public:
 		
-		InputData() : axes(6) {}
+		InputData() : timeToLive(0), isDirty(false), axes(6) {}
 
 		bool isZero() const { return (0.0f == axes[0] &&
 										0.0f == axes[1] &&
@@ -180,6 +183,6 @@ protected:
 
 };
 
-#endif //defined(_WIN32) || defined(WIN32)
+#endif //defined(CC_WINDOWS)
 
 #endif //MOUSE_3D_INPUT_HEADER

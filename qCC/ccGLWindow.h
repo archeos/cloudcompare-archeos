@@ -30,8 +30,10 @@
 
 //qCC
 #include "ccCommon.h"
+#include "ccGuiParameters.h"
 
 //Qt
+#include <QGLWidget>
 #include <QFont>
 
 //system
@@ -73,6 +75,7 @@ public:
 	enum INTERACTION_MODE { TRANSFORM_CAMERA,
 							TRANSFORM_ENTITY,
 							SEGMENT_ENTITY,
+							PAN_ONLY,
 	};
 
 	//! Default message positions on screen
@@ -114,11 +117,11 @@ public:
     virtual void invalidateViewport();
     virtual unsigned getTexture(const QImage& image);
     virtual void releaseTexture(unsigned texID);
-	virtual void display3DLabel(const QString& str, const CCVector3& pos3D, const unsigned char* rgbColor=0, const QFont& font=QFont());
+	virtual void display3DLabel(const QString& str, const CCVector3& pos3D, const unsigned char* rgbColor = 0, const QFont& font = QFont());
 	virtual bool supportOpenGLVersion(unsigned openGLVersionFlag);
-    virtual void displayText(QString text, int x, int y, unsigned char align=ALIGN_DEFAULT, unsigned char bkgAlpha=0, const unsigned char* rgbColor=0, const QFont* font=0);
-	virtual const QFont& getTextDisplayFont() {return m_font;}
-	virtual const ccViewportParameters& getViewportParameters() const { return m_params; }
+    virtual void displayText(QString text, int x, int y, unsigned char align = ALIGN_DEFAULT, unsigned char bkgAlpha = 0, const unsigned char* rgbColor = 0, const QFont* font = 0);
+	virtual QFont getTextDisplayFont() const; //takes rendering zoom into account!
+	virtual const ccViewportParameters& getViewportParameters() const { return m_viewportParams; }
 
     //! Displays a status message in the bottom-left corner
     /** WARNING: currently, 'append' is not supported for SCREEN_CENTER_MESSAGE
@@ -279,8 +282,6 @@ public:
 
 	//! Returns current font size
     virtual int getFontPointSize() const;
-	//! Sets current font size
-    virtual void setFontPointSize(int pixelSize);
 
 	//! Returns window own DB (2D objects only)
     virtual ccHObject* getOwnDB();
@@ -305,7 +306,11 @@ public:
 	**/
     virtual void invalidateVisualization();
 
-    virtual bool renderToFile(const char* filename, float zoomFactor=1.0, bool dontScaleFeatures=false);
+	//! Renders screen to a file
+    virtual bool renderToFile(	const char* filename,
+								float zoomFactor = 1.0,
+								bool dontScaleFeatures = false,
+								bool renderOverlayItems = false);
 
     virtual void setShader(ccShader* shader);
     virtual void setGlFilter(ccGlFilter* filter);
@@ -345,14 +350,44 @@ public:
 	**/
 	CCVector3 getCurrentUpDir() const;
 
+	//! Returns current parameters for this display (const version)
+	/** Warning: may return overriden parameters!
+	**/
+	const ccGui::ParamStruct& getDisplayParameters() const;
+
+	//! Sets current parameters for this display
+	void setDisplayParameters(const ccGui::ParamStruct& params, bool thisWindowOnly = false)
+	{
+		if (thisWindowOnly)
+		{
+			m_overridenDisplayParametersEnabled = true;
+			m_overridenDisplayParameters = params;
+		}
+		else
+		{
+			m_overridenDisplayParametersEnabled = false;
+			ccGui::Set(params);
+		}
+	}
+
+	//! Whether display parameters are overidden for this window
+	bool hasOverridenDisplayParameters() const { return m_overridenDisplayParametersEnabled; }
+
+	//! Sets whether overlay entities (scale, tetrahedron, etc.) should be displayed or not
+	void displayOverlayEntities(bool state) { m_displayOverlayEntities = state; }
+
+	//! Returns whether overlay entities (scale, tetrahedron, etc.) are displayed or not
+	bool overlayEntitiesAreDisplayed() const { return m_displayOverlayEntities; }
+
 public slots:
+
     void zoomGlobal();
     void testFrameRate();
 
 	//inherited from ccGenericGLDisplay
     virtual void redraw();
 
-	//called when recieving muse wheel is rotated
+	//called when recieving mouse wheel is rotated
 	void onWheelEvent(float wheelDelta_deg);
 
 signals:
@@ -436,6 +471,12 @@ signals:
 	void newLabel(ccHObject* obj);
 
 protected:
+
+	//! Sets current font size
+	/** Warning: only used internally.
+		Change 'defaultFontSize' with setDisplayParameters instead!
+	**/
+    void setFontPointSize(int pixelSize);
 
     //events handling
     void mousePressEvent(QMouseEvent *event);
@@ -553,7 +594,7 @@ protected:
 	GLuint m_pivotGLList;
 
 	//! Viewport parameters (zoom, etc.)
-	ccViewportParameters m_params;
+	ccViewportParameters m_viewportParams;
 
     //! Last mouse position
     QPoint m_lastMousePos;
@@ -589,10 +630,23 @@ protected:
 	//! Current picking mode
 	PICKING_MODE m_pickingMode;
 
-	//! Display capturing mode
-    bool m_captureMode;
-	//! Display capturing mode zoom factor
-	float m_captureModeZoomFactor;
+	//! Display capturing mode options
+	struct CaptureModeOptions
+	{
+		bool enabled;
+		float zoomFactor;
+		bool renderOverlayItems;
+
+		//! Default constructor
+		CaptureModeOptions()
+			: enabled(false)
+			, zoomFactor(1.0f)
+			, renderOverlayItems(false)
+		{}
+	};
+
+	//! Display capturing mode options
+    CaptureModeOptions m_captureMode;
 
     //! Temporary Message to display in the lower-left corner
 	struct MessageToDisplay
@@ -676,6 +730,15 @@ protected:
 
 	//! Rectangular picking polyline
 	ccPolyline* m_rectPickingPoly;
+
+	//! Overriden display parameter 
+	ccGui::ParamStruct m_overridenDisplayParameters;
+
+	//! Whether display parameters are overidden for this window
+	bool m_overridenDisplayParametersEnabled;
+
+	//! Whether to display overlay entities or not (scale, tetrahedron, etc.)
+	bool m_displayOverlayEntities;
 
 private:
 

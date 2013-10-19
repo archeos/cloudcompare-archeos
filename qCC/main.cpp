@@ -22,6 +22,7 @@
 #include <QSplashScreen>
 #include <QPixmap>
 #include <QMessageBox>
+#include <QLocale>
 
 #ifdef Q_OS_MAC
 #include <QFileOpenEvent>
