@@ -49,6 +49,8 @@ ccSSAOFilter::ccSSAOFilter() : ccGlFilter("Screen Space Ambient Occlusion")
     bilateralGSize			=	5;
     bilateralGSigma			=	1.0f;
     bilateralGSigmaZ		=	0.4f;
+    
+    memset(ssao_neighbours, 0, sizeof(float) * 3*SSAO_MAX_N);
 }
 
 ccSSAOFilter::~ccSSAOFilter()
@@ -92,7 +94,7 @@ bool ccSSAOFilter::init(int width,
         fbo	= new ccFrameBufferObject();
     if (!fbo->init(width,height))
     {
-        //ccConsole::Warning("[SSAO] FrameBufferObject initialization failed!");
+        //ccLog::Warning("[SSAO] FrameBufferObject initialization failed!");
         reset();
         return false;
     }
@@ -103,7 +105,7 @@ bool ccSSAOFilter::init(int width,
         shader = new ccShader();
         if (!shader->fromFile(shadersPath,"SSAO/ssao"))
         {
-            //ccConsole::Warning("[SSAO] Can't load SSAO program!");
+            //ccLog::Warning("[SSAO] Can't load SSAO program!");
             reset();
             return false;
         }
@@ -157,7 +159,7 @@ void ccSSAOFilter::sampleSphere()
     // Initialize the sobol QRNG
     if ((rc = rk_sobol_init(3, &s, NULL, rk_sobol_Ldirections, NULL)))
     {
-        //ccConsole::Error("RandomKit (Sobol) initialization error: %s\n", rk_sobol_strerror[rc]);
+        //ccLog::Error("RandomKit (Sobol) initialization error: %s\n", rk_sobol_strerror[rc]);
         return;
     }
     rk_sobol_randomshift(&s, NULL);
@@ -187,7 +189,7 @@ void ccSSAOFilter::shade(GLuint texDepth, GLuint texColor, float zoom)
 {
     if (!fbo || !shader)
     {
-        //ccConsole::Warning("[ccSSAOFilter::shade] Internal error: structures not initialized!");
+        //ccLog::Warning("[ccSSAOFilter::shade] Internal error: structures not initialized!");
         return;
     }
 
@@ -280,7 +282,7 @@ void ccSSAOFilter::setParameters(int _N, float _Kz, float _R, float _F)
 
 double frand()
 {
-    return (double)rand()/(double)RAND_MAX;
+    return static_cast<double>(rand())/static_cast<double>(RAND_MAX);
 }
 
 void randomPointInSphere(double& vx, double& vy, double& vz)

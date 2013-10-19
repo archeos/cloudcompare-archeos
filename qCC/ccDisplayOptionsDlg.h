@@ -21,8 +21,20 @@
 //Local
 #include "ccGuiParameters.h"
 
+//qCC_db
+#include <ccPlatform.h>
+
 //Qt
+#include <QDialog>
 #include <QColor>
+#include <QAbstractButton>
+#include <QPalette>
+#ifdef CC_WINDOWS
+#include <QWindowsStyle>
+#endif
+
+//system
+#include <assert.h>
 
 #include <ui_displayOptionsDlg.h>
 
@@ -39,12 +51,28 @@ public:
     //! Sets a button background color
     /** Support Windows XP style particularity.
     **/
-    static void SetButtonColor(QAbstractButton* button, const QColor &col);
+    inline static void SetButtonColor(QAbstractButton* button, const QColor &col)
+	{
+		if (button)
+			button->setStyleSheet(QString("* { background-color: rgb(%1,%2,%3) }").arg(col.red()).arg(col.green()).arg(col.blue()));
+	}
 
     //! Sets a button text color
     /** Support Windows XP style particularity.
     **/
-    static void SetButtonTextColor(QAbstractButton* button, const QColor &col);
+    static void SetButtonTextColor(QAbstractButton* button, const QColor &col)
+	{
+		if (!button)
+			return;
+
+		QPalette pal = button->palette();
+		pal.setColor(QPalette::ButtonText, col);
+		button->setPalette(pal);
+#ifdef CC_WINDOWS
+		button->setStyle(new QWindowsStyle());
+		button->update();
+#endif
+	}
 
 signals:
     void aspectHasChanged();

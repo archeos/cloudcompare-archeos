@@ -25,8 +25,10 @@
 //Objects handled by factory
 #include "ccPointCloud.h"
 #include "ccMesh.h"
+#include "ccSubMesh.h"
 #include "ccMeshGroup.h"
 #include "ccPolyline.h"
+#include "ccFacet.h"
 #include "ccMaterialSet.h"
 #include "ccAdvancedTypes.h"
 #include "ccImage.h"
@@ -79,12 +81,19 @@ ccHObject* ccHObject::New(unsigned objectType, const char* name/*=0*/)
 	case CC_MESH:
 		//warning: no associated vertices --> retrieved later
 		return new ccMesh(0);
+	case CC_SUB_MESH:
+		//warning: no associated mesh --> retrieved later
+		return new ccSubMesh(0);
 	case CC_MESH_GROUP:
+		//warning: deprecated
+		ccLog::Warning("[ccHObject::New] Mesh groups are deprecated!");
 		//warning: no associated vertices --> retrieved later
-		return new ccMeshGroup(0);
+		return new ccMeshGroup();
 	case CC_POLY_LINE:
 		//warning: no associated vertices --> retrieved later
 		return new ccPolyline(0);
+	case CC_FACET:
+		return new ccFacet();
 	case CC_MATERIAL_SET:
 		return new ccMaterialSet();
 	case CC_NORMALS_ARRAY:
@@ -157,7 +166,7 @@ void ccHObject::addChild(ccHObject* anObject, bool dependant/*=true*/, int inser
 	if (dependant)
 	{
 		anObject->setParent(this);
-		anObject->setFlagState(CC_FATHER_DEPENDANT,dependant);
+		anObject->setFlagState(CC_FATHER_DEPENDENT,dependant);
 		if (anObject->isShareable())
 			dynamic_cast<CCShareable*>(anObject)->link();
 	}
@@ -185,14 +194,25 @@ ccHObject* ccHObject::find(int uniqueID)
 	return NULL;
 }
 
-unsigned ccHObject::filterChildren(Container& filteredChildren, bool recursive/*=false*/, CC_CLASS_ENUM filter /*= CC_OBJECT*/) const
+unsigned ccHObject::filterChildren(Container& filteredChildren, bool recursive/*=false*/, CC_CLASS_ENUM filter/*=CC_OBJECT*/) const
 {
-	for (Container::const_iterator it = m_children.begin(); it!=m_children.end(); ++it)
+	for (Container::const_iterator it = m_children.begin(); it != m_children.end(); ++it)
 	{
 		if ((*it)->isKindOf(filter))
+		{
 			//warning: we have to handle unicity as a sibling may be in the same container as its parent!
 			if (std::find(filteredChildren.begin(),filteredChildren.end(),*it) == filteredChildren.end()) //not yet in output vector?
+			{
 				filteredChildren.push_back(*it);
+			}
+			else
+			{
+				//don't put it twice!
+				//FIXME (for tests only)
+				QString childName = (*it)->getName();
+				childName.toUpper();
+			}
+		}
 
 		if (recursive)
 			(*it)->filterChildren(filteredChildren, true, filter);
@@ -218,7 +238,7 @@ void ccHObject::detachFromParent()
 	if (!parent)
 		return;
 
-	setFlagState(CC_FATHER_DEPENDANT,false);
+	setFlagState(CC_FATHER_DEPENDENT,false);
 	parent->removeChild(this);
 }
 
@@ -232,9 +252,9 @@ void ccHObject::transferChild(unsigned index, ccHObject& newParent)
 	}
 
 	//remove link from old parent
-	bool fatherDependent = child->getFlagState(CC_FATHER_DEPENDANT);
+	bool fatherDependent = child->getFlagState(CC_FATHER_DEPENDENT);
 	if (fatherDependent)
-		child->setFlagState(CC_FATHER_DEPENDANT,false);
+		child->setFlagState(CC_FATHER_DEPENDENT,false);
 	removeChild(index);
 	newParent.addChild(child,fatherDependent);
 }
@@ -244,9 +264,9 @@ void ccHObject::transferChildren(ccHObject& newParent, bool forceFatherDependent
 	for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it)
 	{
 		//remove link from old parent
-		bool fatherDependent = (*it)->getFlagState(CC_FATHER_DEPENDANT) || forceFatherDependent;
+		bool fatherDependent = (*it)->getFlagState(CC_FATHER_DEPENDENT) || forceFatherDependent;
 		if (fatherDependent)
-			(*it)->setFlagState(CC_FATHER_DEPENDANT,false);
+			(*it)->setFlagState(CC_FATHER_DEPENDENT,false);
 		newParent.addChild(*it,fatherDependent);
 	}
 
@@ -340,7 +360,8 @@ void ccHObject::drawNameIn3D(CC_DRAW_CONTEXT& context)
 		CCVector3 C = bBox.getCenter();
 		gluProject(C.x,C.y,C.z,MM,MP,VP,&xp,&yp,&zp);
 
-		context._win->displayText(getName(),(int)xp,(int)yp,ccGenericGLDisplay::ALIGN_HMIDDLE | ccGenericGLDisplay::ALIGN_VMIDDLE,75);
+		QFont font = context._win->getTextDisplayFont(); //takes rendering zoom into account!
+		context._win->displayText(getName(),(int)xp,(int)yp,ccGenericGLDisplay::ALIGN_HMIDDLE | ccGenericGLDisplay::ALIGN_VMIDDLE,75,0,&font);
 	}
 }
 
@@ -517,33 +538,34 @@ void ccHObject::removeChild(const ccHObject* anObject, bool preventAutoDelete/*=
 	assert(anObject);
 
 	int pos = getChildIndex(anObject);
-
-	if (pos>=0)
+	if (pos >= 0)
 		removeChild(pos,preventAutoDelete);
 }
 
 void ccHObject::removeChild(int pos, bool preventAutoDelete/*=false*/)
 {
-	assert(pos>=0 && unsigned(pos)<m_children.size());
+	assert(pos>=0 && static_cast<size_t>(pos)<m_children.size());
 
 	ccHObject* child = m_children[pos];
-	if (child->getFlagState(CC_FATHER_DEPENDANT) && !preventAutoDelete)
+	if (child->getParent() == this)
 	{
-		//delete object
-		if (child->isShareable())
-			dynamic_cast<CCShareable*>(child)->release();
+		if (child->getFlagState(CC_FATHER_DEPENDENT) && !preventAutoDelete)
+		{
+			//delete object
+			if (child->isShareable())
+				dynamic_cast<CCShareable*>(child)->release();
+			else
+				delete child;
+		}
 		else
-			delete child;
-	}
-	else
-	{
-		//detach object
-		if (child->getParent() == this)
+		{
+			//detach object
 			child->setParent(0);
+		}
 	}
 
 	//version "swap"
-	/*m_children[pos]=m_children.back();
+	/*m_children[pos] = m_children.back();
 	m_children.pop_back();
 	//*/
 
@@ -557,7 +579,7 @@ void ccHObject::removeAllChildren()
 	{
 		ccHObject* child = m_children.back();
 		m_children.pop_back();
-		if (child->getParent()==this && child->getFlagState(CC_FATHER_DEPENDANT))
+		if (child->getParent() == this && child->getFlagState(CC_FATHER_DEPENDENT))
 		{
 			if (child->isShareable())
 				dynamic_cast<CCShareable*>(child)->release();
@@ -662,7 +684,7 @@ bool ccHObject::fromFile(QFile& in, short dataVersion)
 		{
 			if (child->fromFile(in,dataVersion))
 			{
-				addChild(child,child->getFlagState(CC_FATHER_DEPENDANT));
+				addChild(child,child->getFlagState(CC_FATHER_DEPENDENT));
 			}
 			else
 			{

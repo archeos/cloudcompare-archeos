@@ -26,6 +26,7 @@
 
 class ccHObject;
 class ccGenericPointCloud;
+class ccPolyline;
 class ccGenericMesh;
 class ccGenericPrimitive;
 class ccOctree;
@@ -36,6 +37,7 @@ class ccGBLSensor;
 class ccMaterialSet;
 class cc2DLabel;
 class cc2DViewportObject;
+class ccFacet;
 class CCShareable;
 
 class QStandardItemModel;
@@ -57,6 +59,7 @@ public:
 							OBJECT_COLORS_SHOWN			,
 							OBJECT_NORMALS_SHOWN		,
 							OBJECT_SCALAR_FIELD_SHOWN	,
+							OBJECT_POLYLINE_WIDTH       ,
 							//OBJECT_XXXX				,
 							//OBJECT_XXXX				,
 							OBJECT_SF_SHOW_SCALE		,
@@ -78,6 +81,8 @@ public:
 							OBJECT_PRIMITIVE_PRECISION  ,
 							OBJECT_CLOUD_POINT_SIZE		,
 							OBJECT_NAME_IN_3D			,
+							OBJECT_FACET_CONTOUR		,
+							OBJECT_FACET_MESH			,
 	};
 
     //! Default constructor
@@ -121,6 +126,7 @@ protected slots:
     void objectDisplayChanged(const QString &newDisplayTitle);
     void sensorScaleChanged(double val);
 	void cloudPointSizeChanged(int size);
+    void polyineWidthChanged(int size);
 
 protected:
 
@@ -131,6 +137,8 @@ protected:
     void fillWithPointCloud(ccGenericPointCloud*);
     void fillSFWithPointCloud(ccGenericPointCloud*);
     void fillWithMesh(ccGenericMesh*);
+	void fillWithFacet(ccFacet*);
+    void fillWithPolyline(ccPolyline*);
     void fillWithPrimitive(ccGenericPrimitive*);
     void fillWithPointOctree(ccOctree*);
 	void fillWithPointKdTree(ccKdTree*);
@@ -141,6 +149,7 @@ protected:
     void fillWithGBLSensor(ccGBLSensor*);
 	void fillWithMaterialSet(ccMaterialSet*);
 	void fillWithShareable(CCShareable*);
+	void fillWithMetaData(ccObject*);
 	template<int N, class ElementType> void fillWithChunkedArray(ccChunkedArray<N,ElementType>*);
 
 	//! Updates the current model (assuming object is the same)

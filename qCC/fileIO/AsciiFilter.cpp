@@ -129,7 +129,7 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, const char* filename)
         return CC_FERR_WRITING;
 	QTextStream stream(&file);
 
-    ccGenericPointCloud* cloud = static_cast<ccGenericPointCloud*>(entity);
+	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(entity);
 
     unsigned numberOfPoints = cloud->size();
     bool writeColors = cloud->hasColors();
@@ -443,7 +443,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for normals! (skipped)");
+				ccLog::Warning("Failed to allocate memory for normals! (skipped)");
 			}
 			break;
 		case ASCII_OPEN_DLG_NY:
@@ -455,7 +455,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for normals! (skipped)");
+				ccLog::Warning("Failed to allocate memory for normals! (skipped)");
 			}
 			break;
 		case ASCII_OPEN_DLG_NZ:
@@ -467,7 +467,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for normals! (skipped)");
+				ccLog::Warning("Failed to allocate memory for normals! (skipped)");
 			}
 			break;
 		case ASCII_OPEN_DLG_Scalar:
@@ -493,7 +493,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 				}
 				else
 				{
-					ccConsole::Warning("Failed to add scalar field #%i to cloud #%i! (skipped)",sfIndex);
+					ccLog::Warning("Failed to add scalar field #%i to cloud #%i! (skipped)",sfIndex);
 				}
 				sf->release();
 			}
@@ -507,7 +507,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for colors! (skipped)");
+				ccLog::Warning("Failed to allocate memory for colors! (skipped)");
 			}
 			break;
 		case ASCII_OPEN_DLG_G:
@@ -519,7 +519,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for colors! (skipped)");
+				ccLog::Warning("Failed to allocate memory for colors! (skipped)");
 			}
 			break;
 		case ASCII_OPEN_DLG_B:
@@ -531,7 +531,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for colors! (skipped)");
+				ccLog::Warning("Failed to allocate memory for colors! (skipped)");
 			}
 			break;
 		case ASCII_OPEN_DLG_RGB32i:
@@ -547,7 +547,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for colors! (skipped)");
+				ccLog::Warning("Failed to allocate memory for colors! (skipped)");
 			}
 			break;
 		case ASCII_OPEN_DLG_Grey:
@@ -558,7 +558,7 @@ cloudAttributesDescriptor prepareCloud(const AsciiOpenDlg::Sequence &openSequenc
 			}
 			else
 			{
-				ccConsole::Warning("Failed to allocate memory for colors! (skipped)");
+				ccLog::Warning("Failed to allocate memory for colors! (skipped)");
 			}
 			break;
         }
@@ -604,18 +604,13 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(const char* filename,
         clearStructure(cloudDesc);
         return CC_FERR_READING;
 	}
+	QTextStream stream(&file);
 
 	//we skip lines as defined on input
-    char currentLine[MAX_ASCII_FILE_LINE_LENGTH];
 	{
-		for (unsigned i=0;i<skipLines;++i)
+		for (unsigned i=0; i<skipLines; ++i)
 		{
-			if (file.readLine(currentLine,MAX_ASCII_FILE_LINE_LENGTH)<0)
-			{
-				//we clear already initialized data
-				clearStructure(cloudDesc);
-				return CC_FERR_READING;
-			}
+			stream.readLine();
 		}
 	}
 
@@ -641,24 +636,25 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(const char* filename,
 
     //main process
 	unsigned nextLimit = /*cloudChunkPos+*/cloudChunkSize;
-    while (file.readLine(currentLine,MAX_ASCII_FILE_LINE_LENGTH)>0)
+	QString currentLine = stream.readLine();
+    while (!currentLine.isNull())
     {
         ++linesRead;
 
         //comment
-		if (currentLine[0]=='/' && currentLine[1]=='/')
+		if (currentLine.startsWith("//"))
             continue;
 
-        if (currentLine[0]==0 || currentLine[0]==10)
+        if (currentLine.size() == 0)
         {
-            ccConsole::Warning("[AsciiFilter::Load] Line %i is corrupted (empty)!",linesRead);
+            ccLog::Warning("[AsciiFilter::Load] Line %i is corrupted (empty)!",linesRead);
             continue;
         }
 
         //if we have reached the max. number of points per cloud
         if (pointsRead == nextLimit)
         {
-            ccConsole::PrintDebug("[ASCII] Point %i -> end of chunk (%i points)",pointsRead,cloudChunkSize);
+            ccLog::PrintDebug("[ASCII] Point %i -> end of chunk (%i points)",pointsRead,cloudChunkSize);
 
         	//we re-evaluate the average line size
 			{
@@ -671,29 +667,29 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(const char* filename,
         			newNbOfLinesApproximation = std::max((double)(cloudChunkPos+cloudChunkSize)+1.0,(double)pointsRead * 1.02);
         		}
 				approximateNumberOfLines = (unsigned)ceil(newNbOfLinesApproximation);
-				ccConsole::PrintDebug("[ASCII] New approximate nb of lines: %i",approximateNumberOfLines);
+				ccLog::PrintDebug("[ASCII] New approximate nb of lines: %i",approximateNumberOfLines);
 			}
 
         	//we try to resize actual clouds
         	if (cloudChunkSize < maxCloudSize || approximateNumberOfLines-cloudChunkPos <= maxCloudSize)
         	{
-                ccConsole::PrintDebug("[ASCII] We choose to enlarge existing clouds");
+                ccLog::PrintDebug("[ASCII] We choose to enlarge existing clouds");
 
         		cloudChunkSize = std::min(maxCloudSize,approximateNumberOfLines-cloudChunkPos);
        			if (!cloudDesc.cloud->reserve(cloudChunkSize))
         		{
-        			ccConsole::Error("Not enough memory! Process stopped ...");
+        			ccLog::Error("Not enough memory! Process stopped ...");
 					result = CC_FERR_NOT_ENOUGH_MEMORY;
         			break;
         		}
         	}
         	else //otherwise we have to create new clouds
         	{
-                ccConsole::PrintDebug("[ASCII] We choose to instantiate new clouds");
+                ccLog::PrintDebug("[ASCII] We choose to instantiate new clouds");
 
         		//we store (and resize) actual cloud
         		if (!cloudDesc.cloud->resize(cloudChunkSize))
-        			ccConsole::Warning("Memory reallocation failed ... some memory may have been wasted ...");
+        			ccLog::Warning("Memory reallocation failed ... some memory may have been wasted ...");
 				if (!cloudDesc.scalarFields.empty())
 				{
 					for (unsigned k=0;k<cloudDesc.scalarFields.size();++k)
@@ -711,7 +707,7 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(const char* filename,
         		cloudDesc = prepareCloud(openSequence, cloudChunkSize, maxPartIndex, ++chunkRank);
         		if (!cloudDesc.cloud)
         		{
-        			ccConsole::Error("Not enough memory! Process stopped ...");
+        			ccLog::Error("Not enough memory! Process stopped ...");
         			break;
         		}
 				cloudDesc.cloud->setOriginalShift(Pshift[0],Pshift[1],Pshift[2]);
@@ -725,114 +721,119 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(const char* filename,
         }
 
         //we split current line
-        QStringList parts = QString(currentLine).split(separator,QString::SkipEmptyParts);
+        QStringList parts = currentLine.split(separator,QString::SkipEmptyParts);
 
         int nParts = parts.size();
-        if (nParts<=maxPartIndex)
+        if (nParts > maxPartIndex)
         {
-            ccConsole::Warning("[AsciiFilter::Load] Line %i is corrupted (found %i part(s) on %i attended)!",linesRead,nParts,maxPartIndex+1);
-            continue;
-        }
+			//(X,Y,Z)
+			if (cloudDesc.xCoordIndex>=0)
+				P[0] = parts[cloudDesc.xCoordIndex].toDouble();
+			if (cloudDesc.yCoordIndex>=0)
+				P[1] = parts[cloudDesc.yCoordIndex].toDouble();
+			if (cloudDesc.zCoordIndex>=0)
+				P[2] = parts[cloudDesc.zCoordIndex].toDouble();
 
-		//(X,Y,Z)
-		if (cloudDesc.xCoordIndex>=0)
-			P[0] = parts[cloudDesc.xCoordIndex].toDouble();
-		if (cloudDesc.yCoordIndex>=0)
-			P[1] = parts[cloudDesc.yCoordIndex].toDouble();
-		if (cloudDesc.zCoordIndex>=0)
-			P[2] = parts[cloudDesc.zCoordIndex].toDouble();
-
-		//first point: check for 'big' coordinates
-		if (pointsRead==0)
-		{
-			bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
-			if (shiftAlreadyEnabled)
-				memcpy(Pshift,coordinatesShift,sizeof(double)*3);
-			bool applyAll=false;
-			if (ccCoordinatesShiftManager::Handle(P,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+			//first point: check for 'big' coordinates
+			if (pointsRead == 0)
 			{
-				cloudDesc.cloud->setOriginalShift(Pshift[0],Pshift[1],Pshift[2]);
-				ccConsole::Warning("[ASCIIFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift[0],Pshift[1],Pshift[2]);
-
-				//we save coordinates shift information
-				if (applyAll && coordinatesShiftEnabled && coordinatesShift)
+				bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
+				if (shiftAlreadyEnabled)
+					memcpy(Pshift,coordinatesShift,sizeof(double)*3);
+				bool applyAll=false;
+				if (ccCoordinatesShiftManager::Handle(P,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
 				{
-					*coordinatesShiftEnabled = true;
-					coordinatesShift[0] = Pshift[0];
-					coordinatesShift[1] = Pshift[1];
-					coordinatesShift[2] = Pshift[2];
+					cloudDesc.cloud->setOriginalShift(Pshift[0],Pshift[1],Pshift[2]);
+					ccLog::Warning("[ASCIIFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift[0],Pshift[1],Pshift[2]);
+
+					//we save coordinates shift information
+					if (applyAll && coordinatesShiftEnabled && coordinatesShift)
+					{
+						*coordinatesShiftEnabled = true;
+						coordinatesShift[0] = Pshift[0];
+						coordinatesShift[1] = Pshift[1];
+						coordinatesShift[2] = Pshift[2];
+					}
 				}
 			}
-		}
 
-		//add point
-		cloudDesc.cloud->addPoint(CCVector3(P[0]+Pshift[0],P[1]+Pshift[1],P[2]+Pshift[2]));
+			//add point
+			cloudDesc.cloud->addPoint(CCVector3(P[0]+Pshift[0],P[1]+Pshift[1],P[2]+Pshift[2]));
 
-		//Normal vector
-		if (cloudDesc.hasNorms)
-		{
-			if (cloudDesc.xNormIndex>=0)
-				N[0] = parts[cloudDesc.xNormIndex].toFloat();
-			if (cloudDesc.yNormIndex>=0)
-				N[1] = parts[cloudDesc.yNormIndex].toFloat();
-			if (cloudDesc.zNormIndex>=0)
-				N[2] = parts[cloudDesc.zNormIndex].toFloat();
-			cloudDesc.cloud->addNorm(N);
-		}
-
-		//Colors
-		if (cloudDesc.hasRGBColors)
-		{
-			if (cloudDesc.iRgbaIndex>=0)
+			//Normal vector
+			if (cloudDesc.hasNorms)
 			{
-				const uint32_t rgb = parts[cloudDesc.iRgbaIndex].toInt();
-				col[0] = ((rgb >> 16)	& 0x0000ff);
-				col[1] = ((rgb >> 8)	& 0x0000ff);
-				col[2] = ((rgb)			& 0x0000ff);
+				if (cloudDesc.xNormIndex>=0)
+					N[0] = parts[cloudDesc.xNormIndex].toFloat();
+				if (cloudDesc.yNormIndex>=0)
+					N[1] = parts[cloudDesc.yNormIndex].toFloat();
+				if (cloudDesc.zNormIndex>=0)
+					N[2] = parts[cloudDesc.zNormIndex].toFloat();
+				cloudDesc.cloud->addNorm(N);
+			}
 
-			}
-			else if (cloudDesc.fRgbaIndex>=0)
+			//Colors
+			if (cloudDesc.hasRGBColors)
 			{
-				const float rgbf = parts[cloudDesc.fRgbaIndex].toFloat();
-				const uint32_t rgb = (uint32_t)(*((uint32_t*)&rgbf));
-				col[0] = ((rgb >> 16)	& 0x0000ff);
-				col[1] = ((rgb >> 8)	& 0x0000ff);
-				col[2] = ((rgb)			& 0x0000ff);
+				if (cloudDesc.iRgbaIndex>=0)
+				{
+					const uint32_t rgb = parts[cloudDesc.iRgbaIndex].toInt();
+					col[0] = ((rgb >> 16)	& 0x0000ff);
+					col[1] = ((rgb >> 8)	& 0x0000ff);
+					col[2] = ((rgb)			& 0x0000ff);
+
+				}
+				else if (cloudDesc.fRgbaIndex>=0)
+				{
+					const float rgbf = parts[cloudDesc.fRgbaIndex].toFloat();
+					const uint32_t rgb = (uint32_t)(*((uint32_t*)&rgbf));
+					col[0] = ((rgb >> 16)	& 0x0000ff);
+					col[1] = ((rgb >> 8)	& 0x0000ff);
+					col[2] = ((rgb)			& 0x0000ff);
+				}
+				else
+				{
+					if (cloudDesc.redIndex>=0)
+						col[0]=(colorType)parts[cloudDesc.redIndex].toInt();
+					if (cloudDesc.greenIndex>=0)
+						col[1]=(colorType)parts[cloudDesc.greenIndex].toInt();
+					if (cloudDesc.blueIndex>=0)
+						col[2]=(colorType)parts[cloudDesc.blueIndex].toInt();
+				}
+				cloudDesc.cloud->addRGBColor(col);
 			}
-			else
+			else if (cloudDesc.greyIndex>=0)
 			{
-				if (cloudDesc.redIndex>=0)
-					col[0]=(colorType)parts[cloudDesc.redIndex].toInt();
-				if (cloudDesc.greenIndex>=0)
-					col[1]=(colorType)parts[cloudDesc.greenIndex].toInt();
-				if (cloudDesc.blueIndex>=0)
-					col[2]=(colorType)parts[cloudDesc.blueIndex].toInt();
+				col[0]=col[1]=col[2]=(colorType)parts[cloudDesc.greyIndex].toInt();
+				cloudDesc.cloud->addRGBColor(col);
 			}
-			cloudDesc.cloud->addRGBColor(col);
+
+			//Scalar distance
+			if (!cloudDesc.scalarIndexes.empty())
+			{
+				for (unsigned j=0;j<cloudDesc.scalarIndexes.size();++j)
+				{
+					D=(ScalarType)parts[cloudDesc.scalarIndexes[j]].toDouble();
+					cloudDesc.scalarFields[j]->setValue(pointsRead-cloudChunkPos,D);
+				}
+			}
+
+			++pointsRead;
 		}
-		else if (cloudDesc.greyIndex>=0)
+		else
 		{
-			col[0]=col[1]=col[2]=(colorType)parts[cloudDesc.greyIndex].toInt();
-			cloudDesc.cloud->addRGBColor(col);
-		}
+            ccLog::Warning("[AsciiFilter::Load] Line %i is corrupted (found %i part(s) on %i expected)!",linesRead,nParts,maxPartIndex+1);
+        }
 
-		//Scalar distance
-		if (!cloudDesc.scalarIndexes.empty())
-		{
-			for (unsigned j=0;j<cloudDesc.scalarIndexes.size();++j)
-			{
-				D=(ScalarType)parts[cloudDesc.scalarIndexes[j]].toDouble();
-				cloudDesc.scalarFields[j]->setValue(pointsRead-cloudChunkPos,D);
-			}
-		}
-
-        ++pointsRead;
 		if (!nprogress.oneStep())
         {
             //cancel requested
 			result = CC_FERR_CANCELED_BY_USER;
 			break;
         }
+
+		//read next line
+		currentLine = stream.readLine();
     }
 
     file.close();

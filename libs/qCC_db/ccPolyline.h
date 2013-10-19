@@ -25,7 +25,7 @@
 
 //! Colored polyline
 /** Extends the Polyline class of CCLib.
-	Check CCLib documentation for more information about it.
+Check CCLib documentation for more information about it.
 **/
 #ifdef QCC_DB_USE_AS_DLL
 #include "qCC_db_dll.h"
@@ -46,19 +46,24 @@ public:
 	**/
 	ccPolyline(const ccPolyline& poly);
 
-    //! Default destructor
+	//! Destructor
 	virtual ~ccPolyline() {};
 
-    //! Returns class ID
-    virtual CC_CLASS_ENUM getClassID() const {return CC_POLY_LINE;};
+	//! Returns class ID
+	virtual CC_CLASS_ENUM getClassID() const {return CC_POLY_LINE;}
 
 	//inherited methods (ccHObject)
-    virtual bool hasColors() const;
+	virtual bool isSerializable() const { return true; }
+	virtual bool hasColors() const;
+    virtual void applyGLTransformation(const ccGLMatrix& trans);
 
 	//! Defines if the polyline is considered as 2D or 3D
 	/** \param state if true, the polyline is 2D
 	**/
-    void set2DMode(bool state);
+	void set2DMode(bool state);
+
+	//! Returns whether the polyline is considered as 2D or 3D
+	inline bool is2DMode() const { return m_mode2D; }
 
 	//! Defines if the polyline is drawn in background or foreground
 	/** \param state if true, the polyline is drawn in foreground
@@ -70,21 +75,45 @@ public:
 	**/
 	void setColor(const colorType col[]);
 
+	//! Sets the width of the line
+	/**  \param width the desired width
+	**/
+	void setWidth(PointCoordinateType width);
+
 	//! Returns the polyline color
 	/** \return a pointer to the polyline RGB color
 	**/
 	const colorType* getColor() const;
 
 	//inherited methods (ccHObject)
-    virtual ccBBox getMyOwnBB();
+	virtual ccBBox getMyOwnBB();
+
+	//! Extracts the (flat) contour of a point cloud
+	/** Projects the cloud on its best fitting LS plane first.
+		\param points point cloud
+		\param maxEdgelLength max edge length (ignored if 0, in which case the contour is the convex hull)
+		\return contour polyline (or 0 if an error occured)
+	**/
+	static ccPolyline* ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* points,
+											PointCoordinateType maxEdgelLength = 0);
+
+	//! Computes the polyline length
+	PointCoordinateType computeLength() const;
 
 protected:
+
+	//inherited from ccHObject
+	virtual bool toFile_MeOnly(QFile& out) const;
+	virtual bool fromFile_MeOnly(QFile& in, short dataVersion);
 
 	//inherited methods (ccHObject)
 	virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
 
 	//! Unique RGB color
 	colorType m_rgbColor[3];
+
+	//! Width of the line
+	PointCoordinateType m_width;
 
 	//! Whether poyline should be considered as 2D (true) or 3D (false)
 	bool m_mode2D;

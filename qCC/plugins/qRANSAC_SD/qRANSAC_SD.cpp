@@ -48,9 +48,18 @@
 #include <ccCylinder.h>
 #include <ccCone.h>
 #include <ccTorus.h>
+#include <ccPlatform.h>
 
 //CCLib
 #include <ScalarField.h>
+
+//System
+#include <algorithm>
+#if defined(CC_WINDOWS)
+#include "Windows.h"
+#else
+#include <time.h>
+#endif
 
 qRansacSD::qRansacSD(QObject* parent/*=0*/)
 	: QObject(parent)
@@ -302,7 +311,7 @@ void qRansacSD::doAction()
 		unsigned progress = 0;
 		while (!future.isFinished())
 		{
-#if defined(_WIN32) || defined(WIN32)
+#if defined(CC_WINDOWS)
 			::Sleep(500);
 #else
 			sleep(500);
@@ -404,10 +413,8 @@ void qRansacSD::doAction()
 			}
 
 			//random color
-			unsigned char col[3]={ (unsigned char)(255.0*(float)rand()/(float)RAND_MAX),
-									(unsigned char)(255.0*(float)rand()/(float)RAND_MAX),
-									0};
-			col[2]=255-(col[1]+col[2])/2;
+			colorType col[3];
+			ccColor::Generator::Random(col);
 			pcShape->setRGBColor(col);
 			pcShape->showColors(true);
 			pcShape->showNormals(saveNormals);

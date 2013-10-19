@@ -19,17 +19,19 @@
 
 //Local
 #include "sfEditDlg.h"
-#include "../ccConsole.h"
 #include "../ccGLWindow.h"
 #include "../mainwindow.h"
 #include "../ccGuiParameters.h"
 #include "../ccColorScaleEditorDlg.h"
+#include "../ccColorScaleSelector.h"
 
 //qCC_db
 #include <ccHObjectCaster.h>
 #include <ccHObject.h>
 #include <ccPointCloud.h>
-#include <ccGenericMesh.h>
+#include <ccMesh.h>
+#include <ccPolyline.h>
+#include <ccSubMesh.h>
 #include <ccOctree.h>
 #include <ccKdTree.h>
 #include <ccImage.h>
@@ -41,6 +43,7 @@
 #include <ccMaterialSet.h>
 #include <ccAdvancedTypes.h>
 #include <ccGenericPrimitive.h>
+#include <ccFacet.h>
 
 //Qt
 #include <QStandardItemModel>
@@ -61,42 +64,11 @@
 // Default 'None' string
 const QString c_noDisplayString = QString("None");
 const QString c_defaultPointSizeString = QString("Default");
+const QString c_defaultPolyWidthSizeString = QString("Default Width");
 
 // Default separator colors
 const QBrush SEPARATOR_BACKGROUND_BRUSH(Qt::darkGray);
 const QBrush SEPARATOR_TEXT_BRUSH(Qt::white);
-
-//! Advanced editor for color scales
-class QColorScaleSelector : public QFrame
-{
-public:
-
-	QColorScaleSelector(QWidget* parent)
-		: QFrame(parent)
-		, m_comboBox(new QComboBox())
-		, m_button(new QToolButton())
-	{
-		setLayout(new QHBoxLayout());
-		layout()->setContentsMargins(0,0,0,0);
-		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-
-		//combox box
-		if (m_comboBox)
-		{
-			layout()->addWidget(m_comboBox);
-		}
-		
-		//tool button
-		if (m_button)
-		{
-			m_button->setIcon(QIcon(QString::fromUtf8(":/CC/images/ccGear.png")));
-			layout()->addWidget(m_button);
-		}
-	}
-	
-	QComboBox* m_comboBox;
-	QToolButton* m_button;
-};
 
 ccPropertiesTreeDelegate::ccPropertiesTreeDelegate(QStandardItemModel* model,
 												   QAbstractItemView* view,
@@ -130,6 +102,7 @@ QSize ccPropertiesTreeDelegate::sizeHint(const QStyleOptionViewItem& option, con
         case OBJECT_COLOR_RAMP_STEPS:
         case OBJECT_CLOUD_POINT_SIZE:
             return QSize(50,18);
+        case OBJECT_POLYLINE_WIDTH:
         case OBJECT_CURRENT_COLOR_RAMP:
             return QSize(70,22);
 		case OBJECT_CLOUD_SF_EDITOR:
@@ -178,41 +151,49 @@ void ccPropertiesTreeDelegate::fillModel(ccHObject* hObject)
 
     if (m_currentObject->isKindOf(CC_POINT_CLOUD))
     {
-        fillWithPointCloud(static_cast<ccGenericPointCloud*>(m_currentObject));
+        fillWithPointCloud(ccHObjectCaster::ToGenericPointCloud(m_currentObject));
     }
     else if (m_currentObject->isKindOf(CC_MESH))
     {
-        fillWithMesh(static_cast<ccGenericMesh*>(m_currentObject));
+		fillWithMesh(ccHObjectCaster::ToGenericMesh(m_currentObject));
     
 		if (m_currentObject->isKindOf(CC_PRIMITIVE))
-			fillWithPrimitive(static_cast<ccGenericPrimitive*>(m_currentObject));
+			fillWithPrimitive(ccHObjectCaster::ToPrimitive(m_currentObject));
+    }
+    else if (m_currentObject->isA(CC_FACET))
+    {
+		fillWithFacet(ccHObjectCaster::ToFacet(m_currentObject));
+	}
+    else if (m_currentObject->isA(CC_POLY_LINE))
+    {
+        fillWithPolyline(ccHObjectCaster::ToPolyline(m_currentObject));
     }
     else if (m_currentObject->isA(CC_POINT_OCTREE))
     {
-        fillWithPointOctree(static_cast<ccOctree*>(m_currentObject));
+		fillWithPointOctree(ccHObjectCaster::ToOctree(m_currentObject));
     }
     else if (m_currentObject->isA(CC_POINT_KDTREE))
     {
-        fillWithPointKdTree(static_cast<ccKdTree*>(m_currentObject));
+		fillWithPointKdTree(ccHObjectCaster::ToKdTree(m_currentObject));
     }
     else if (m_currentObject->isKindOf(CC_IMAGE))
     {
-        fillWithImage(static_cast<ccImage*>(m_currentObject));
+		fillWithImage(ccHObjectCaster::ToImage(m_currentObject));
 
         if (m_currentObject->isA(CC_CALIBRATED_IMAGE))
-            fillWithCalibratedImage(static_cast<ccCalibratedImage*>(m_currentObject));
+			fillWithCalibratedImage(ccHObjectCaster::ToCalibratedImage(m_currentObject));
     }
     else if (m_currentObject->isA(CC_2D_LABEL))
     {
-        fillWithLabel(static_cast<cc2DLabel*>(m_currentObject));
+		fillWithLabel(ccHObjectCaster::To2DLabel(m_currentObject));
     }
     else if (m_currentObject->isKindOf(CC_2D_VIEWPORT_OBJECT))
     {
-        fillWithViewportObject(static_cast<cc2DViewportObject*>(m_currentObject));
+		fillWithViewportObject(ccHObjectCaster::To2DViewportObject(m_currentObject));
     }
     else if (m_currentObject->isKindOf(CC_GBL_SENSOR))
     {
-        fillWithGBLSensor(static_cast<ccGBLSensor*>(m_currentObject));
+		fillWithGBLSensor(ccHObjectCaster::ToGBLSensor(m_currentObject));
     }
     else if (m_currentObject->isA(CC_MATERIAL_SET))
     {
@@ -234,6 +215,8 @@ void ccPropertiesTreeDelegate::fillModel(ccHObject* hObject)
     {
         fillWithChunkedArray(static_cast<ColorsTableType*>(m_currentObject));
     }
+
+	fillWithMetaData(m_currentObject);
 	
 	//go back to original position
 	if (scrollPos>0)
@@ -258,7 +241,7 @@ void ccPropertiesTreeDelegate::appendRow(QStandardItem* leftItem, QStandardItem*
 		}
 		m_model->appendRow(rowItems);
 
-		//the presistent editor (if any) is always the right one!
+		//the persistent editor (if any) is always the right one!
 		if (openPersistentEditor)
 			m_view->openPersistentEditor(m_model->index(m_model->rowCount()-1,1));
 	}
@@ -311,6 +294,37 @@ QStandardItem* PERSISTENT_EDITOR(ccPropertiesTreeDelegate::CC_PROPERTY_ROLE role
 	return ITEM(QString(),Qt::ItemIsEditable,role);
 }
 
+void ccPropertiesTreeDelegate::fillWithMetaData(ccObject* _obj)
+{
+	assert(_obj && m_model);
+
+	const QVariantMap& metaData = _obj->metaData();
+	if (metaData.size() == 0)
+		return;
+
+	addSeparator("Meta data");
+
+	for (QVariantMap::ConstIterator it = metaData.constBegin(); it != metaData.constEnd(); ++it)
+	{
+		QString value;
+		if (it.value().canConvert(QVariant::String))
+		{
+			QVariant var = it.value();
+			var.convert(QVariant::String);
+			value = var.toString();
+		}
+		else
+		{
+			value = QString(QVariant::typeToName(it.value().type()));
+		}
+		//switch (var.type())
+		//{
+		//	QVariant::Bool
+		//}
+		appendRow( ITEM(it.key()), ITEM(value) );
+	}
+}
+
 void ccPropertiesTreeDelegate::fillWithHObject(ccHObject* _obj)
 {
     assert(_obj && m_model);
@@ -326,7 +340,7 @@ void ccPropertiesTreeDelegate::fillWithHObject(ccHObject* _obj)
     //number of children
 	appendRow( ITEM("Children"), ITEM(QString::number(_obj->getChildrenNumber())) );
 
-    //visiblity
+    //visibility
     if (!_obj->isVisiblityLocked())
 		appendRow( ITEM("Visible"), CHECKABLE_ITEM(_obj->isVisible(),OBJECT_VISIBILITY) );
 
@@ -460,11 +474,40 @@ void ccPropertiesTreeDelegate::fillWithPrimitive(ccGenericPrimitive* _obj)
 		appendRow( ITEM("Drawing precision"), PERSISTENT_EDITOR(OBJECT_PRIMITIVE_PRECISION), true );
 }
 
+void ccPropertiesTreeDelegate::fillWithFacet(ccFacet* _obj)
+{
+    assert(_obj && m_model);
+
+    addSeparator("Facet");
+
+    //surface
+	appendRow( ITEM("Surface"), ITEM(QLocale(QLocale::English).toString(_obj->getSurface())) );
+
+	//RMS
+	appendRow( ITEM("RMS"), ITEM(QLocale(QLocale::English).toString(_obj->getRMS())) );
+
+	//center
+	appendRow( ITEM("Center"), ITEM(QString("(%1 ; %2 ; %3)").arg(_obj->getCenter().x).arg(_obj->getCenter().y).arg(_obj->getCenter().z)) );
+	
+	//normal
+	appendRow( ITEM("Normal"), ITEM(QString("(%1 ; %2 ; %3)").arg(_obj->getNormal().x).arg(_obj->getNormal().y).arg(_obj->getNormal().z)) );
+
+	//contour visibility
+	if (_obj->getContour())
+		appendRow( ITEM("Show contour"), CHECKABLE_ITEM(_obj->getContour()->isVisible(),OBJECT_FACET_CONTOUR) );
+
+	//polygon visibility
+	if (_obj->getPolygon())
+		appendRow( ITEM("Show polygon"), CHECKABLE_ITEM(_obj->getPolygon()->isVisible(),OBJECT_FACET_MESH) );
+}
+
 void ccPropertiesTreeDelegate::fillWithMesh(ccGenericMesh* _obj)
 {
     assert(_obj && m_model);
 
-    addSeparator("Mesh");
+	bool isSubMesh = _obj->isA(CC_SUB_MESH);
+
+    addSeparator(isSubMesh ? "Sub-mesh" : "Mesh");
 
     //number of facets
 	appendRow( ITEM("Faces"), ITEM(QLocale(QLocale::English).toString(_obj->size())) );
@@ -482,8 +525,24 @@ void ccPropertiesTreeDelegate::fillWithMesh(ccGenericMesh* _obj)
 
 	//we also integrate vertices SF into mesh properties
     ccGenericPointCloud* vertices = _obj->getAssociatedCloud();
-    if (vertices && (_obj->isA(CC_MESH_GROUP) || !vertices->isLocked() || _obj->isAncestorOf(vertices)))
+    if (vertices && (!vertices->isLocked() || _obj->isAncestorOf(vertices)))
         fillSFWithPointCloud(vertices);
+}
+
+void ccPropertiesTreeDelegate::fillWithPolyline(ccPolyline* _obj)
+{
+    assert(_obj && m_model);
+
+    addSeparator("Polyline");
+
+    //number of vertices
+    appendRow( ITEM("Vertices"), ITEM(QLocale(QLocale::English).toString(_obj->size())) );
+
+	//polyline length
+	appendRow( ITEM("Length"), ITEM(QLocale(QLocale::English).toString(_obj->computeLength())) );
+
+    //custom line width
+    appendRow( ITEM("Line width"), PERSISTENT_EDITOR(OBJECT_POLYLINE_WIDTH), true );
 }
 
 void ccPropertiesTreeDelegate::fillWithPointOctree(ccOctree* _obj)
@@ -638,7 +697,7 @@ void ccPropertiesTreeDelegate::fillWithShareable(CCShareable* _obj)
     addSeparator("Array");
 
 	//Link count
-	unsigned linkCount = _obj->getLinkCount(); //if we display it, it means it is a member of the DB --> ie. link is already >1
+	unsigned linkCount = _obj->getLinkCount(); //if we display it, it means it is a member of the DB --> i.e. link is already >1
 	appendRow( ITEM("Shared"), ITEM(linkCount < 3 ? QString("No") : QString("Yes (%1)").arg(linkCount-1)) );
 }
 
@@ -687,7 +746,7 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 
         comboBox->addItem(c_noDisplayString);
 
-        for (unsigned i=0;i<glWindows.size();++i)
+        for (unsigned i=0; i<glWindows.size(); ++i)
             comboBox->addItem(glWindows[i]->windowTitle());
 
         connect(comboBox, SIGNAL(currentIndexChanged(const QString)), this, SLOT(objectDisplayChanged(const QString)));
@@ -714,27 +773,11 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
     }
     case OBJECT_CURRENT_COLOR_RAMP:
     {
-		QColorScaleSelector* selector = new QColorScaleSelector(parent);
-
-		//fill combox box
-		if (selector->m_comboBox)
-		{
-			selector->m_comboBox->blockSignals(true);
-			selector->m_comboBox->clear();
-			//add all available color scales
-			ccColorScalesManager* csManager = ccColorScalesManager::GetUniqueInstance();
-			assert(csManager);
-			for (ccColorScalesManager::ScalesMap::const_iterator it = csManager->map().begin(); it != csManager->map().end(); ++it)
-				selector->m_comboBox->addItem((*it)->getName(),(*it)->getUuid());
-			selector->m_comboBox->blockSignals(false);
-
-			connect(selector->m_comboBox, SIGNAL(activated(int)), this, SLOT(colorScaleChanged(int)));
-		}
-		//advanced tool button
-		if (selector->m_button)
-		{
-			connect(selector->m_button, SIGNAL(clicked()), this, SLOT(spawnColorRampEditor()));
-		}
+		ccColorScaleSelector* selector = new ccColorScaleSelector(ccColorScalesManager::GetUniqueInstance(),parent,QString::fromUtf8(":/CC/images/ccGear.png"));
+		//fill combobox box with Color Scales Manager
+		selector->init();
+		connect(selector, SIGNAL(colorScaleSelected(int)), this, SLOT(colorScaleChanged(int)));
+		connect(selector, SIGNAL(colorScaleEditorSummoned()), this, SLOT(spawnColorRampEditor()));
 
 		selector->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
         return selector;
@@ -852,6 +895,19 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 		comboBox->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
         return comboBox;
     }
+    case OBJECT_POLYLINE_WIDTH:
+    {
+        QComboBox *comboBox = new QComboBox(parent);
+
+        comboBox->addItem(c_defaultPolyWidthSizeString); //size = 0
+        for (unsigned i=1; i<=10; ++i)
+            comboBox->addItem(QString::number(i));
+
+        connect(comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(polyineWidthChanged(int)));
+
+        comboBox->setFocusPolicy(Qt::StrongFocus); //Qt doc: << The returned editor widget should have Qt::StrongFocus >>
+        return comboBox;
+    }
     default:
         return QStyledItemDelegate::createEditor(parent, option, index);
     }
@@ -921,7 +977,7 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
         QFrame *selectorFrame = qobject_cast<QFrame*>(editor);
         if (!selectorFrame)
             return;
-		QColorScaleSelector* selector = static_cast<QColorScaleSelector*>(selectorFrame);
+		ccColorScaleSelector* selector = static_cast<ccColorScaleSelector*>(selectorFrame);
 
         ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
         assert(cloud);
@@ -929,11 +985,10 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
         ccScalarField* sf = cloud->getCurrentDisplayedScalarField();
         if (sf)
 		{
-			int pos = -1;
-			//search right index by UUID
 			if (sf->getColorScale())
-				pos = selector->m_comboBox->findData(sf->getColorScale()->getUuid());
-			selector->m_comboBox->setCurrentIndex(pos);
+				selector->setSelectedScale(sf->getColorScale()->getUuid());
+			else
+				selector->setSelectedScale(QString());
 		}
         break;
     }
@@ -1092,6 +1147,24 @@ void ccPropertiesTreeDelegate::updateItem(QStandardItem * item)
 		}
 		redraw=true;
 		break;
+	case OBJECT_FACET_CONTOUR:
+		{
+			ccFacet* facet = ccHObjectCaster::ToFacet(m_currentObject);
+			assert(facet);
+			if (facet && facet->getContour())
+				facet->getContour()->setVisible(item->checkState() == Qt::Checked);
+		}
+		redraw=true;
+		break;
+	case OBJECT_FACET_MESH:
+		{
+			ccFacet* facet = ccHObjectCaster::ToFacet(m_currentObject);
+			assert(facet);
+			if (facet && facet->getPolygon())
+				facet->getPolygon()->setVisible(item->checkState() == Qt::Checked);
+		}
+		redraw=true;
+		break;
 	case OBJECT_MESH_WIRE:
 		{
 			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(m_currentObject);
@@ -1102,7 +1175,7 @@ void ccPropertiesTreeDelegate::updateItem(QStandardItem * item)
 		break;
 	case OBJECT_MESH_STIPPLING:
 		{
-			ccMesh* mesh = ccHObjectCaster::ToMesh(m_currentObject);
+			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(m_currentObject);
 			assert(mesh);
 			mesh->enableStippling(item->checkState() == Qt::Checked);
 		}
@@ -1197,7 +1270,7 @@ void ccPropertiesTreeDelegate::spawnColorRampEditor()
 	ccScalarField* sf = (cloud ? static_cast<ccScalarField*>(cloud->getCurrentDisplayedScalarField()) : 0);
 	if (sf)
 	{
-		ccColorScaleEditorDialog* editorDialog = new ccColorScaleEditorDialog(sf->getColorScale(),static_cast<ccGLWindow*>(cloud->getDisplay()));
+		ccColorScaleEditorDialog* editorDialog = new ccColorScaleEditorDialog(ccColorScalesManager::GetUniqueInstance(),sf->getColorScale(),static_cast<ccGLWindow*>(cloud->getDisplay()));
 		editorDialog->setAssociatedScalarField(sf);
 		if (editorDialog->exec())
 		{
@@ -1226,13 +1299,11 @@ void ccPropertiesTreeDelegate::colorScaleChanged(int pos)
 		return;
 	}
 
-	QComboBox* comboBox = dynamic_cast<QComboBox*>(QObject::sender());
-	if (!comboBox)
+	ccColorScaleSelector* selector = dynamic_cast<ccColorScaleSelector*>(QObject::sender());
+	if (!selector)
 		return;
 
-	QString UUID = comboBox->itemData(pos).toString();
-	ccColorScale::Shared colorScale = ccColorScalesManager::GetUniqueInstance()->getScale(UUID);
-
+	ccColorScale::Shared colorScale = selector->getScale(pos);
 	if (!colorScale)
 	{
 		ccLog::Error("Internal error: color scale doesn't seem to exist anymore!");
@@ -1381,6 +1452,20 @@ void ccPropertiesTreeDelegate::cloudPointSizeChanged(int size)
 	updateDisplay();
 }
 
+void ccPropertiesTreeDelegate::polyineWidthChanged(int size)
+{
+    if (!m_currentObject)
+        return;
+
+    ccPolyline* pline = ccHObjectCaster::ToPolyline(m_currentObject);
+    assert(pline);
+
+	if (pline)
+		pline->setWidth(size);
+    
+	updateDisplay();
+}
+
 void ccPropertiesTreeDelegate::objectDisplayChanged(const QString& newDisplayTitle)
 {
     if (!m_currentObject)
@@ -1397,7 +1482,7 @@ void ccPropertiesTreeDelegate::objectDisplayChanged(const QString& newDisplayTit
     if (actualDisplayTitle != newDisplayTitle)
     {
         //we first mark the "old displays" before removal,
-        //to be sure that they wiil also be redrawn!
+        //to be sure that they will also be redrawn!
         m_currentObject->prepareDisplayForRefresh_recursive();
 
         ccGLWindow* win = MainWindow::GetGLWindow(newDisplayTitle);

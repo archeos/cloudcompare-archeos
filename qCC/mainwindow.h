@@ -36,7 +36,7 @@
 #include <ui_mainWindow.h>
 
 //qCC_db
-#include <ccGenericMesh.h>
+#include <ccMesh.h>
 
 //db
 #include "db_tree/ccDBRoot.h"
@@ -126,6 +126,7 @@ public:
 	virtual ccHObject* dbRootObject();
 	virtual QMainWindow* getMainWindow() {return this;}
 	virtual const ccHObject::Container& getSelectedEntities() const { return m_selectedEntities; }
+	virtual ccColorScalesManager* getColorScalesManager();
 
 	//! Returns real 'dbRoot' object
 	virtual ccDBRoot* db();
@@ -259,13 +260,15 @@ protected slots:
     void doActionSFConvertToRGB();
 	void doActionRenameSF();
 	void doActionOpenColorScalesManager();
+    void doActionAddIdField();
 
 	void doComputeDensity();
     void doComputeCurvature();
     void doActionSFGradient();
     void doComputeRoughness();
 	void doSphericalNeighbourhoodExtractionTest(); //DGM TODO: remove after test
-	void doComputePlaneOrientation();
+	void doActionFitPlane();
+	void doActionFitFacet();
 	void doShowPrimitiveFactory();
 
     void doActionComputeNormals();
@@ -436,7 +439,12 @@ protected:
     //! Apply a specific process to a mesh scalar field
 	/** \param process process
     **/
-	void doMeshSFAction(ccGenericMesh::MESH_SCALAR_FIELD_PROCESS process);
+	void doMeshSFAction(ccMesh::MESH_SCALAR_FIELD_PROCESS process);
+
+	//! Computes the orientation of an entity
+	/** Either fit a plane or a 'facet' (2D polygon)
+	**/
+	void doComputePlaneOrientation(bool fitFacet);
 
     //! Connects all QT actions to slots
     void connectActions();

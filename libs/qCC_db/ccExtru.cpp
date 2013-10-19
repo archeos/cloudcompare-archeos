@@ -17,17 +17,12 @@
 
 #include "ccExtru.h"
 
-//Triangle Lib
-#include <triangle.h>
-
 //qCC_db
 #include "ccPointCloud.h"
 #include "ccNormalVectors.h"
 
 //CCLib
-#include <SimpleCloud.h>
-#include <Polyline.h>
-#include <ManualSegmentationTools.h>
+#include <Delaunay2dMesh.h>
 
 //system
 #include <string.h>
@@ -60,95 +55,27 @@ ccGenericPrimitive* ccExtru::clone() const
 bool ccExtru::buildUp()
 {
 	unsigned count = (unsigned)m_profile.size();
-	if (count<3)
+	if (count < 3)
 		return false;
 
-	//let's try to triangulate the profile first
-	//we use the external library 'Triangle'
-	triangulateio in;
-	memset(&in,0,sizeof(triangulateio));
-
-	in.numberofpoints = (int)m_profile.size();
-	in.pointlist = (REAL*)(&m_profile[0]);
+	CCLib::Delaunay2dMesh mesh;
 
 	//DGM: we check that last vertex is different from the first one!
 	//(yes it happens ;)
-	if (m_profile.back().x == m_profile.front().x && 
-		m_profile.back().y == m_profile.front().y)
-	{
-		--in.numberofpoints;
-		if (in.numberofpoints<3)
-			return false;
-	}
+	if (m_profile.back().x == m_profile.front().x &&  m_profile.back().y == m_profile.front().y)
+		--count;
 
-	try
-	{
-		triangulate ( "zQN", &in, &in, 0 );
-	}
-	catch (...)
+	if (!mesh.build(m_profile,count,true))
 	{
 		ccLog::Error("[ccPlane::buildUp] Profile triangulation failed");
 		return false;
 	}
 
-	unsigned numberOfTriangles = in.numberoftriangles;
-	int* triIndexes = (int*)in.trianglelist;
+	unsigned numberOfTriangles = mesh.size();
+	int* triIndexes = mesh.getTriangleIndexesArray();
 
-	if (!triIndexes)
+	if (numberOfTriangles == 0)
 		return false;
-
-	//we must first remove triangles out of the profile! ('Triangle' triangulates the convex hull)
-	{
-		//build corresponding polyline
-		CCLib::SimpleCloud polyCloud;
-		if (!polyCloud.reserve(count))
-		{
-			delete[] triIndexes;
-			ccLog::Error("[ccPlane::buildUp] Not enough memory");
-			return false;
-		}
-		else
-		{
-			for (unsigned i=0;i<count;++i)
-				polyCloud.addPoint(CCVector3(m_profile[i].x,m_profile[i].y,0));
-		}
-		CCLib::Polyline poly(&polyCloud);
-		if (!poly.addPointIndex(0,count))
-		{
-			delete[] triIndexes;
-			ccLog::Error("[ccPlane::buildUp] Not enough memory");
-			return false;
-		}
-		poly.setClosingState(true);
-
-		//test each triangle center
-		const int* _triIndexes = triIndexes;
-		unsigned lastValidIndex=0;
-		for (unsigned i=0;i<numberOfTriangles;++i,_triIndexes+=3)
-		{
-			const CCVector2& A = m_profile[_triIndexes[0]];
-			const CCVector2& B = m_profile[_triIndexes[1]];
-			const CCVector2& C = m_profile[_triIndexes[2]];
-			CCVector2 G = CCVector2((A.x+B.x+C.x)/3.0,
-									(A.y+B.y+C.y)/3.0);
-
-			//i fG is inside polygon
-			if (CCLib::ManualSegmentationTools::isPointInsidePoly(G,&poly))
-			{
-				if (lastValidIndex<i)
-					memcpy(triIndexes+3*lastValidIndex,triIndexes+3*i,3*sizeof(int));
-				++lastValidIndex;
-			}
-		}
-
-		numberOfTriangles = lastValidIndex;
-	}
-
-	if (numberOfTriangles==0)
-	{
-		delete[] triIndexes;
-		return false;
-	}
 
 	//vertices
 	unsigned vertCount = 2*count;
@@ -159,7 +86,6 @@ bool ccExtru::buildUp()
 
 	if (!init(vertCount,false,faceCount,faceNormCount))
 	{
-		delete[] triIndexes;
 		ccLog::Error("[ccPlane::buildUp] Not enough memory");
 		return false;
 	}
@@ -211,10 +137,6 @@ bool ccExtru::buildUp()
 			}
 		}
 	}
-
-	if (triIndexes)
-		delete[] triIndexes;
-	triIndexes=0;
 
 	return true;
 }

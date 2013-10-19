@@ -28,6 +28,7 @@
 #include <QMessageBox>
 
 //qCC_db
+#include <ccLog.h>
 #include <ccHObject.h>
 #include <ccGenericPointCloud.h>
 #include <ccPointCloud.h>
@@ -36,10 +37,14 @@
 #include <cc2DLabel.h>
 #include <ccGenericPrimitive.h>
 #include <ccPlane.h>
+#include <ccPolyline.h>
+#include <ccFacet.h>
+
+//CClib
+#include <CCMiscTools.h>
 
 //local
 #include "ccPropertiesTreeDelegate.h"
-#include "../ccConsole.h"
 #include "../mainwindow.h"
 
 //system
@@ -213,7 +218,7 @@ void ccDBRoot::removeElement(ccHObject* anObject)
     ccHObject* parent = anObject->getParent();
     if (!parent)
     {
-		ccConsole::Warning("[ccDBRoot::removeElement] Internal error: object has no parent!");
+		ccLog::Warning("[ccDBRoot::removeElement] Internal error: object has no parent!");
         return;
     }
 
@@ -250,13 +255,16 @@ void ccDBRoot::deleteSelectedEntities()
 	{
 		for (unsigned i=0; i<allLabels.size(); ++i)
 		{
-			cc2DLabel* label = static_cast<cc2DLabel*>(allLabels[i]);
-			//shared labels are labels shared by at least 2 different clouds
-			if (label->size() > 1 && label->getPoint(0).cloud != label->getPoint(1).cloud
-				|| label->size() > 2 && label->getPoint(1).cloud != label->getPoint(2).cloud)
+			if (allLabels[i]->isA(CC_2D_LABEL)) //Warning: cc2DViewportLabel is also a kind of 'CC_2D_LABEL'!
 			{
-				hasSharedLabels = true;
-				break;
+				cc2DLabel* label = static_cast<cc2DLabel*>(allLabels[i]);
+				//shared labels are labels shared by at least 2 different clouds
+				if (label->size() > 1 && label->getPoint(0).cloud != label->getPoint(1).cloud
+					|| label->size() > 2 && label->getPoint(1).cloud != label->getPoint(2).cloud)
+				{
+					hasSharedLabels = true;
+					break;
+				}
 			}
 		}
 	}
@@ -270,7 +278,7 @@ void ccDBRoot::deleteSelectedEntities()
         //we don't take care of parentless objects (i.e. the tree root)
 		if (!obj->getParent() || obj->isLocked())
 		{
-			ccConsole::Warning(QString("Object '%1' can't be deleted this way (locked)").arg(obj->getName()));
+			ccLog::Warning(QString("Object '%1' can't be deleted this way (locked)").arg(obj->getName()));
 			continue;
 		}
 
@@ -293,9 +301,9 @@ void ccDBRoot::deleteSelectedEntities()
 		{
 			//last check: mesh vertices
 			if (obj->isKindOf(CC_POINT_CLOUD) && obj->getParent()->isKindOf(CC_MESH))
-				if (static_cast<ccGenericMesh*>(obj->getParent())->getAssociatedCloud() == obj)
+				if (ccHObjectCaster::ToGenericMesh(obj->getParent())->getAssociatedCloud() == obj)
 				{
-					ccConsole::Warning("Mesh vertices can't be deleted without their parent mesh!");
+					ccLog::Warning("Mesh vertices can't be deleted without their parent mesh!");
 					continue;
 				}
 
@@ -355,7 +363,7 @@ void ccDBRoot::deleteSelectedEntities()
 		{
 			//specific case: the object is a mesh and its parent is its vertices!
 			//(can happen if a Delaunay mesh is computed directly in CC)
-			if (anObject->getParent() && anObject->getParent() == static_cast<ccGenericMesh*>(anObject)->getAssociatedCloud())
+			if (anObject->getParent() && anObject->getParent() == ccHObjectCaster::ToGenericMesh(anObject)->getAssociatedCloud())
 				anObject->getParent()->setVisible(true);
 		}
 
@@ -424,6 +432,7 @@ QVariant ccDBRoot::data(const QModelIndex &index, int role) const
 			case CC_BOX:	
 			case CC_DISH:	
 			case CC_EXTRU:	
+			case CC_FACET:
                 if (locked)
                     return QIcon(QString::fromUtf8(":/CC/images/dbMiscGeomSymbolLocked.png"));
                 else
@@ -433,11 +442,13 @@ QVariant ccDBRoot::data(const QModelIndex &index, int role) const
                     return QIcon(QString::fromUtf8(":/CC/images/dbMeshSymbolLocked.png"));
                 else
                     return QIcon(QString::fromUtf8(":/CC/images/dbMeshSymbol.png"));
-            case CC_MESH_GROUP:
+            case CC_SUB_MESH:
                 if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbMeshGroupSymbolLocked.png"));
+                    return QIcon(QString::fromUtf8(":/CC/images/dbSubMeshSymbolLocked.png"));
                 else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbMeshGroupSymbol.png"));
+                    return QIcon(QString::fromUtf8(":/CC/images/dbSubMeshSymbol.png"));
+			case CC_POLY_LINE:
+				return QIcon(QString::fromUtf8(":/CC/images/dbPolylineSymbol.png"));
             case CC_POINT_OCTREE:
                 if (locked)
                     return QIcon(QString::fromUtf8(":/CC/images/dbOctreeSymbolLocked.png"));
@@ -562,7 +573,7 @@ QModelIndex ccDBRoot::index(ccHObject* object)
     ccHObject* parent = object->getParent();
     if (!parent)
     {
-        ccConsole::Error(QString("An error while creating DB tree index: object '%1' has no parent!").arg(object->getName()));
+        ccLog::Error(QString("An error while creating DB tree index: object '%1' has no parent!").arg(object->getName()));
         return QModelIndex();
     }
 
@@ -904,13 +915,16 @@ int ccDBRoot::getSelectedEntities(ccHObject::Container& selEntities,
 
             if (obj->isKindOf(CC_POINT_CLOUD))
             {
-                ccGenericPointCloud* cloud = static_cast<ccGenericPointCloud*>(obj);
+                ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(obj);
                 info->cloudCount++;
                 info->octreeCount += int(cloud->getOctree()!=NULL);
             }
 
             if (obj->isKindOf(CC_MESH))
                 info->meshCount++;
+
+            if (obj->isKindOf(CC_POLY_LINE))
+                info->polylineCount++;
 
             if (obj->isKindOf(CC_SENSOR))
             {
@@ -947,14 +961,22 @@ Qt::ItemFlags ccDBRoot::flags(const QModelIndex &index) const
 	assert(item);
 	if (item)
 	{
-		if (item->isA(CC_HIERARCHY_OBJECT)	||
-			item->isKindOf(CC_POINT_CLOUD)	||
-			item->isKindOf(CC_MESH)			||
-			item->isKindOf(CC_IMAGE)		||
-			item->isKindOf(CC_2D_LABEL)		||
+		if (item->isA(CC_HIERARCHY_OBJECT)							||
+			item->isKindOf(CC_POINT_CLOUD)							||
+			(item->isKindOf(CC_MESH) && !item->isA(CC_SUB_MESH))	|| //a sub-mesh can't leave its parent mesh
+			item->isKindOf(CC_IMAGE)								||
+			item->isKindOf(CC_2D_LABEL)								||
 			item->isKindOf(CC_PRIMITIVE))
 		{
 			defaultFlags |= (Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
+		}
+		else if (item->isKindOf(CC_POLY_LINE))
+		{
+			const ccPolyline* poly = static_cast<const ccPolyline*>(item);
+			//we can only displace a polyline if it is not dependant on it's father!
+			const ccHObject* polyVertices = dynamic_cast<const ccHObject*>(poly->getAssociatedCloud());
+			if (polyVertices != poly->getParent())
+				defaultFlags |= (Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
 		}
 		else if (item->isKindOf(CC_2D_VIEWPORT_OBJECT))
 		{
@@ -1011,11 +1033,11 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 		ccHObject *item = m_treeRoot->find(uniqueID);
 		if (!item)
 			continue;
-		//ccConsole::Print(QString("[Drag & Drop] Source: %1").arg(item->getName()));
+		//ccLog::Print(QString("[Drag & Drop] Source: %1").arg(item->getName()));
 
 		//old parent
 		ccHObject* oldParent = item->getParent();
-		//ccConsole::Print(QString("[Drag & Drop] Parent: %1").arg(oldParent ? oldParent->getName() : "none")));
+		//ccLog::Print(QString("[Drag & Drop] Parent: %1").arg(oldParent ? oldParent->getName() : "none")));
 
 		//let's check if we can actually move the entity
 		if (oldParent)
@@ -1023,45 +1045,37 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 			if (item->isKindOf(CC_POINT_CLOUD))
 			{
 				//point cloud == mesh vertices?
-				if (oldParent->isKindOf(CC_MESH) && static_cast<ccGenericMesh*>(oldParent)->getAssociatedCloud() == item)
+				if (oldParent->isKindOf(CC_MESH) && ccHObjectCaster::ToGenericMesh(oldParent)->getAssociatedCloud() == item)
 					if (oldParent != newParent)
 					{
-						ccConsole::Error("Vertices can't leave their parent mesh!");
+						ccLog::Error("Vertices can't leave their parent mesh!");
 						return false;
 					}
 			}
 			else if (item->isKindOf(CC_MESH))
 			{
-				//a mesh can't leave it's mesh group
-				if (oldParent->isA(CC_MESH_GROUP) && static_cast<ccGenericMesh*>(item)->getAssociatedCloud() == static_cast<ccGenericMesh*>(oldParent)->getAssociatedCloud())
+				//a sub-mesh can't leave its parent mesh
+				if (item->isA(CC_SUB_MESH))
 				{
-					if (oldParent != newParent)
-					{
-						ccConsole::Error("Sub-meshes can't leave their mesh group!");
-						return false;
-					}
-				}
-				//a mesh can't leave it's associated cloud
-				else if (oldParent->isKindOf(CC_POINT_CLOUD) &&  static_cast<ccGenericMesh*>(item)->getAssociatedCloud() == oldParent)
-				{
-					if (oldParent != newParent)
-					{
-						ccConsole::Error("Sub-meshes can't leave their associated cloud!");
-						return false;
-					}
-				}
-				//a mesh can't be inserted in a mesh group
-				else if (newParent->isA(CC_MESH_GROUP) && static_cast<ccGenericMesh*>(item)->getAssociatedCloud() != static_cast<ccGenericMesh*>(newParent)->getAssociatedCloud())
-				{
-					ccConsole::Error("Outside meshes can't be added to mesh groups!");
+					assert(false);
+					ccLog::Error("Sub-meshes can't leave their mesh group!");
 					return false;
+				}
+				//a mesh can't leave its associated cloud
+				else if (oldParent->isKindOf(CC_POINT_CLOUD) &&  ccHObjectCaster::ToGenericMesh(item)->getAssociatedCloud() == oldParent)
+				{
+					if (oldParent != newParent)
+					{
+						ccLog::Error("Sub-meshes can't leave their associated cloud!");
+						return false;
+					}
 				}
 			}
 			else if (/*item->isKindOf(CC_PRIMITIVE) || */item->isKindOf(CC_IMAGE))
 			{
 				if (oldParent != newParent)
 				{
-					ccConsole::Error("This kind of entity can't leave their parent!");
+					ccLog::Error("This kind of entity can't leave their parent!");
 					return false;
 				}
 			}
@@ -1077,25 +1091,28 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 				//for all labels in the sub-tree
 				for (ccHObject::Container::const_iterator it = labels.begin(); it != labels.end(); ++it)
 				{
-					cc2DLabel* label = static_cast<cc2DLabel*>(*it);
-					bool canMove = false;
-					for (unsigned j=0;j<label->size();++j)
+					if ((*it)->isA(CC_2D_LABEL)) //Warning: cc2DViewportLabel is also a kind of 'CC_2D_LABEL'!
 					{
-						assert(label->getPoint(j).cloud);
-						//3 options to allow moving a label:
-						if (item->isAncestorOf(label->getPoint(j).cloud) //label's cloud is inside sub-tree
-							|| newParent == label->getPoint(j).cloud //destination is label's cloud
-							|| label->getPoint(j).cloud->isAncestorOf(newParent)) //destination is below label's cloud
+						cc2DLabel* label = static_cast<cc2DLabel*>(*it);
+						bool canMove = false;
+						for (unsigned j=0;j<label->size();++j)
 						{
-							canMove = true;
-							break;
+							assert(label->getPoint(j).cloud);
+							//3 options to allow moving a label:
+							if (item->isAncestorOf(label->getPoint(j).cloud) //label's cloud is inside sub-tree
+								|| newParent == label->getPoint(j).cloud //destination is label's cloud
+								|| label->getPoint(j).cloud->isAncestorOf(newParent)) //destination is below label's cloud
+							{
+								canMove = true;
+								break;
+							}
 						}
-					}
 
-					if (!canMove)
-					{
-						ccConsole::Error("Labels (or group of) can't leave their parent!");
-						return false;
+						if (!canMove)
+						{
+							ccLog::Error("Labels (or group of) can't leave their parent!");
+							return false;
+						}
 					}
 				}
 			}
@@ -1121,10 +1138,10 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 
 		//remove link from old parent
 		bool fatherDependant = false;
-		if (item->getFlagState(CC_FATHER_DEPENDANT))
+		if (item->getFlagState(CC_FATHER_DEPENDENT))
 		{
 			fatherDependant = true;
-			item->setFlagState(CC_FATHER_DEPENDANT,false);
+			item->setFlagState(CC_FATHER_DEPENDENT,false);
 		}
 
 		//remove item from current position
@@ -1220,9 +1237,9 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 	//plane normal
 	CCVector3 planeNormal;
 	CCVector3 planeVertDir;
+	CCVector3 center;
 
-	//2D label with 3 points?
-	if (obj->isA(CC_2D_LABEL))
+	if (obj->isA(CC_2D_LABEL)) //2D label with 3 points?
 	{
 		cc2DLabel* label = static_cast<cc2DLabel*>(obj);
 		//work only with labels with 3 points!
@@ -1236,6 +1253,7 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 			const CCVector3* _C = C.cloud->getPoint(C.index);
 			planeNormal = (*_B-*_A).cross(*_C-*_A);
 			planeVertDir = /*(*_B-*_A)*/win->getCurrentUpDir();
+			center = (*_A + *_B + *_C)/3;
 		}
 		else
 		{
@@ -1243,13 +1261,21 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 			return;
 		}
 	}
-	//plane ?
-	else if (obj->isA(CC_PLANE))
+	else if (obj->isA(CC_PLANE)) //plane
 	{
 		ccPlane* plane = static_cast<ccPlane*>(obj);
 		//3rd column = plane normal!
 		planeNormal = plane->getNormal();
 		planeVertDir = CCVector3(plane->getTransformation().getColumn(1));
+		center = plane->getCenter();
+	}
+	else if (obj->isA(CC_FACET)) //facet
+	{
+		ccFacet* facet = static_cast<ccFacet*>(obj);
+		planeNormal = facet->getNormal();
+		CCVector3 planeHorizDir(0,1,0);
+		CCLib::CCMiscTools::ComputeBaseVectors(planeNormal.u,planeHorizDir.u,planeVertDir.u);
+		center = facet->getCenter();
 	}
 	else
 	{
@@ -1258,8 +1284,23 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 	}
 
 	//we can now make the camera look in the direction of the normal
-	CCVector3 forward = (reverse ? planeNormal : -planeNormal);
-	win->setCustomView(forward,planeVertDir);
+	if (!reverse)
+		planeNormal *= -1;
+	win->setCustomView(planeNormal,planeVertDir);
+
+	//output the transformation matrix that would make this normal points towards +Z
+	{
+		ccGLMatrix transMat;
+		transMat.setTranslation(-center);
+		ccGLMatrix viewMat = win->getViewportParameters().viewMat;
+		viewMat = viewMat * transMat;
+		viewMat.setTranslation(CCVector3(viewMat.getTranslation()) + center);
+
+		ccLog::Print("[Align camera] Corresponding view matrix:");
+		const float* mat = viewMat.data();
+		ccLog::Print("%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f\n%6.12f\t%6.12f\t%6.12f\t%6.12f",mat[0],mat[4],mat[8],mat[12],mat[1],mat[5],mat[9],mat[13],mat[2],mat[6],mat[10],mat[14],mat[3],mat[7],mat[11],mat[15]);
+		ccLog::Print("[Orientation] You can copy this matrix values (CTRL+C) and paste them in the 'Apply transformation tool' dialog");
+	}
 }
 
 void ccDBRoot::gatherRecursiveInformation()
@@ -1333,13 +1374,10 @@ void ccDBRoot::gatherRecursiveInformation()
 		{
 			ccMesh* mesh = static_cast<ccMesh*>(ent);
 
-			if (!ent->isA(CC_MESH_GROUP)) //CC_MESH_GROUPs already return the sum of their children sizes!
-			{
-				info.meshCount++;
-				unsigned meshSize = mesh->size();
-				info.triangleCount += meshSize;
-				info.normalCount += (mesh->hasTriNormals() ? meshSize : 0);
-			}
+			info.meshCount++;
+			unsigned meshSize = mesh->size();
+			info.triangleCount += meshSize;
+			info.normalCount += (mesh->hasTriNormals() ? meshSize : 0);
 			info.materialCount += (mesh->getMaterialSet() ? (unsigned)mesh->getMaterialSet()->size() : 0);
 		}
 		else if (ent->isKindOf(CC_2D_LABEL))
@@ -1532,7 +1570,7 @@ void ccDBRoot::toggleSelectedEntitiesProperty(unsigned prop)
 {
 	if (prop>6)
 	{
-		ccConsole::Warning("[ccDBRoot::toggleSelectedEntitiesProperty] Internal error: invalid 'prop' value");
+		ccLog::Warning("[ccDBRoot::toggleSelectedEntitiesProperty] Internal error: invalid 'prop' value");
 		return;
 	}
 
@@ -1649,11 +1687,11 @@ void ccDBRoot::showContextMenu(const QPoint& menuPos)
 					
 					if (selCount == 1)
 					{
-						if (item->isKindOf(CC_2D_LABEL))
+						if (item->isA(CC_2D_LABEL))
 						{
 							hasExactlyOnePlanarEntity = (static_cast<cc2DLabel*>(item)->size() == 3);
 						}
-						else if (item->isA(CC_PLANE))
+						else if (item->isA(CC_PLANE) || item->isA(CC_FACET))
 						{
 							hasExactlyOnePlanarEntity = true;
 						}

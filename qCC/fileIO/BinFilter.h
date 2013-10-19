@@ -20,13 +20,8 @@
 
 #include "FileIOFilter.h"
 
-//qCC_db
-#include <ccFlags.h>
-
 //Qt
 #include <QFile>
-
-class ccGenericPointCloud;
 
 //! CloudCompare dedicated binary point cloud I/O filter
 class BinFilter : public FileIOFilter
@@ -45,33 +40,6 @@ protected:
 	//! new style BIN loading
     virtual CC_FILE_ERROR loadFileV2(QFile& in, ccHObject& container);
 	//virtual CC_FILE_ERROR saveToFileV2(ccHObject* entity, const char* filename);
-
-	//! Per-cloud header flags (old style)
-	union HeaderFlags
-	{
-		struct
-		{
-			bool bit1;			//bit 1
-			bool colors;		//bit 2
-			bool normals;		//bit 3
-			bool scalarField;	//bit 4
-			bool name;			//bit 5
-			bool sfName;		//bit 6
-			bool bit7;			//bit 7
-			bool bit8;			//bit 8
-		};
-		ccFlags flags;
-
-		//! Default constructor
-		HeaderFlags()
-		{
-			flags.reset();
-			bit1=true; //bit '1' is always ON!
-		}
-	};
-
-	//specific methods (old style)
-	static int ReadEntityHeader(QFile& in, unsigned& numberOfPoints, HeaderFlags& header);
 };
 
-#endif
+#endif //CC_BIN_FILTER_HEADER
