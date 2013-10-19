@@ -7,22 +7,24 @@ export DEB_BUILD_OPTIONS=parallel=$(NPROCS)
 
 %:
 	dh $@ --parallel
-	
+
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -f qCC/config.h
 
 override_dh_auto_configure:
 	dh_auto_configure -- -DINSTALL_QBLUR_PLUGIN=ON \
-		-D-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_BUILD_TYPE=Release \
 		-DINSTALL_QHPR_PLUGIN=ON \
 		-DINSTALL_QPOISSON_RECON_PLUGIN=ON \
 		-DINSTALL_QEDL_PLUGIN=ON \
 		-DINSTALL_QKINECT_PLUGIN=ON \
-	    -DLIBFREENECT_INCLUDE_DIR="/usr/include" \
-	    -DLIBFREENECT_LIBRARY_FILE="-lfreenect" \
+	    	-DLIBFREENECT_INCLUDE_DIR="/usr/include" \
+	        -DLIBFREENECT_LIBRARY_FILE="-lfreenect" \
+		-DOPTION_USE_DXF_LIB=ON \
+		-DDXF_LIB_SRC_DIR="/usr/include/dxflib" \
 		-DINSTALL_QSSAO_PLUGIN=ON \
-		-DINSTALL_QPCV_PLUGIN=ON
+		-DINSTALL_QPCV_PLUGIN=ON 
 
 override_dh_shlibdeps:
 	dh_shlibdeps -l/usr/lib/cloudcompare
