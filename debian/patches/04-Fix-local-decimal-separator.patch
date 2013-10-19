@@ -12,7 +12,7 @@ It give consistency with Meshlab behavior.
 
 --- a/ccViewer/main.cpp
 +++ b/ccViewer/main.cpp
-@@ -46,6 +46,7 @@ class ccApplication : public QApplicatio
+@@ -43,6 +43,7 @@ class ccApplication : public QApplicatio
        {
           setOrganizationName("CCCorp");
           setApplicationName("CloudCompareViewer");
@@ -22,7 +22,7 @@ It give consistency with Meshlab behavior.
           
 --- a/qCC/main.cpp
 +++ b/qCC/main.cpp
-@@ -50,6 +50,7 @@ class qccApplication : public QApplicati
+@@ -51,6 +51,7 @@ class qccApplication : public QApplicati
        {
           setOrganizationName("CCCorp");
           setApplicationName("CloudCompare");

@@ -9,7 +9,7 @@ Subject: Use package directory for libs
 
 --- a/CC/CMakeLists.txt
 +++ b/CC/CMakeLists.txt
-@@ -42,7 +42,7 @@ endif()
+@@ -45,7 +45,7 @@ endif()
  
  # Install (shared) library to specified destinations
  if( UNIX )
@@ -20,7 +20,7 @@ Subject: Use package directory for libs
  	install_shared( CC_DLL ${dest} ${dest}_debug )
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
-@@ -38,7 +38,7 @@ endif()
+@@ -37,7 +37,7 @@ endif()
  
  # install (shared) lib to specified destinations
  if( UNIX )

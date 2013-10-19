@@ -9,7 +9,7 @@ Subject: Doc must live in a good dir
 
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -146,7 +146,7 @@ else()
+@@ -148,7 +148,7 @@ else()
  endif()
  
  # Auxiliary files
@@ -18,7 +18,7 @@ Subject: Doc must live in a good dir
  
  if( WIN32 )
  	# Export Qt dlls & plugins
-@@ -158,9 +158,9 @@ if( WIN32 )
+@@ -160,9 +160,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files
@@ -33,7 +33,7 @@ Subject: Doc must live in a good dir
  if( APPLE )
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
-@@ -125,9 +125,9 @@ if( WIN32 )
+@@ -127,9 +127,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files
