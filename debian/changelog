@@ -1,10 +1,16 @@
+cloudcompare (2.5.1-0archeos1) theodoric; urgency=low
+
+  * New upstream version 2.5.1
+    upstream changes are in the history.txt file
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 19 Oct 2013 12:00:00 +0200
+
 cloudcompare (2.5.0-0archeos1) theodoric; urgency=low
 
   * New upstream version 2.5.0
     upstream changes are in the history.txt file
   * Removed patch 04 for hardening (fixed upstream)
   * Removed StyleSheet in ccViewer (patch 06)
-   
 
  -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 13 Jul 2013 10:36:30 +0200
 
