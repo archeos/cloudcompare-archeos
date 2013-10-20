@@ -5,7 +5,7 @@ distrib=(raring tata titi)
 debversion=0
 ppaversion=1
 
-for d in precise
+for d in precise quantal raring
 do
     git branch $d;   
     git checkout $d;
