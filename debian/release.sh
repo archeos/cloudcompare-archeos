@@ -6,14 +6,17 @@ ppaversion=1
 
 for d in precise quantal raring saucy
 do
-    #Saucy package can be build from 'experimental' branch, with DXF support
+    # Saucy package can be built from 'experimental' branch, with DXF support
     if [ $d = "saucy" ]
     then
-    git checkout experimental;
+	git checkout experimental;
     fi
-
+    
+    # Create new branch
     git branch $d;   
     git checkout $d;
+    
+    # Distrib name substitution in changelog
     sed -i -e 's/archeos/'${d}'/g' -e 's/theodoric/'${d}'/g' debian/changelog;
     
     # Precise do not support libfreenect
@@ -29,6 +32,8 @@ do
     git checkout master
     git branch -D $d;
 done
+
+# Purge release directory
 rm -rf ../release/cloudcompare*
 
 
