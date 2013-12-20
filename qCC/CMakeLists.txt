@@ -4,7 +4,7 @@ project( CloudCompare )
 
 set( VERSION_MAJOR 2 )
 set( VERSION_MINOR 5 )
-set( VERSION_PATCH 0 )
+set( VERSION_PATCH 2 )
 
 if ( UNIX )
 	set( CloudCompare_dest_release bin ) #default destination: /usr/bin
@@ -108,6 +108,10 @@ target_link_LIBE57( ${PROJECT_NAME} )
 target_link_3DXWARE( ${PROJECT_NAME} )
 #DXF support
 target_link_DXFLIB( ${PROJECT_NAME} )
+#GDAL support
+target_link_GDAL( ${PROJECT_NAME} ${CloudCompare_dest_release} ${CloudCompare_dest_debug} )
+#FBX support
+target_link_FBX_SDK( ${PROJECT_NAME} )
 
 # Default preprocessors
 set_default_cc_preproc( ${PROJECT_NAME} )
@@ -170,7 +174,7 @@ if( APPLE )
    set_source_files_properties( images/icon/cc_icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources )   
 
    set( MACOSX_BUNDLE_ICON_FILE cc_icon.icns ) 
-   set( MACOSX_BUNDLE_SHORT_VERSION_STRING "${VERSION_MAJOR}.${VERSION_MINOR}" )
+   set( MACOSX_BUNDLE_SHORT_VERSION_STRING "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}" )
    set( MACOSX_BUNDLE_LONG_VERSION_STRING "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}" )
    set( MACOSX_BUNDLE_BUNDLE_VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}" )
 

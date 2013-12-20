@@ -36,10 +36,11 @@
 //Qt
 #include <QtGui>
 #include <QApplication>
-#include <qtconcurrentrun.h>
+#include <QtConcurrentRun>
+#include <QApplication>
+#include <QProgressDialog>
 
 //qCC_db
-#include <ccProgressDialog.h>
 #include <ccGenericPointCloud.h>
 #include <ccPointCloud.h>
 #include <ccGenericMesh.h>
@@ -135,7 +136,8 @@ void qRansacSD::doAction()
 	bool hasNorms = pc->hasNormals();
     PointCoordinateType bbMin[3],bbMax[3];
     pc->getBoundingBox(bbMin,bbMax);
-	const double* originalShift = pc->getOriginalShift();
+	const CCVector3d& globalShift = pc->getGlobalShift();
+	double globalScale = pc->getGlobalScale();
 
     //Convert CC point cloud to RANSAC_SD type
 	PointCloud cloud;
@@ -158,27 +160,27 @@ void qRansacSD::doAction()
 		for (unsigned i=0;i<(unsigned)count;++i)
 		{
 			const CCVector3* P = pc->getPoint(i);
-			Pt.pos[0] = P->x;
-			Pt.pos[1] = P->y;
-			Pt.pos[2] = P->z;
+			Pt.pos[0] = static_cast<float>(P->x);
+			Pt.pos[1] = static_cast<float>(P->y);
+			Pt.pos[2] = static_cast<float>(P->z);
 			if (hasNorms)
 			{
 				const PointCoordinateType* N = pc->getPointNormal(i);
-				Pt.normal[0] = N[0];
-				Pt.normal[1] = N[1];
-				Pt.normal[2] = N[2];
+				Pt.normal[0] = static_cast<float>(N[0]);
+				Pt.normal[1] = static_cast<float>(N[1]);
+				Pt.normal[2] = static_cast<float>(N[2]);
 			}
 			cloud.push_back(Pt);
 		}
 		
 		//manually set bounding box!
 		Vec3f cbbMin,cbbMax;
-		cbbMin[0] = bbMin[0];
-		cbbMin[1] = bbMin[1];
-		cbbMin[2] = bbMin[2];
-		cbbMax[0] = bbMax[0];
-		cbbMax[1] = bbMax[1];
-		cbbMax[2] = bbMax[2];
+		cbbMin[0] = static_cast<float>(bbMin[0]);
+		cbbMin[1] = static_cast<float>(bbMin[1]);
+		cbbMin[2] = static_cast<float>(bbMin[2]);
+		cbbMax[0] = static_cast<float>(bbMax[0]);
+		cbbMax[1] = static_cast<float>(bbMax[1]);
+		cbbMax[2] = static_cast<float>(bbMax[2]);
 		cloud.setBBox(cbbMin,cbbMax);
 	}
 
@@ -231,32 +233,30 @@ void qRansacSD::doAction()
 	//import parameters from dialog
 	RansacShapeDetector::Options ransacOptions;
 	{
-		ransacOptions.m_epsilon = rsdDlg.epsilonDoubleSpinBox->value();
-		ransacOptions.m_bitmapEpsilon = rsdDlg.bitmapEpsilonDoubleSpinBox->value();
-		ransacOptions.m_normalThresh = rsdDlg.normThreshDoubleSpinBox->value();
-		ransacOptions.m_minSupport = rsdDlg.supportPointsSpinBox->value();
-		ransacOptions.m_probability = rsdDlg.probaDoubleSpinBox->value();
+		ransacOptions.m_epsilon			= static_cast<float>(rsdDlg.epsilonDoubleSpinBox->value());
+		ransacOptions.m_bitmapEpsilon	= static_cast<float>(rsdDlg.bitmapEpsilonDoubleSpinBox->value());
+		ransacOptions.m_normalThresh	= static_cast<float>(rsdDlg.normThreshDoubleSpinBox->value());
+		ransacOptions.m_probability		= static_cast<float>(rsdDlg.probaDoubleSpinBox->value());
+		ransacOptions.m_minSupport		= static_cast<unsigned>(rsdDlg.supportPointsSpinBox->value());
 	}
-
-	//progress dialog
-	ccProgressDialog progressCb(false,m_app->getMainWindow());
-	progressCb.setRange(0,0);
 
 	if (!hasNorms)
 	{
-		progressCb.setInfo("Computing normals (please wait)");
-		progressCb.start();
+		QProgressDialog pDlg("Computing normals (please wait)",QString(),0,0,m_app->getMainWindow());
+		pDlg.setWindowTitle("Ransac Shape Detection");
+		pDlg.show();
 		QApplication::processEvents();
 
 		cloud.calcNormals(.01f * scale);
 
 		if (pc->reserveTheNormsTable())
 		{
-			for (size_t i=0;i<count;++i)
+			for (size_t i=0; i<count; ++i)
 			{
-				CCVector3 N(cloud[i].normal);
-				N.normalize();
-				pc->addNorm(N.u);
+				Vec3f& Ni = cloud[i].normal;
+				//normalize the vector in case of
+				Vector3Tpl<float>::vnormalize(Ni);
+				pc->addNorm(Ni[0],Ni[1],Ni[2]);
 			}
 			pc->showNormals(true);
 			
@@ -298,9 +298,11 @@ void qRansacSD::doAction()
 	// [ pc.size() - \sum_{j=0..i} shapes[j].second, pc.size() - \sum_{j=0..i-1} shapes[j].second )
 
 	{
-		progressCb.setInfo("Operation in progress");
-		progressCb.setMethodTitle("Ransac Shape Detection");
-		progressCb.start();
+		//progress dialog (Qtconcurrent::run can't be canceled!)
+		QProgressDialog pDlg("Operation in progress (please wait)",QString(),0,0,m_app->getMainWindow());
+		pDlg.setWindowTitle("Ransac Shape Detection");
+		pDlg.show();
+		QApplication::processEvents();
 
 		//run in a separate thread
 		s_detector = &detector;
@@ -308,7 +310,6 @@ void qRansacSD::doAction()
 		s_cloud = &cloud;
 		QFuture<void> future = QtConcurrent::run(doDetection);
 
-		unsigned progress = 0;
 		while (!future.isFinished())
 		{
 #if defined(CC_WINDOWS)
@@ -316,21 +317,13 @@ void qRansacSD::doAction()
 #else
 			sleep(500);
 #endif
-			progressCb.update(++progress);
-			//Qtconcurrent::run can't be canceled!
-			/*if (progressCb.isCancelRequested())
-			{
-				future.cancel();
-				future.waitForFinished();
-				s_remainingPoints = count;
-				break;
-			}
-			//*/
+			pDlg.setValue(pDlg.value()+1);
+			QApplication::processEvents();
 		}
 
 		remaining = s_remainingPoints;
 
-		progressCb.stop();
+		pDlg.hide();
 		QApplication::processEvents();
 	}
 	//else
@@ -407,9 +400,9 @@ void qRansacSD::doAction()
 
 			for (size_t j=0;j<shapePointsCount;++j)
 			{
-				pcShape->addPoint(CCVector3(cloud[count-1-j].pos));
+				pcShape->addPoint(CCVector3::fromArray(cloud[count-1-j].pos));
 				if (saveNormals)
-					pcShape->addNorm(cloud[count-1-j].normal);
+					pcShape->addNorm(CCVector3::fromArray(cloud[count-1-j].normal).u);
 			}
 
 			//random color
@@ -419,8 +412,8 @@ void qRansacSD::doAction()
 			pcShape->showColors(true);
 			pcShape->showNormals(saveNormals);
 			pcShape->setVisible(true);
-			if (originalShift)
-				pcShape->setOriginalShift(originalShift[0],originalShift[1],originalShift[2]);
+			pcShape->setGlobalShift(globalShift);
+			pcShape->setGlobalScale(globalScale);
 
 			//convert detected primitive into a CC primitive type
 			ccGenericPrimitive* prim = 0;
@@ -461,14 +454,14 @@ void qRansacSD::doAction()
 				//we recenter plane (as it is not always the case!)
 				float dX = maxX-minX;
 				float dY = maxY-minY;
-				G += X * (minX+dX*0.5);
-				G += Y * (minY+dY*0.5);
+				G += X * (minX+dX/2);
+				G += Y * (minY+dY/2);
 
-				//we build matrix from these vecctors
-				ccGLMatrix glMat(CCVector3(X.getValue()),
-								CCVector3(Y.getValue()),
-								CCVector3(N.getValue()),
-								CCVector3(G.getValue()));
+				//we build matrix from these vectors
+				ccGLMatrix glMat(	CCVector3::fromArray(X.getValue()),
+									CCVector3::fromArray(Y.getValue()),
+									CCVector3::fromArray(N.getValue()),
+									CCVector3::fromArray(G.getValue()) );
 
 				//plane primitive
 				prim = new ccPlane(dX,dY,&glMat);
@@ -486,7 +479,7 @@ void qRansacSD::doAction()
 
 				//we build matrix from these vecctors
 				ccGLMatrix glMat;
-				glMat.setTranslation(CCVector3(CC.getValue()));
+				glMat.setTranslation(CC.getValue());
 				//sphere primitive
 				prim = new ccSphere(radius,&glMat);
 				prim->setEnabled(false);
@@ -505,15 +498,15 @@ void qRansacSD::doAction()
 				float hMin = cyl->MinHeight();
 				float hMax = cyl->MaxHeight();
 				float h = hMax-hMin;
-				G += N * (hMin+h*0.5);
+				G += N * (hMin+h/2);
 
 				pcShape->setName(QString("Cylinder (r=%1/h=%2)").arg(r,0,'f').arg(h,0,'f'));
 
 				//we build matrix from these vecctors
-				ccGLMatrix glMat(CCVector3(X.getValue()),
-								CCVector3(Y.getValue()),
-								CCVector3(N.getValue()),
-								CCVector3(G.getValue()));
+				ccGLMatrix glMat(	CCVector3::fromArray(X.getValue()),
+									CCVector3::fromArray(Y.getValue()),
+									CCVector3::fromArray(N.getValue()),
+									CCVector3::fromArray(G.getValue()) );
 
 				//cylinder primitive
 				prim = new ccCylinder(r,h,&glMat);
@@ -530,23 +523,23 @@ void qRansacSD::doAction()
 				float alpha = cone->Internal().Angle();
 
 				//compute max height
-				CCVector3 maxP(CC.getValue());
+				CCVector3 maxP = CCVector3::fromArray(CC.getValue());
 				float maxHeight = 0;
-				for (size_t j=0;j<shapePointsCount;++j)
+				for (size_t j=0; j<shapePointsCount; ++j)
 				{
 					float h = cone->Internal().Height(cloud[count-1-j].pos);
-					if (h>maxHeight)
+					if (h > maxHeight)
 					{
-						maxHeight=h;
-						maxP = CCVector3(cloud[count-1-j].pos);
+						maxHeight = h;
+						maxP = CCVector3::fromArray(cloud[count-1-j].pos);
 					}
 				}
 
 				pcShape->setName(QString("Cone (alpha=%1/h=%2)").arg(alpha,0,'f').arg(maxHeight,0,'f'));
 
 				float radius = tan(alpha)*maxHeight;
-				CCVector3 Z = CCVector3(CA.getValue());
-				CCVector3 C = CCVector3(CC.getValue()); //cone apex
+				CCVector3 Z = CCVector3::fromArray(CA.getValue());
+				CCVector3 C = CCVector3::fromArray(CC.getValue()); //cone apex
 
 				//construct remaining of base
 				Z.normalize();
@@ -555,7 +548,7 @@ void qRansacSD::doAction()
 				CCVector3 Y = Z * X;
 
 				//we build matrix from these vecctors
-				ccGLMatrix glMat(X,Y,Z,C+(maxHeight*0.5)*Z);
+				ccGLMatrix glMat(X,Y,Z,C+(maxHeight/2)*Z);
 
 				//cone primitive
 				prim = new ccCone(0,radius,maxHeight,0,0,&glMat);
@@ -580,8 +573,8 @@ void qRansacSD::doAction()
 
 					pcShape->setName(QString("Torus (r=%1/R=%2)").arg(minRadius,0,'f').arg(maxRadius,0,'f'));
 
-					CCVector3 Z = CCVector3(CA.getValue());
-					CCVector3 C = CCVector3(CC.getValue());
+					CCVector3 Z = CCVector3::fromArray(CA.getValue());
+					CCVector3 C = CCVector3::fromArray(CC.getValue());
 					//construct remaining of base
 					CCVector3 X = Z.orthogonal();
 					CCVector3 Y = Z * X;
