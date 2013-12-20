@@ -18,6 +18,7 @@ override_dh_auto_configure:
 		-DINSTALL_QHPR_PLUGIN=ON \
 		-DINSTALL_QPOISSON_RECON_PLUGIN=ON \
 		-DINSTALL_QEDL_PLUGIN=ON \
+		-DOPTION_USE_GDAL=On \
 		-DINSTALL_QKINECT_PLUGIN=ON \
 	    -DLIBFREENECT_INCLUDE_DIR="/usr/include" \
 	    -DLIBFREENECT_LIBRARY_FILE="/usr/lib/x86_64-linux-gnu/libfreenect.so" \
