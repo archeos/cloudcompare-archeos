@@ -31,7 +31,7 @@ Subject: Use package directory for libs
  	install_shared( QCC_DB_DLL ${dest} ${dest}_debug )
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -10,6 +10,8 @@ if( UNIX )
+@@ -19,6 +19,8 @@ if( UNIX )
          set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
  endif()
  
