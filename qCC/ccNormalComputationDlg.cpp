@@ -14,18 +14,13 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1790                                                              $
-//$LastChangedDate:: 2011-02-14 17:31:03 +0100 (lun., 14 fevr. 2011)      $
-//**************************************************************************
-//
 
 #include "ccNormalComputationDlg.h"
 
+//Qt
 #include <QComboBox>
 
+//system
 #include <assert.h>
 
 ccNormalComputationDlg::ccNormalComputationDlg(QWidget* parent) : QDialog(parent), Ui::NormalComputationDlg()
@@ -58,14 +53,14 @@ void ccNormalComputationDlg::localModelChanged(int index)
 	radiusDoubleSpinBox->setEnabled(index != 2);
 }
 
-void ccNormalComputationDlg::setRadius(float radius)
+void ccNormalComputationDlg::setRadius(PointCoordinateType radius)
 {
-	radiusDoubleSpinBox->setValue(radius);
+	radiusDoubleSpinBox->setValue(static_cast<double>(radius));
 }
 
-float ccNormalComputationDlg::getRadius() const
+PointCoordinateType ccNormalComputationDlg::getRadius() const
 {
-	return radiusDoubleSpinBox->value();
+	return static_cast<PointCoordinateType>(radiusDoubleSpinBox->value());
 }
 
 int ccNormalComputationDlg::getPreferedOrientation() const

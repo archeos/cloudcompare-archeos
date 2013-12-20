@@ -35,7 +35,7 @@
 namespace CCLib
 {
 
-//!A Kd Tree Class which implements functions related to point to point distance
+//! A Kd Tree Class which implements functions related to point to point distance
 #ifdef CC_USE_AS_DLL
 #include "CloudCompareDll.h"
 
@@ -62,7 +62,7 @@ public:
     //! Gets the point cloud from which the tree has been build
     /** \return associated cloud
     **/
-    GenericIndexedCloud* getAssociatedCloud() const { return associatedCloud; }
+    GenericIndexedCloud* getAssociatedCloud() const { return m_associatedCloud; }
 
     //! Nearest point search
     /**!
@@ -71,14 +71,14 @@ public:
         \param maxDist distance above which the function doesn't consider points
         \return true if it finds a point p such that ||p-queryPoint||<=maxDist. False otherwise
     **/
-    bool findNearestNeighbour(const PointCoordinateType *queryPoint,
+    bool findNearestNeighbour(	const PointCoordinateType *queryPoint,
                                 unsigned &nearestPointIndex,
-                                PointCoordinateType maxDist);
+                                ScalarType maxDist);
 
 
     //! Optimized version of nearest point research which only check if there is a point p int the tree such that ||p-queryPoint||<=maxDist (see FindNearestNeighbour())
     bool findPointBelowDistance(const PointCoordinateType *queryPoint,
-									PointCoordinateType maxDist);
+								ScalarType maxDist);
 
 
     //! Searches for the points that lie to a given distance (up to a tolerance) from a query point
@@ -90,8 +90,8 @@ public:
         \return the number of matching points
     **/
     unsigned findPointsLyingToDistance(const PointCoordinateType *queryPoint,
-										PointCoordinateType distance,
-										PointCoordinateType tolerance,
+										ScalarType distance,
+										ScalarType tolerance,
 										std::vector<unsigned> &points);
 
 protected:
@@ -128,26 +128,14 @@ protected:
     } KdCell;
 
 
-    //! Structure to link a point and its index
-    typedef struct
-    {
-        //! Point index
-        unsigned index;
-        //! Point coordinates
-        CCVector3 point; //DGM (02/10/2011): has to be a copy now, as it is not compatible with parallel strategies or 'light' interaction with client db
-    } PointAndIndex;
-
-
     /*** Protected attributes ***/
 
     //! Tree root
     KdCell *m_root;
-    //! Point m_indexes
+    //! Point indexes
     std::vector<unsigned> m_indexes;
-    //! Array
-    std::vector<PointAndIndex> m_list;
     //! Associated cloud
-    GenericIndexedCloud *associatedCloud;
+    GenericIndexedCloud *m_associatedCloud;
     //! Number of cells
     unsigned m_cellCount;
 
@@ -231,27 +219,6 @@ protected:
 							ScalarType tolerance, 
 							KdCell *cell, 
 							std::vector<unsigned> &localArray);
-
-
-    /*** Comparison functions used by the sort function (Strict ordering must be used) ***/
-
-    //! Compares X coordinates of two points designated by their index
-    static bool ComparisonX(const PointAndIndex &a, const PointAndIndex &b)
-    {
-        return (a.point.x<b.point.x);
-    }
-
-    //! Compares Y coordinates of two points designated by their index
-    static bool ComparisonY(const PointAndIndex &a, const PointAndIndex &b)
-    {
-        return (a.point.y<b.point.y);
-    }
-
-    //! Compares Z coordinates of two points designated by their index
-    static bool ComparisonZ(const PointAndIndex &a, const PointAndIndex &b)
-    {
-        return (a.point.z<b.point.z);
-    }
 };
 
 }

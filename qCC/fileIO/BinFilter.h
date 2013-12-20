@@ -29,17 +29,20 @@ class BinFilter : public FileIOFilter
 public:
 
     //inherited from FileIOFilter
-    virtual CC_FILE_ERROR loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, double* coordinatesShift = 0);
+    virtual CC_FILE_ERROR loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
 	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, const char* filename);
+
+	//! old style BIN loading
+    static CC_FILE_ERROR LoadFileV1(QFile& in, ccHObject& container, unsigned nbScansTotal, bool alwaysDisplayLoadDialog);
+
+	//! new style BIN loading
+    static CC_FILE_ERROR LoadFileV2(QFile& in, ccHObject& container, int flags);
+
+	//! new style BIN saving
+    static CC_FILE_ERROR SaveFileV2(QFile& out, ccHObject* object);
 
 protected:
 
-	//! old style BIN loading
-    virtual CC_FILE_ERROR loadFileV1(QFile& in, ccHObject& container, unsigned nbScansTotal);
-
-	//! new style BIN loading
-    virtual CC_FILE_ERROR loadFileV2(QFile& in, ccHObject& container);
-	//virtual CC_FILE_ERROR saveToFileV2(ccHObject* entity, const char* filename);
 };
 
 #endif //CC_BIN_FILTER_HEADER
