@@ -19,8 +19,9 @@ do
     # Precise do not support libfreenect
     if [ $d = "precise" ]
     then
-      sed -i 's/, freenect//g' debian/control;
-      sed -i -e '/\-DLIBFREENECT_INCLUDE_DIR=\"\/usr\/include\" \\/d' -e '/\-DLIBFREENECT_LIBRARY_FILE=\"\-lfreenect\" \\/d' -e '/\-DINSTALL_QKINECT_PLUGIN=ON \\/d'  debian/rules;
+      sed -i 's/, libfreenect-dev//g' debian/control;
+      sed -i -e '/\-DLIBFREENECT_INCLUDE_DIR=\"\/usr\/include\" \\/d' -e
+      '/\-DLIBFREENECT_LIBRARY_FILE=\"\/usr/lib/x86_64-linux-gnu/libfreenect.so\" \\/d' -e '/\-DINSTALL_QKINECT_PLUGIN=ON \\/d'  debian/rules;
     fi
     
     git commit -am "Release";
@@ -30,7 +31,3 @@ do
     git branch -D $d;
 done
 rm -rf ../release/cloudcompare*
-
-
-
-
