@@ -25,3 +25,40 @@
  	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_DXF_SUPPORT )
  
  endif()
+--- a/qCC/fileIO/DxfFilter.cpp
++++ b/qCC/fileIO/DxfFilter.cpp
+@@ -582,8 +582,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 	dw->tableEnd();
+ 
+ 	//Writing Various Other Tables
+-	//dxf.writeStyle(*dw); //DXFLIB V2.5
+-	dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
++	dxf.writeStyle(*dw); //DXFLIB V2.5
++	// dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
+ 	dxf.writeView(*dw);
+ 	dxf.writeUcs(*dw);
+ 
+--- a/qCC/plugins/qSRA/dxfProfilesExporter.cpp
++++ b/qCC/plugins/qSRA/dxfProfilesExporter.cpp
+@@ -223,8 +223,8 @@ bool DxfProfilesExporter::SaveVerticalPr
+ 	dw->tableEnd();
+ 
+ 	//Writing Various Other Tables
+-	//dxf.writeStyle(*dw); //DXFLIB V2.5
+-	dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
++	dxf.writeStyle(*dw); //DXFLIB V2.5
++	//dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
+ 	dxf.writeView(*dw);
+ 	dxf.writeUcs(*dw);
+ 
+@@ -705,8 +705,8 @@ bool DxfProfilesExporter::SaveHorizontal
+ 	dw->tableEnd();
+ 
+ 	//Writing Various Other Tables
+-	//dxf.writeStyle(*dw); //DXFLIB V2.5
+-	dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
++	dxf.writeStyle(*dw); //DXFLIB V2.5
++	//dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
+ 	dxf.writeView(*dw);
+ 	dxf.writeUcs(*dw);
+ 
