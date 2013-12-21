@@ -21,7 +21,7 @@ do
     then
       sed -i 's/, libfreenect-dev//g' debian/control;
       sed -i -e '/\-DLIBFREENECT_INCLUDE_DIR=\"\/usr\/include\" \\/d' -e
-      '/\-DLIBFREENECT_LIBRARY_FILE=\"\/usr/lib/x86_64-linux-gnu/libfreenect.so\" \\/d' -e '/\-DINSTALL_QKINECT_PLUGIN=ON \\/d'  debian/rules;
+      '/\-DLIBFREENECT_LIBRARY_FILE=\"\-lfreenect\" \\/d' -e '/\-DINSTALL_QKINECT_PLUGIN=ON \\/d'  debian/rules;
     fi
     
     git commit -am "Release";
