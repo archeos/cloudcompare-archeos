@@ -17,6 +17,7 @@ override_dh_auto_configure:
 		-DCMAKE_BUILD_TYPE=Release \
 		-DINSTALL_QHPR_PLUGIN=ON \
 		-DINSTALL_QPOISSON_RECON_PLUGIN=ON \
+		-DPOISSON_RECON_WITH_OPEN_MP=ON \
 		-DINSTALL_QEDL_PLUGIN=ON \
 		-DINSTALL_QSRA_PLUGIN=ON \
 		-DOPTION_USE_GDAL=ON \
@@ -24,7 +25,7 @@ override_dh_auto_configure:
 		-DOPTION_USE_DXF_LIB=ON \
 		-DDXF_LIB_SRC_DIR="/usr/include/dxflib" \
 	    -DLIBFREENECT_INCLUDE_DIR="/usr/include" \
-	    -DLIBFREENECT_LIBRARY_FILE="/usr/lib/x86_64-linux-gnu/libfreenect.so" \
+	    -DLIBFREENECT_LIBRARY_FILE="-lfreenect" \
 		-DINSTALL_QSSAO_PLUGIN=ON \
 		-DINSTALL_QPCV_PLUGIN=ON 
 
