@@ -1,7 +1,8 @@
-cloudcompare (2.5.2-0archeos1) UNRELEASED; urgency=low
+cloudcompare (2.5.2-0archeos1) theodoric; urgency=low
 
   * New upstream version 2.5.2
     As usual, upstream changes are in the history.txt file.
+  * Depend now on libfreekinect-dev instead of freenect
 
  -- Romain Janvier <romain.janvier@hotmail.fr>  Fri, 20 Dec 2013 17:51:34 +0100
 
