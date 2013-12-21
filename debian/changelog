@@ -1,3 +1,9 @@
+cloudcompare (2.5.2-0archeos4) theodoric; urgency=low
+
+  * Release script
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 21 Dec 2013 17:52:11 +0100
+
 cloudcompare (2.5.2-0archeos3) theodoric; urgency=low
 
   * OpenMP fix
