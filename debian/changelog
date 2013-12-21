@@ -1,6 +1,8 @@
-cloudcompare (2.5.2-0archeos2) UNRELEASED; urgency=low
+cloudcompare (2.5.2-0archeos2) theodoric; urgency=low
 
   * Release script
+  * Proper libfreenect handling
+  * Build PoissonRecon with openMP support
 
  -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 21 Dec 2013 11:40:43 +0100
 
