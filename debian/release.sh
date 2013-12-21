@@ -2,7 +2,7 @@
 
 version=2.5.2
 debversion=0
-ppaversion=3
+ppaversion=4
 
 for d in precise quantal raring saucy
 do
