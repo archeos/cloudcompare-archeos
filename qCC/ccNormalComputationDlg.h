@@ -14,21 +14,16 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1790                                                              $
-//$LastChangedDate:: 2011-02-14 17:31:03 +0100 (lun., 14 fevr. 2011)      $
-//**************************************************************************
-//
 
-#ifndef CC_NORMAL_COMPUTATION_DLGHEADER
-#define CC_NORMAL_COMPUTATION_DLGHEADER
+#ifndef CC_NORMAL_COMPUTATION_DLG_HEADER
+#define CC_NORMAL_COMPUTATION_DLG_HEADER
 
 #include <ui_normalComputationDlg.h>
 
-#include <CCConst.h>
+//CCLib
+#include <CCConst.h> //for CC_LOCAL_MODEL_TYPES
 
+//! Dialog for normal computation
 class ccNormalComputationDlg : public QDialog, public Ui::NormalComputationDlg
 {
 	Q_OBJECT
@@ -37,14 +32,14 @@ public:
     //! Default constructor
     ccNormalComputationDlg(QWidget* parent=0);
 
-    //! Returns local model choosed for normal computation
+    //! Returns local model chosen for normal computation
     CC_LOCAL_MODEL_TYPES getLocalModel() const;
 
 	//! Sets default value for local neighbourhood radius
-	void setRadius(float radius);
+	void setRadius(PointCoordinateType radius);
 	
 	//! Returns local neighbourhood radius
-	float getRadius() const;
+	PointCoordinateType getRadius() const;
 
 	//! Returns prefered orientation
     /** \return prefered orientation (-1: none, 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z, 5:-Z)
@@ -57,4 +52,4 @@ protected slots:
 	void localModelChanged(int index);
 };
 
-#endif
+#endif // CC_NORMAL_COMPUTATION_DLG_HEADER

@@ -31,33 +31,18 @@ using namespace CCLib;
 
 FastMarchingForPropagation::FastMarchingForPropagation()
 	: FastMarching()
-	, jumpCoef(0.0f)					//resistance a l'avancement du front, en fonction de Cell->f (ici, pas de resistance)
-	, detectionThreshold(Cell::T_INF())	//saut relatif de la valeur d'arrivee qui arrete la propagation (ici, "desactive")
-	, lastT(0.0f)						//derniere valeur d'arrivee
+	, m_jumpCoef(0)							//resistance a l'avancement du front, en fonction de Cell->f (ici, pas de resistance)
+	, m_detectionThreshold(Cell::T_INF())	//saut relatif de la valeur d'arrivee qui arrete la propagation (ici, "desactive")
 {
 }
 
-bool FastMarchingForPropagation::instantiateGrid(unsigned size)
-{
-    assert(theGrid==0);
-
-	PropagationCell** _theGrid = new PropagationCell*[size];
-	if (!_theGrid)
-        return false;
-	memset(_theGrid,0,size*sizeof(PropagationCell*));
-
-	theGrid = (Cell**)_theGrid;
-
-	return true;
-}
-
-int FastMarchingForPropagation::init(GenericCloud* theCloud,
+int FastMarchingForPropagation::init(	GenericCloud* theCloud,
 										DgmOctree* theOctree,
 										uchar level,
 										bool constantAcceleration/*=false*/)
 {
-	int result = initGrid(theOctree,level);
-	if (result<0)
+	int result = initGridWithOctree(theOctree,level);
+	if (result < 0)
 		return result;
 
 	//on remplit la grille
@@ -66,52 +51,52 @@ int FastMarchingForPropagation::init(GenericCloud* theCloud,
 
 	while (!cellCodes.empty())
 	{
-		//on transforme le code de cellule en position
-		int cellPos[3];
-		theOctree->getCellPos(cellCodes.back(),level,cellPos,true);
-
-		//on renseigne la grille
-		unsigned gridPos = FM_pos2index(cellPos);
-
-		PropagationCell* aCell = new PropagationCell;
-		aCell->state = Cell::FAR_CELL;
-		aCell->T = Cell::T_INF();
-		aCell->cellCode = cellCodes.back();
-
 		ReferenceCloud* Yk = theOctree->getPointsInCell(cellCodes.back(),level,true);
-		aCell->f = (constantAcceleration ? 1.0f : ScalarFieldTools::computeMeanScalarValue(Yk),false);
+		if (Yk)
+		{
+			//on transforme le code de cellule en position
+			int cellPos[3];
+			theOctree->getCellPos(cellCodes.back(),level,cellPos,true);
 
-		//Yk->clear(); //inutile
+			//on renseigne la grille
+			unsigned gridPos = FM_pos2index(cellPos);
 
-		theGrid[gridPos] = (Cell*)aCell;
+			PropagationCell* aCell = new PropagationCell;
+			aCell->cellCode = cellCodes.back();
+			aCell->f = (constantAcceleration ? 1.0f : static_cast<float>(ScalarFieldTools::computeMeanScalarValue(Yk)));
+
+			m_theGrid[gridPos] = aCell;
+		}
 
 		cellCodes.pop_back();
 	}
 
-	initialized = true;
+	m_initialized = true;
 
 	return 0;
 }
 
 int FastMarchingForPropagation::step()
 {
-	if (!initialized)
+	if (!m_initialized)
 		return -1;
 
 	unsigned minTCellIndex = getNearestTrialCell();
-
-	if (minTCellIndex==0)
+	if (minTCellIndex == 0)
 	{
 		//fl_alert("No more trial cells !");
 		return 0;
 	}
 
-	Cell* minTCell =  theGrid[minTCellIndex];
+	Cell* minTCell =  m_theGrid[minTCellIndex];
 	assert(minTCell != 0);
 
-	if (minTCell->T-lastT > detectionThreshold*m_cellSize)
+	//last arrival time
+	float lastT = (m_activeCells.empty() ? 0 : m_theGrid[m_activeCells.back()]->T);
+
+	if (minTCell->T-lastT > m_detectionThreshold * m_cellSize)
 	{
-		//endPropagation();
+		//reset();
 		return 0;
 	}
 
@@ -119,169 +104,55 @@ int FastMarchingForPropagation::step()
 
 	if (minTCell->T < Cell::T_INF())
 	{
-		//on rajoute cette cellule au groupe des cellules "ACTIVE"
-		minTCell->state = Cell::ACTIVE_CELL;
-		activeCells.push_back(minTCellIndex);
+		//we add this cell to the "ACTIVE" set
+		addActiveCell(minTCellIndex);
 
-		lastT = minTCell->T;
+		assert(minTCell->T >= lastT);
 
-		//on doit rajouter ses voisines au groupe TRIAL
+		//add its neighbors to the TRIAL set
 		unsigned nIndex;
 		Cell* nCell;
-		for (int i=0;i<CC_FM_NUMBER_OF_NEIGHBOURS;++i)
+		for (unsigned i=0;i<m_numberOfNeighbours;++i)
 		{
-			nIndex = minTCellIndex + neighboursIndexShift[i];
-			//pointeur vers la cellule voisine
-			nCell = theGrid[nIndex];
-
-			//si elle est definie
+			//get neighbor cell
+			nIndex = minTCellIndex + m_neighboursIndexShift[i];
+			nCell = m_theGrid[nIndex];
 			if (nCell)
 			{
-				//et si elle n'est pas encore dans un groupe, on la rajoute
-				if (nCell->state==Cell::FAR_CELL)
+				//if it' not yet a TRIAL cell
+				if (nCell->state == Cell::FAR_CELL)
 				{
-					nCell->state = Cell::TRIAL_CELL;
 					nCell->T = computeT(nIndex);
-
-					addTrialCell(nIndex,nCell->T);
-					//Console::print("Cell %i added to TRIAL\n",nIndex);
+					addTrialCell(nIndex);
 				}
 				else if (nCell->state == Cell::TRIAL_CELL)
-				//sinon, il faut recaculer T
+				//otherwise we must update it's arrival time
 				{
 					float t_old = nCell->T;
 					float t_new = computeT(nIndex);
 
-					if (t_new<t_old)
+					if (t_new < t_old)
 						nCell->T = t_new;
 				}
 			}
 		}
 	}
+	else
+	{
+		addIgnoredCell(minTCellIndex);
+	}
 
 	return 1;
 }
 
-float FastMarchingForPropagation::computeT(unsigned index)
-{
-	double Tij = ((PropagationCell*)theGrid[index])->T;
-	double Fij = ((PropagationCell*)theGrid[index])->f; //weight
-
-	PropagationCell *nCell = 0;
-
-	nCell = (PropagationCell*)theGrid[index+neighboursIndexShift[3]];
-	double Txm = (nCell ? nCell->T + neighboursDistance[3]*(exp(jumpCoef*(nCell->f-Fij))-1.0): Cell::T_INF());
-	nCell = (PropagationCell*)theGrid[index+neighboursIndexShift[1]];
-	double Txp = (nCell ? nCell->T + neighboursDistance[1]*(exp(jumpCoef*(nCell->f-Fij))-1.0) : Cell::T_INF());
-	nCell = (PropagationCell*)theGrid[index+neighboursIndexShift[0]];
-	double Tym = (nCell ? nCell->T + neighboursDistance[0]*(exp(jumpCoef*(nCell->f-Fij))-1.0) : Cell::T_INF());
-	nCell = (PropagationCell*)theGrid[index+neighboursIndexShift[2]];
-	double Typ = (nCell ? nCell->T + neighboursDistance[2]*(exp(jumpCoef*(nCell->f-Fij))-1.0) : Cell::T_INF());
-	nCell = (PropagationCell*)theGrid[index+neighboursIndexShift[4]];
-	double Tzm = (nCell ? nCell->T + neighboursDistance[4]*(exp(jumpCoef*(nCell->f-Fij))-1.0) : Cell::T_INF());
-	nCell = (PropagationCell*)theGrid[index+neighboursIndexShift[5]];
-	double Tzp = (nCell ? nCell->T + neighboursDistance[5]*(exp(jumpCoef*(nCell->f-Fij))-1.0) : Cell::T_INF());
-
-	//if (Gij-Gxm < 0) front must propagate faster, i.e. exp(jumpCoef*ANS)>1.0 --> jumpCoef>0
-
-	double A=0.0, B=0.0, C=0.0;
-
-	//Quadratic eq. along X
-	double Tmin = std::min(Txm,Txp);
-	if (Tij>Tmin)
-	{
-		A += 1.0;
-		B += -2.0 * Tmin;
-		C += Tmin * Tmin;
-	}
-
-	//Quadratic eq. along Y
-	Tmin = std::min(Tym,Typ);
-	if (Tij>Tmin)
-	{
-		A += 1.0;
-		B += -2.0 * Tmin;
-		C += Tmin * Tmin;
-	}
-
-	//Quadratic eq. along Z
-	Tmin = std::min(Tzm,Tzp);
-	if (Tij>Tmin)
-	{
-		A += 1.0;
-		B += -2.0 * Tmin;
-		C += Tmin * Tmin;
-	}
-
-	C -=  m_cellSize*m_cellSize;
-
-	double delta = B*B - 4.0*A*C;
-
-	// cases when the quadratic equation is singular
-	if (A==0 || delta < 0.0)
-	{
-		Tij = Cell::T_INF();
-
-		for(int n=0; n<CC_FM_NUMBER_OF_NEIGHBOURS; n++)
-		{
-			int candidateIndex = index + neighboursIndexShift[n];
-			PropagationCell* cCell = (PropagationCell*)theGrid[candidateIndex];
-			if (cCell)
-			{
-				if( (cCell->state==Cell::TRIAL_CELL) || (cCell->state==Cell::ACTIVE_CELL) )
-				{
-					float candidateT = cCell->T + neighboursDistance[n]*exp((cCell->f-(float)Fij)*jumpCoef);
-					//if (Gij-cCell->f > 0) front must propagate faster, i.e. exp(jumpCoef*ANS)>1.0 --> jumpCoef>0
-
-					if(candidateT<Tij)
-						Tij=candidateT;
-				}
-			}
-		}
-
-		assert( Tij < Cell::T_INF() );
-		if(Tij >= Cell::T_INF())
-			return Cell::T_INF();
-
-		//assert( Tij<10000 );
-		return (float)Tij;
-	}
-
-	//Solve the quadratic equation. Note that the new crossing
-	//must be GREATER than the average of the active neighbors,
-	//since only EARLIER elements are active. Therefore the plus
-	//sign is appropriate.
-	double TijNew = (-B + sqrt(delta))/(2.0*A);
-
-	return (float)TijNew;
-}
-
-void FastMarchingForPropagation::initLastT()
-{
-	Cell* aCell;
-	lastT = 0.0;
-	for (unsigned i=0; i<activeCells.size(); i++)
-	{
-		aCell = theGrid[activeCells[i]];
-		lastT=std::max(lastT,aCell->T);
-	}
-}
-
 int FastMarchingForPropagation::propagate()
 {
-	int iteration = 0;
-	int result = 1;
-
-	//initialisation de la liste des "TRIAL" cells
 	initTrialCells();
 
-	initLastT();
-
-	while (result>0)
+	int result = 1;
+	while (result > 0)
 	{
 		result = step();
-
-		++iteration;
 	}
 
 	return result;
@@ -289,15 +160,14 @@ int FastMarchingForPropagation::propagate()
 
 ReferenceCloud* FastMarchingForPropagation::extractPropagatedPoints()
 {
-	if (!initialized)
+	if (!m_initialized || !m_octree || m_gridLevel > DgmOctree::MAX_OCTREE_LEVEL)
 		return 0;
-	assert(m_octree);
 
 	ReferenceCloud* Zk = new ReferenceCloud(m_octree->associatedCloud());
 
-	for (unsigned i=0; i<activeCells.size(); ++i)
+	for (unsigned i=0; i<m_activeCells.size(); ++i)
 	{
-		PropagationCell* aCell = (PropagationCell*)theGrid[activeCells[i]];
+		PropagationCell* aCell = (PropagationCell*)m_theGrid[m_activeCells[i]];
 		ReferenceCloud* Yk = m_octree->getPointsInCell(aCell->cellCode,m_gridLevel,true);
 
 		if (!Zk->reserve(Yk->size())) //not enough memory
@@ -323,13 +193,12 @@ ReferenceCloud* FastMarchingForPropagation::extractPropagatedPoints()
 
 bool FastMarchingForPropagation::setPropagationTimingsAsDistances()
 {
-	if (!initialized)
+	if (!m_initialized || !m_octree || m_gridLevel > DgmOctree::MAX_OCTREE_LEVEL)
 		return false;
-	assert(m_octree);
 
-	for (unsigned i=0;i<activeCells.size();++i)
+	for (unsigned i=0;i<m_activeCells.size();++i)
 	{
-		PropagationCell* aCell = (PropagationCell*)theGrid[activeCells[i]];
+		PropagationCell* aCell = (PropagationCell*)m_theGrid[m_activeCells[i]];
 		ReferenceCloud* Yk = m_octree->getPointsInCell(aCell->cellCode,m_gridLevel,true);
 
 		Yk->placeIteratorAtBegining();
@@ -344,123 +213,47 @@ bool FastMarchingForPropagation::setPropagationTimingsAsDistances()
 	return true;
 }
 
-
-void FastMarchingForPropagation::endPropagation()
+float FastMarchingForPropagation::computeTCoefApprox(Cell* currentCell, Cell* neighbourCell) const
 {
-	while (!activeCells.empty())
-	{
-		PropagationCell* aCell = (PropagationCell*)theGrid[activeCells.back()];
-		delete aCell;
-		theGrid[activeCells.back()]=0;
-
-		activeCells.pop_back();
-	}
-
-	while (!trialCells.empty())
-	{
-		Cell* aCell = theGrid[trialCells.back()];
-		assert(aCell != 0);
-
-		aCell->state = Cell::FAR_CELL;
-		aCell->T = Cell::T_INF();
-
-		trialCells.pop_back();
-	}
-
-	lastT = 0.0f;
+	PropagationCell* cCell = static_cast<PropagationCell*>(currentCell);
+	PropagationCell* nCell = static_cast<PropagationCell*>(neighbourCell);
+	return exp(m_jumpCoef * (cCell->f-nCell->f)) -1.0f;
 }
 
-
-//rajouter un element a la structure "untidy priority queue"
-void FastMarchingForPropagation::addTrialCell(unsigned index, float T)
-{
-	trialCells.push_back(index);
-}
-
-//recuperer le premier element de la structure "untidy priority queue"
-unsigned FastMarchingForPropagation::getNearestTrialCell() //renvoie 0 si probleme
-{
-	if (trialCells.empty()) return 0;
-
-	//on trouve la cellule de "TRIAL" qui a le T minimum
-	std::vector<unsigned>::const_iterator p = trialCells.begin();
-
-	int i=0,k=0;
-	unsigned minTCellIndex = *p;
-	Cell* minTCell = theGrid[minTCellIndex];
-	assert(minTCell != 0);
-	++p;
-	++i;
-
-	while (p != trialCells.end())
-	{
-		assert(theGrid[*p] != 0);
-		if (theGrid[*p]->T <minTCell->T)
-		{
-			minTCellIndex = *p;
-			minTCell = theGrid[minTCellIndex];
-			k=i;
-		}
-		++p;
-		++i;
-	}
-
-	//on l'enleve de la liste
-	trialCells[k]=trialCells[trialCells.size()-1];
-	trialCells.pop_back();
-
-	return minTCellIndex;
-}
-
-float FastMarchingForPropagation::computeTCoefApprox(Cell* currentCell, Cell* neighbourCell)
-{
-	return exp(jumpCoef*(((PropagationCell*)currentCell)->f-((PropagationCell*)neighbourCell)->f));
-}
-
-//pour le watershed
 void FastMarchingForPropagation::findPeaks()
 {
-	if (!initialized) return;
-
-	//on remplit la grille
-	unsigned i,j,k;
-	int n;
-
-	int neighbours3DIndexShift[CC_FM_NUMBER_OF_3D_NEIGHBOURS];
-	//calculs de decalages pour voisnages
-	for (n=0;n<CC_FM_NUMBER_OF_3D_NEIGHBOURS;++n)
-	{
-		neighbours3DIndexShift[n] = neighbours3DPosShift[n*3]+
-									neighbours3DPosShift[n*3+1]*int(decY)+
-									neighbours3DPosShift[n*3+2]*int(decZ);
-	}
+	if (!m_initialized)
+		return;
 
 	//on fait bien attention a ne pas initialiser les cellules sur les bords
-	int pos[3];
-	unsigned index;
-	for (k=0;k<dz;++k)
+	for (unsigned k=0; k<m_dz; ++k)
 	{
-		pos[2] = k;
-		for (j=0;j<dy;++j)
+		int pos[3] = { 0, 0, static_cast<int>(k) };
+
+		for (unsigned j=0; j<m_dy; ++j)
 		{
-			pos[1] = j;
-			for (i=0;i<dx;++i)
+			pos[1] = static_cast<int>(j);
+
+			for (unsigned i=0; i<m_dx; ++i)
 			{
-				pos[0] = i;
+				pos[0] = static_cast<int>(i);
 
-				index = unsigned(pos[0]+1)+unsigned(pos[1]+1)*decY+unsigned(pos[2]+1)*decZ;
-				PropagationCell* theCell = (PropagationCell*)theGrid[index];
+				unsigned index =  static_cast<unsigned>(pos[0]+1)
+								+ static_cast<unsigned>(pos[1]+1) * m_decY
+								+ static_cast<unsigned>(pos[2]+1) * m_decZ;
+				
+				PropagationCell* theCell = reinterpret_cast<PropagationCell*>(m_theGrid[index]);
 
-				bool isMin=true;
-				bool isMax=true;
+				bool isMin = true;
+				bool isMax = true;
 
 				if (theCell)
 				{
 					//theCell->state = ACTIVE_CELL;
 
-					for (n=0;n<CC_FM_NUMBER_OF_3D_NEIGHBOURS;++n)
+					for (unsigned n=0; n<CC_FM_MAX_NUMBER_OF_NEIGHBOURS; ++n)
 					{
-						PropagationCell* nCell = (PropagationCell*)theGrid[index+neighbours3DIndexShift[n]];
+						const PropagationCell* nCell = reinterpret_cast<const PropagationCell*>(m_theGrid[index+m_neighboursIndexShift[n]]);
 						if (nCell)
 						{
 							if (nCell->f > theCell->f)
@@ -468,22 +261,22 @@ void FastMarchingForPropagation::findPeaks()
 							else if (nCell->f < theCell->f)
 								isMin = false;
 						}
-						//theGrid[index];
 					}
 
 					if (isMin != isMax)
 					{
-						/*if (isMin) theCell->T = 1.0;
-						else theCell->T = 2.0;*/
+						//if (isMin)
+						//	theCell->T = 1.0;
+						//else
+						//	theCell->T = 2.0;
 
 						if (isMax)
 						{
-							theCell->state = Cell::ACTIVE_CELL;
-							theCell->T = 0.0;
-							activeCells.push_back(index);
+							theCell->T = 0;
+							addActiveCell(index);
 						}
 					}
-					//else theCell->T=0.0;
+					//else theCell->T = 0;
 				}
 			}
 		}

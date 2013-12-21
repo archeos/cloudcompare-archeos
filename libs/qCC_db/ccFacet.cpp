@@ -18,11 +18,13 @@
 #include "ccFacet.h"
 
 //qCC_db
-#include <ccLog.h>
-#include <ccPointCloud.h>
-#include <ccMesh.h>
-#include <ccPolyline.h>
-#include <ccNormalVectors.h>
+#include "ccLog.h"
+#include "ccPointCloud.h"
+#include "ccMesh.h"
+#include "ccPolyline.h"
+#include "ccNormalVectors.h"
+#include "ccCylinder.h"
+#include "ccCone.h"
 
 //CCLib
 #include <Neighbourhood.h>
@@ -49,11 +51,12 @@ ccFacet::ccFacet(	PointCoordinateType maxEdgeLength/*=0*/,
 	, m_rms(0.0)
 	, m_surface(0.0)
 	, m_maxEdgeLength(maxEdgeLength)
+	, m_showNormalVector(false)
 {
 	m_planeEquation[0] = 0;
 	m_planeEquation[1] = 0;
 	m_planeEquation[2] = 1;
-	m_planeEquation[0] = 0;
+	m_planeEquation[3] = 0;
 
 	setVisible(true);
     lockVisibility(false);
@@ -61,6 +64,84 @@ ccFacet::ccFacet(	PointCoordinateType maxEdgeLength/*=0*/,
 
 ccFacet::~ccFacet()
 {
+}
+
+ccFacet* ccFacet::clone() const
+{
+	ccFacet* facet = new ccFacet(m_maxEdgeLength, m_name);
+
+	//clone contour
+	if (m_contourPolyline)
+	{
+		assert(m_contourVertices);
+		facet->m_contourPolyline = new ccPolyline(*m_contourPolyline);
+		facet->m_contourVertices = dynamic_cast<ccPointCloud*>(facet->m_contourPolyline->getAssociatedCloud());
+
+		if (!facet->m_contourPolyline || !facet->m_contourVertices)
+		{
+			//not enough memory?!
+			ccLog::Warning(QString("[ccFacet::clone][%1] Failed to clone countour!").arg(getName()));
+			delete facet;
+			return 0;
+		}
+
+		facet->m_contourPolyline->setLocked(m_contourPolyline->isLocked());
+		facet->m_contourVertices->setEnabled(m_contourVertices->isEnabled());
+		facet->m_contourVertices->setVisible(m_contourVertices->isVisible());
+		facet->m_contourVertices->setLocked(m_contourVertices->isLocked());
+		facet->m_contourVertices->setName(m_contourVertices->getName());
+		facet->m_contourVertices->addChild(facet->m_contourPolyline);
+		facet->addChild(facet->m_contourVertices);
+	}
+
+	//clone mesh
+	if (m_polygonMesh)
+	{
+		facet->m_polygonMesh = m_polygonMesh->clone(facet->m_contourVertices);
+		if (!facet->m_polygonMesh)
+		{
+			//not enough memory?!
+			ccLog::Warning(QString("[ccFacet::clone][%1] Failed to clone polygon!").arg(getName()));
+			delete facet;
+			return 0;
+		}
+		
+		facet->m_polygonMesh->setLocked(m_polygonMesh->isLocked());
+		facet->m_polygonMesh->setName(m_polygonMesh->getName());
+		if (facet->m_contourVertices)
+			facet->m_contourVertices->addChild(facet->m_polygonMesh);
+		else
+			facet->addChild(facet->m_polygonMesh);
+	}
+
+
+	if (m_originPoints)
+	{
+		facet->m_originPoints = dynamic_cast<ccPointCloud*>(m_originPoints->clone());
+		if (!facet->m_originPoints)
+		{
+			ccLog::Warning(QString("[ccFacet::clone][%1] Failed to clone origin points!").arg(getName()));
+			//delete facet;
+			//return 0;
+		}
+		else
+		{
+			facet->m_originPoints->setLocked(m_originPoints->isLocked());
+			facet->m_originPoints->setName(m_originPoints->getName());
+			facet->addChild(facet->m_originPoints);
+		}
+	}
+
+	facet->m_center = m_center;
+	facet->m_rms = m_rms;
+	facet->m_surface = m_surface;
+	facet->m_showNormalVector = m_showNormalVector;
+	memcpy(facet->m_planeEquation, m_planeEquation, sizeof(PointCoordinateType)*4);
+	facet->setVisible(isVisible());
+	facet->lockVisibility(isVisiblityLocked());
+	facet->setDisplay_recursive(getDisplay());
+
+	return facet;
 }
 
 ccFacet* ccFacet::Create(	CCLib::GenericIndexedCloudPersist* cloud,
@@ -285,6 +366,56 @@ void ccFacet::setColor(const colorType rgb[])
 	showColors(true);
 }
 
+//unit point marker
+static QSharedPointer<ccCylinder> c_unitNormalSymbol(0);
+static QSharedPointer<ccCone> c_unitNormalHeadSymbol(0);
+
+void ccFacet::drawMeOnly(CC_DRAW_CONTEXT& context)
+{
+	if (!MACRO_Draw3D(context))
+		return;
+
+	if (m_showNormalVector && m_contourPolyline)
+	{
+		if (!c_unitNormalSymbol)
+		{
+			c_unitNormalSymbol = QSharedPointer<ccCylinder>(new ccCylinder(0.02f,0.9f,0,"UnitNormal",12));
+			c_unitNormalSymbol->showColors(true);
+			c_unitNormalSymbol->setVisible(true);
+			c_unitNormalSymbol->setEnabled(true);
+			c_unitNormalSymbol->setTempColor(ccColor::green);
+		}
+		if (!c_unitNormalHeadSymbol)
+		{
+			c_unitNormalHeadSymbol = QSharedPointer<ccCone>(new ccCone(0.05f,0.0f,0.1f,0,0,0,"UnitNormalHead",12));
+			c_unitNormalHeadSymbol->showColors(true);
+			c_unitNormalHeadSymbol->setVisible(true);
+			c_unitNormalHeadSymbol->setEnabled(true);
+			c_unitNormalHeadSymbol->setTempColor(ccColor::green);
+		}
+
+		//build-up point maker own 'context'
+		CC_DRAW_CONTEXT markerContext = context;
+		markerContext.flags &= (~CC_DRAW_ENTITY_NAMES); //we must remove the 'push name flag' so that the sphere doesn't push its own!
+		markerContext._win = 0;
+
+		c_unitNormalSymbol->setTempColor(m_contourPolyline->getColor());
+		PointCoordinateType scale = m_contourPolyline->getBB().getMinBoxDim();
+
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+		ccGL::Translate(m_center.x,m_center.y,m_center.z);
+		ccGLMatrix mat = ccGLMatrix::FromToRotation(getNormal(),CCVector3(0,0,1));
+		glMultMatrixf(mat.data());
+		ccGL::Scale(scale,scale,scale);
+		glTranslatef(0,0,0.45f);
+		c_unitNormalSymbol->draw(markerContext);
+		glTranslatef(0,0,0.45f);
+		c_unitNormalHeadSymbol->draw(markerContext);
+		glPopMatrix();
+	}
+}
+
 bool ccFacet::toFile_MeOnly(QFile& out) const
 {
 	if (!ccHObject::toFile_MeOnly(out))
@@ -349,9 +480,9 @@ bool ccFacet::toFile_MeOnly(QFile& out) const
 	return true;
 }
 
-bool ccFacet::fromFile_MeOnly(QFile& in, short dataVersion)
+bool ccFacet::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 {
-	if (!ccHObject::fromFile_MeOnly(in, dataVersion))
+	if (!ccHObject::fromFile_MeOnly(in, dataVersion, flags))
 		return false;
 
 	if (dataVersion < 32)
@@ -422,4 +553,12 @@ bool ccFacet::fromFile_MeOnly(QFile& in, short dataVersion)
 		return WriteError();
 
 	return true;
+}
+
+void ccFacet::invertNormal()
+{
+	for (int i=0; i<4; ++i)
+	{
+		m_planeEquation[i] = -m_planeEquation[i];
+	}
 }

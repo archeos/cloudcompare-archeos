@@ -50,24 +50,24 @@ public:
 	static void ReleaseUniqueInstance();
 
 	//! Returns the number of compressed normal vectors
-	static inline unsigned GetNumberOfVectors() {return GetUniqueInstance()->m_numberOfVectors;}
+	static inline unsigned GetNumberOfVectors() { return GetUniqueInstance()->m_numberOfVectors; }
 
 	//! Static access to ccNormalVectors::getNormal
-	static inline const PointCoordinateType* GetNormal(unsigned normIndex) {return GetUniqueInstance()->getNormal(normIndex);}
+	static inline const PointCoordinateType* GetNormal(unsigned normIndex) { return GetUniqueInstance()->getNormal(normIndex); }
 
-	//! Returns the pre-computed normal corresponding to a given compressed index
-	inline const PointCoordinateType* getNormal(unsigned normIndex) const {return m_theNormalVectors+normIndex*3;}
+	//! Returns the precomputed normal corresponding to a given compressed index
+	inline const PointCoordinateType* getNormal(unsigned normIndex) const { return m_theNormalVectors+normIndex*3; }
 
 	//! Computes the normal corresponding to a given compressed index
 	/** Warning: slower than 'GetNormal' (but avoids computation of the whole table)
 	**/
-	static inline void ComputeNormal(normsType normIndex, PointCoordinateType N[]) {Quant_dequantize_normal(normIndex,NORMALS_QUANTIZE_LEVEL,N);}
+	static inline void ComputeNormal(normsType normIndex, PointCoordinateType N[]) { Quant_dequantize_normal(normIndex,NORMALS_QUANTIZE_LEVEL,N); }
 
 	//! Returns the compressed index corresponding to a normal vector
-	static inline normsType GetNormIndex(const PointCoordinateType N[]) {return (normsType)Quant_quantize_normal(N,NORMALS_QUANTIZE_LEVEL);}
+	static inline normsType GetNormIndex(const PointCoordinateType N[]) { return (normsType)Quant_quantize_normal(N,NORMALS_QUANTIZE_LEVEL); }
 
-	//! Inverts normal orresponding to a given compressed index
-	/** Compressed index is direclty updated.
+	//! Inverts normal corresponding to a given compressed index
+	/** Warning: compressed index is directly updated!
 	**/
 	static void InvertNormal(normsType &code);
 
@@ -76,15 +76,15 @@ public:
         \param theCloud point cloud on which to process the normals.
         \param theNormsCodes array in which the normals indexes are stored
         \param method which kind of model to use for the computation (LS = plane, HF = quadratic Height Function, TRI = triangulation)
-		\param radius local neighbourhood radius (not necessary for TRI)
-        \param preferedOrientation specifies a prefered orientation for normals (-1: no prefered orientation, 0:X, 1:-X, 2:Y, 3:-Y, 4:Z, 5: -Z, 6:+Barycenter, 7:-Barycenter)
+		\param radius local neighborhood radius (not necessary for TRI)
+        \param preferedOrientation specifies a preferred orientation for normals (-1: no preferred orientation, 0:X, 1:-X, 2:Y, 3:-Y, 4:Z, 5: -Z, 6:+Barycenter, 7:-Barycenter)
         \param progressCb progress bar
         \param _theOctree octree associated with theCloud.
     **/
 	static bool ComputeCloudNormals(ccGenericPointCloud* theCloud,
                                     NormsIndexesTableType& theNormsCodes,
                                     CC_LOCAL_MODEL_TYPES method,
-									float radius,
+									PointCoordinateType radius,
                                     int preferedOrientation=-1,
                                     CCLib::GenericProgressCallback* progressCb=0,
                                     CCLib::DgmOctree* _theOctree=0);
@@ -162,7 +162,7 @@ public:
 protected:
 
 	//! Default constructor
-	/** Shouldn't be called direclty. Use 'GetUniqueInstance' instead.
+	/** Shouldn't be called directly. Use 'GetUniqueInstance' instead.
 	**/
 	ccNormalVectors();
 
@@ -184,16 +184,16 @@ protected:
 	unsigned m_numberOfVectors;
 
 	//! Decompression algorithm
-    static void Quant_dequantize_normal(unsigned q, unsigned level, float* res);
+    static void Quant_dequantize_normal(unsigned q, unsigned level, PointCoordinateType* res);
 	//! Compression algorithm
-    static unsigned Quant_quantize_normal(const float* n, unsigned level);
+    static unsigned Quant_quantize_normal(const PointCoordinateType* n, unsigned level);
 
 	//! Cellular method for octree-based normal computation
-	static bool ComputeNormsAtLevelWithHF(const CCLib::DgmOctree::octreeCell& cell, void** additionalParameters);
+	static bool ComputeNormsAtLevelWithHF(const CCLib::DgmOctree::octreeCell& cell, void** additionalParameters, CCLib::NormalizedProgress* nProgress = 0);
 	//! Cellular method for octree-based normal computation
-	static bool ComputeNormsAtLevelWithLS(const CCLib::DgmOctree::octreeCell& cell, void** additionalParameters);
+	static bool ComputeNormsAtLevelWithLS(const CCLib::DgmOctree::octreeCell& cell, void** additionalParameters, CCLib::NormalizedProgress* nProgress = 0);
 	//! Cellular method for octree-based normal computation
-	static bool ComputeNormsAtLevelWithTri(const CCLib::DgmOctree::octreeCell& cell, void** additionalParameters);
+	static bool ComputeNormsAtLevelWithTri(const CCLib::DgmOctree::octreeCell& cell, void** additionalParameters, CCLib::NormalizedProgress* nProgress = 0);
 };
 
  #endif //CC_NORMAL_VECTORS_HEADER
