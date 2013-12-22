@@ -1,8 +1,8 @@
 #!/bin/bash
 
-version=2.5.2
+version=2.5.3
 debversion=0
-ppaversion=3
+ppaversion=1
 
 for d in precise quantal raring saucy
 do
