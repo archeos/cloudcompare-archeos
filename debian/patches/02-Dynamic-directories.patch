@@ -21,7 +21,7 @@ Subject: Dynamic directies
  //qCC_db
  #include <ccLog.h>
  #include <ccHObject.h>
-@@ -318,7 +321,7 @@ void ccGLWindow::initializeGL()
+@@ -324,7 +327,7 @@ void ccGLWindow::initializeGL()
  			else
  			{
  				ccColorRampShader* colorRampShader = new ccColorRampShader();
@@ -30,7 +30,7 @@ Subject: Dynamic directies
  				if (!colorRampShader->loadProgram(0,qPrintable(shadersPath+QString("/ColorRamp/color_ramp.frag"))))
  				{
  					ccLog::Warning("[3D View %i] Failed to load color ramp shader!",m_uniqueID);
-@@ -3141,7 +3144,7 @@ bool ccGLWindow::renderToFile(	const cha
+@@ -3147,7 +3150,7 @@ bool ccGLWindow::renderToFile(	const cha
  
  			if (m_activeGLFilter && !filter)
  			{
@@ -39,7 +39,7 @@ Subject: Dynamic directies
  
  				if (!m_activeGLFilter->init(Wp,Hp,qPrintable(shadersPath)))
  				{
-@@ -3404,7 +3407,7 @@ bool ccGLWindow::initGLFilter(int w, int
+@@ -3410,7 +3413,7 @@ bool ccGLWindow::initGLFilter(int w, int
  	ccGlFilter* _filter = m_activeGLFilter;
  	m_activeGLFilter=0;
  
@@ -77,7 +77,7 @@ Subject: Dynamic directies
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
 @@ -7,13 +7,23 @@ set( VERSION_MINOR 5 )
- set( VERSION_PATCH 2 )
+ set( VERSION_PATCH 3 )
  
  if ( UNIX )
 -	set( CloudCompare_dest_release bin ) #default destination: /usr/bin
