@@ -1,3 +1,10 @@
+cloudcompare (2.5.3-0archeos1) theodoric; urgency=low
+
+  * New upstream version 2.5.3
+    upstream changes are in the history.txt file.
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Mon, 23 Dec 2013 00:31:43 +0100
+
 cloudcompare (2.5.2-0archeos4) theodoric; urgency=low
 
   * Release script
@@ -65,7 +72,7 @@ cloudcompare (2.4+git20130310-0archeos1) theodoric; urgency=low
 
  -- Romain Janvier <romain.janvier@hotmail.fr>  Mon, 11 Mar 2013 09:40:47 +0100
 
-cloudcompare (2.4+git8336b3-0archeos1) UNRELEASED; urgency=low
+cloudcompare (2.4+git8336b3-0archeos1) theodoric; urgency=low
 
   * New upstream version 2.4+git8336b3
 
