@@ -30,6 +30,7 @@
 #define CC_CHI2_DISTANCES_DEFAULT_SF_NAME "Chi2 distances"
 #define CC_CONNECTED_COMPONENTS_DEFAULT_LABEL_NAME "CC labels"
 #define CC_LOCAL_DENSITY_FIELD_NAME "Local density"
+#define CC_LOCAL_DENSITY_APPROX_FIELD_NAME "Dist to nearest neighbor"
 #define CC_MEAN_CURVATURE_FIELD_NAME "Mean curvature"
 #define CC_ROUGHNESS_FIELD_NAME "Roughness"
 #define CC_GAUSSIAN_CURVATURE_FIELD_NAME "Gaussian curvature"
@@ -40,6 +41,8 @@
 #define CC_DEFAULT_DEG_SCATTERING_ANGLES_SF_NAME "Scattering angles (deg)"
 #define CC_DEFAULT_RANGES_SF_NAME "Ranges"
 #define CC_DEFAULT_SQUARED_RANGES_SF_NAME "Ranges (squared)"
+#define CC_DEFAULT_DIP_SF_NAME "Dip (degrees)"
+#define CC_DEFAULT_DIP_DIR_SF_NAME "Dip direction (degrees)"
 
 //Qt
 #include <QString>
@@ -50,7 +53,7 @@ class ccCommon
     public:
 
         //! Returns current software version
-        static QString GetCCVersion();
+        static QString GetCCVersion(bool full = true);
 };
 
 #endif

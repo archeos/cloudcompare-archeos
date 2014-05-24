@@ -40,6 +40,8 @@ ccPolyline::ccPolyline(GenericIndexedCloudPersist* associatedCloud)
 	setVisible(true);
 	lockVisibility(false);
 	setColor(ccColor::white);
+	showVertices(false);
+	setVertexMarkerWidth(3);
 	setWidth(0);
 }
 
@@ -51,17 +53,30 @@ ccPolyline::ccPolyline(const ccPolyline& poly)
 	ccPointCloud* clone = cloud ? cloud->partialClone(&poly) : ccPointCloud::From(&poly);
 	if (clone)
 	{
-		setAssociatedCloud(clone);
-		assert(m_theAssociatedCloud);
-		if (m_theAssociatedCloud)
-			addPointIndex(0,m_theAssociatedCloud->size());
+		if (cloud)
+			clone->setName(cloud->getName()); //as 'partialClone' adds the '.extract' suffix by default
 	}
 	else
 	{
 		//not enough memory?
 		ccLog::Warning("[ccPolyline][copy constructor] Not enough memory!");
-		//return;
 	}
+
+	initWith(clone,poly);
+}
+
+void ccPolyline::initWith(ccPointCloud* vertices, const ccPolyline& poly)
+{
+	if (vertices)
+	{
+		setAssociatedCloud(vertices);
+		addChild(vertices);
+		//vertices->setEnabled(false);
+		assert(m_theAssociatedCloud);
+		if (m_theAssociatedCloud)
+			addPointIndex(0,m_theAssociatedCloud->size());
+	}
+
 	setClosed(poly.m_isClosed);
 	set2DMode(poly.m_mode2D);
 	setForeground(poly.m_foreground);
@@ -70,6 +85,8 @@ ccPolyline::ccPolyline(const ccPolyline& poly)
 	setColor(poly.m_rgbColor);
 	setWidth(poly.m_width);
 	showColors(poly.colorsShown());
+	showVertices(poly.verticesShown());
+	setVertexMarkerWidth(poly.getVertexMarkerWidth());
 	setVisible(poly.isVisible());
 }
 
@@ -105,6 +122,10 @@ void ccPolyline::applyGLTransformation(const ccGLMatrix& trans)
 
 void ccPolyline::drawMeOnly(CC_DRAW_CONTEXT& context)
 {
+	//no picking enabled on polylines
+	if (MACRO_DrawNames(context))
+		return;
+
 	unsigned vertCount = size();
 	if (vertCount < 2)
 		return;
@@ -126,23 +147,40 @@ void ccPolyline::drawMeOnly(CC_DRAW_CONTEXT& context)
 		if (colorsShown())
 			glColor3ubv(m_rgbColor);
 
-		if (m_width != 0)
+		//display polyline
 		{
-			glPushAttrib(GL_LINE_BIT);
-			glLineWidth(static_cast<GLfloat>(m_width));
+			if (m_width != 0)
+			{
+				glPushAttrib(GL_LINE_BIT);
+				glLineWidth(static_cast<GLfloat>(m_width));
+			}
+
+			glBegin(m_isClosed ? GL_LINE_LOOP : GL_LINE_STRIP);
+			for (unsigned i=0; i<vertCount; ++i)
+			{
+				ccGL::Vertex3v(getPoint(i)->u);
+			}
+			glEnd();
+
+			if (m_width != 0)
+			{
+				glPopAttrib();
+			}
 		}
 
-		glBegin(m_isClosed ? GL_LINE_LOOP : GL_LINE_STRIP);
-
-		for (unsigned i=0; i<vertCount; ++i)
+		//display vertices
+		if (m_showVertices)
 		{
-			ccGL::Vertex3v(getPoint(i)->u);
-		}
+			glPushAttrib(GL_POINT_BIT);
+			glPointSize((GLfloat)m_vertMarkWidth);
 
-		glEnd();
+			glBegin(GL_POINTS);
+			for (unsigned i=0; i<vertCount; ++i)
+			{
+				ccGL::Vertex3v(getPoint(i)->u);
+			}
+			glEnd();
 
-		if (m_width != 0)
-		{
 			glPopAttrib();
 		}
 	}
@@ -267,15 +305,137 @@ bool ccPolyline::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 
 	//Width of the line (dataVersion>=31)
 	if (dataVersion >= 31)
-		inStream >> m_width;
+		ccSerializationHelper::CoordsFromDataStream(inStream,flags,&m_width,1);
 	else
 		m_width = 0;
 
 	return true;
 }
 
+bool ccPolyline::split(	PointCoordinateType maxEdgelLength,
+						std::vector<ccPolyline*>& parts)
+{
+	parts.clear();
+
+	//not enough vertices?
+	unsigned vertCount = size();
+	if (vertCount <= 2)
+	{
+		parts.push_back(new ccPolyline(*this));
+		return true;
+	}
+
+	unsigned startIndex = 0;
+	unsigned lastIndex = vertCount-1;
+	while (startIndex <= lastIndex)
+	{
+		unsigned stopIndex = startIndex;
+		while (stopIndex < lastIndex && (*getPoint(stopIndex+1) - *getPoint(stopIndex)).norm() <= maxEdgelLength)
+		{
+			++stopIndex;
+		}
+
+		//number of vertices for the current part
+		unsigned partSize = stopIndex-startIndex+1;
+
+		//if the polyline is closed we have to look backward for the first segment!
+		if (startIndex == 0)
+		{
+			if (isClosed())
+			{
+				unsigned realStartIndex = vertCount;
+				while (realStartIndex > stopIndex && (*getPoint(realStartIndex-1) - *getPoint(realStartIndex % vertCount)).norm() <= maxEdgelLength)
+				{
+					--realStartIndex;
+				}
+
+				if (realStartIndex == stopIndex)
+				{
+					//whole loop
+					parts.push_back(new ccPolyline(*this));
+					return true;
+				}
+				else if (realStartIndex < vertCount)
+				{
+					partSize += (vertCount - realStartIndex);
+					assert(realStartIndex != 0);
+					lastIndex = realStartIndex-1;
+					//warning: we shift the indexes!
+					startIndex = realStartIndex; 
+					stopIndex += vertCount;
+				}
+			}
+			else if (partSize == vertCount)
+			{
+				//whole polyline
+				parts.push_back(new ccPolyline(*this));
+				return true;
+			}
+		}
+
+		if (partSize > 1) //otherwise we skip that point
+		{
+			//create the corresponding part
+			CCLib::ReferenceCloud ref(m_theAssociatedCloud);
+			if (!ref.reserve(partSize))
+			{
+				ccLog::Error("[ccPolyline::split] Not enough memory!");
+				return false;
+			}
+
+			for (unsigned i=startIndex; i<=stopIndex; ++i)
+			{
+				ref.addPointIndex(i % vertCount);
+			}
+
+			ccPointCloud* vertices = dynamic_cast<ccPointCloud*>(m_theAssociatedCloud);
+			ccPointCloud* subset = vertices ? vertices->partialClone(&ref) : ccPointCloud::From(&ref);
+			ccPolyline* part = new ccPolyline(subset);
+			part->initWith(subset,*this);
+			part->setClosed(false); //by definition!
+			parts.push_back(part);
+		}
+
+		//forward
+		startIndex = (stopIndex % vertCount) + 1;
+	}
+
+	return true;
+}
+
+bool ccPolyline::ExtractFlatContour(CCLib::GenericIndexedCloudPersist* points,
+									PointCoordinateType maxEdgelLength,
+									std::vector<ccPolyline*>& parts,
+									bool allowSplitting/*=true*/,
+									const PointCoordinateType* preferredDim/*=0*/)
+{
+	parts.clear();
+
+	//extract whole contour
+	ccPolyline* basePoly = ExtractFlatContour(points,maxEdgelLength,preferredDim);
+	if (!basePoly)
+	{
+		return false;
+	}
+	else if (!allowSplitting)
+	{
+		parts.push_back(basePoly);
+		return true;
+	}
+
+	//and split it if necessary
+	bool success = basePoly->split(maxEdgelLength,parts);
+
+	delete basePoly;
+	basePoly = 0;
+
+	return success;
+
+}
+
 ccPolyline* ccPolyline::ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* points,
-											PointCoordinateType maxEdgelLength/*=0*/)
+											PointCoordinateType maxEdgelLength/*=0*/,
+											const PointCoordinateType* preferredDim/*=0*/)
 {
 	assert(points);
 	if (!points)
@@ -289,7 +449,20 @@ ccPolyline* ccPolyline::ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* p
 
 	//we project the input points on a plane
 	std::vector<CCLib::PointProjectionTools::IndexedCCVector2> points2D;
-	if (!Yk.projectPointsOn2DPlane<CCLib::PointProjectionTools::IndexedCCVector2>(points2D,0,&O,&X,&Y))
+	PointCoordinateType* planeEq = 0;
+	//if the user has specified a default direction, we'll use it as 'projecting plane'
+	PointCoordinateType preferredPlaneEq[4] = {0, 0, 0, 0};
+	if (preferredDim != 0)
+	{
+		const CCVector3* G = points->getPoint(0); //any point through which the point pass is ok
+		preferredPlaneEq[0] = preferredDim[0];
+		preferredPlaneEq[1] = preferredDim[1];
+		preferredPlaneEq[2] = preferredDim[2];
+		CCVector3::vnormalize(preferredPlaneEq);
+		preferredPlaneEq[3] = CCVector3::vdot(G->u,preferredPlaneEq);
+		planeEq = preferredPlaneEq;
+	}
+	if (!Yk.projectPointsOn2DPlane<CCLib::PointProjectionTools::IndexedCCVector2>(points2D,planeEq,&O,&X,&Y))
 	{
 		ccLog::Warning("[ccPolyline::ExtractFlatContour] Failed to project the points on the LS plane (not enough memory?)!");
 		return 0;
@@ -304,8 +477,8 @@ ccPolyline* ccPolyline::ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* p
 	//try to get the points on the convex/concave hull to build the contour and the polygon
 	std::list<CCLib::PointProjectionTools::IndexedCCVector2*> hullPoints;
 	if (!CCLib::PointProjectionTools::extractConcaveHull2D(	points2D,
-		hullPoints,
-		maxEdgelLength) )
+															hullPoints,
+															maxEdgelLength*maxEdgelLength) )
 	{
 		ccLog::Error("[ccPolyline::ExtractFlatContour] Failed to compute the convex hull of the input points!");
 	}
@@ -327,7 +500,7 @@ ccPolyline* ccPolyline::ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* p
 		for (std::list<CCLib::PointProjectionTools::IndexedCCVector2*>::const_iterator it = hullPoints.begin(); it != hullPoints.end(); ++it)
 			contourVertices->addPoint(O + X*(*it)->x + Y*(*it)->y);
 		contourVertices->setName("vertices");
-		contourVertices->setVisible(false);
+		contourVertices->setEnabled(false);
 	}
 
 	//we create the corresponding (3D) polyline
@@ -374,7 +547,7 @@ PointCoordinateType ccPolyline::computeLength() const
 
 unsigned ccPolyline::getUniqueIDForDisplay() const
 {
-	if (m_parent && m_parent->getParent() && m_parent->getParent()->isA(CC_FACET))
+	if (m_parent && m_parent->getParent() && m_parent->getParent()->isA(CC_TYPES::FACET))
 		return m_parent->getParent()->getUniqueID();
 	else
 		return getUniqueID();

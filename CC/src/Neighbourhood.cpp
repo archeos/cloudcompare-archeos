@@ -28,6 +28,7 @@
 #include "SimpleMesh.h"
 
 //system
+#include <string.h>
 #include <assert.h>
 
 using namespace CCLib;
@@ -51,11 +52,30 @@ const CCVector3* Neighbourhood::getGravityCenter()
 	return ((structuresValidity & GRAVITY_CENTER) ? &theGravityCenter : 0);
 }
 
+void Neighbourhood::setGravityCenter(const CCVector3& G)
+{
+	theGravityCenter = G;
+	structuresValidity |= GRAVITY_CENTER;
+}
+
 const PointCoordinateType* Neighbourhood::getLSQPlane()
 {
 	if (!(structuresValidity & LSQ_PLANE))
 		computeLeastSquareBestFittingPlane();
 	return ((structuresValidity & LSQ_PLANE) ? theLSQPlaneEquation : 0);
+}
+
+void Neighbourhood::setLSQPlane(const PointCoordinateType eq[4],
+								const CCVector3& X,
+								const CCVector3& Y,
+								const CCVector3& N)
+{
+	memcpy(theLSQPlaneEquation,eq,sizeof(PointCoordinateType)*4);
+	theLSQPlaneVectors[0] = X;
+	theLSQPlaneVectors[1] = Y;
+	theLSQPlaneVectors[2] = N;
+	
+	structuresValidity |= LSQ_PLANE;
 }
 
 const CCVector3* Neighbourhood::getLSQPlaneX()
@@ -101,7 +121,7 @@ const double* Neighbourhood::get3DQuadric()
 
 void Neighbourhood::computeGravityCenter()
 {
-	//invalidate precedent centroid (if any)
+	//invalidate previous centroid (if any)
 	structuresValidity &= (~GRAVITY_CENTER);
 
 	assert(m_associatedCloud);
@@ -109,39 +129,21 @@ void Neighbourhood::computeGravityCenter()
 	if (!count)
 		return;
 
-	CCVector3d Psum(0.0);
-
-	//sums
-	#ifdef CC_NEIGHBOURHOOD_PRECISION_COMPUTINGS
-	PointCoordinateType bbMin[3],bbMax[3];
-	m_associatedCloud->getBoundingBox(bbMin,bbMax);
-	CCVector3 C = (CCVector3(bbMin)+CCVector3(bbMax))*0.5;
-	#endif
-
-	for (unsigned i=0;i<count;++i)
+	//sum
+	CCVector3d Psum(0,0,0);
+	for (unsigned i=0; i<count; ++i)
 	{
 		const CCVector3* P = m_associatedCloud->getPoint(i);
-		#ifdef CC_NEIGHBOURHOOD_PRECISION_COMPUTINGS
-		Xsum += (double)(P->x-C.x);
-		Ysum += (double)(P->y-C.y);
-		Zsum += (double)(P->z-C.z);
-		#else
-		Psum.x += (double)P->x;
-		Psum.y += (double)P->y;
-		Psum.z += (double)P->z;
-		#endif
+		Psum.x += P->x;
+		Psum.y += P->y;
+		Psum.z += P->z;
 	}
 
-	Psum /= (double)count;
-	theGravityCenter.x = (PointCoordinateType)Psum.x;
-	theGravityCenter.y = (PointCoordinateType)Psum.y;
-	theGravityCenter.z = (PointCoordinateType)Psum.z;
+	CCVector3 G(static_cast<PointCoordinateType>(Psum.x / count),
+				static_cast<PointCoordinateType>(Psum.y / count),
+				static_cast<PointCoordinateType>(Psum.z / count) );
 
-	#ifdef CC_NEIGHBOURHOOD_PRECISION_COMPUTINGS
-	theGravityCenter += C;
-	#endif
-
-	structuresValidity |= GRAVITY_CENTER;
+	setGravityCenter(G);
 }
 
 CCLib::SquareMatrixd Neighbourhood::computeCovarianceMatrix()
@@ -213,7 +215,7 @@ PointCoordinateType Neighbourhood::computeLargestRadius()
 
 bool Neighbourhood::computeLeastSquareBestFittingPlane()
 {
-	//invalidate precedent LS plane (if any)
+	//invalidate previous LS plane (if any)
 	structuresValidity &= (~LSQ_PLANE);
 
 	assert(m_associatedCloud);
@@ -242,18 +244,14 @@ bool Neighbourhood::computeLeastSquareBestFittingPlane()
 			double vec[3];
 			//the smallest eigen vector corresponds to the "least square best fitting plane" normal
 			eig.getMinEigenValueAndVector(vec);
-			theLSQPlaneVectors[2].x = (PointCoordinateType)vec[0];
-			theLSQPlaneVectors[2].y = (PointCoordinateType)vec[1];
-			theLSQPlaneVectors[2].z = (PointCoordinateType)vec[2];
+			theLSQPlaneVectors[2] = CCVector3::fromArray(vec);
 		}
 
-		//get also X
+		//get also X (Y will be deduced by cross product, see below
 		{
 			double vec[3];
 			eig.getMaxEigenValueAndVector(vec);
-			theLSQPlaneVectors[0].x = (PointCoordinateType)vec[0];
-			theLSQPlaneVectors[0].y = (PointCoordinateType)vec[1];
-			theLSQPlaneVectors[0].z = (PointCoordinateType)vec[2];
+			theLSQPlaneVectors[0] = CCVector3::fromArray(vec);
 		}
 
 		//get the centroid (should already be up-to-date - see computeCovarianceMatrix)
@@ -288,8 +286,7 @@ bool Neighbourhood::computeLeastSquareBestFittingPlane()
 	//normalize X as well
 	theLSQPlaneVectors[0].normalize();
 	//and update Y
-	theLSQPlaneVectors[1] = theLSQPlaneVectors[2].cross(theLSQPlaneVectors[1]);
-
+	theLSQPlaneVectors[1] = theLSQPlaneVectors[2].cross(theLSQPlaneVectors[0]);
 
 	//deduce the proper equation
 	theLSQPlaneEquation[0] = theLSQPlaneVectors[2].x;
@@ -308,7 +305,7 @@ bool Neighbourhood::computeLeastSquareBestFittingPlane()
 
 bool Neighbourhood::computeHeightFunction()
 {
-	//invalidate precedent quadric (if any)
+	//invalidate previous quadric (if any)
 	structuresValidity &= (~HEIGHT_FUNCTION);
 
 	assert(m_associatedCloud);
@@ -355,40 +352,40 @@ bool Neighbourhood::computeHeightFunction()
 	float *A = new float[6*count];
 	float *b = new float[count];
 
-	float lmax2=0; //max (squared) dimension
+	float lmax2 = 0; //max (squared) dimension
 
     //for all points
 	{
-		float* _A=A;
-		float* _b=b;
-		for (unsigned i=0;i<count;++i)
+		float* _A = A;
+		float* _b = b;
+		for (unsigned i=0; i<count; ++i)
 		{
 			CCVector3 P = *m_associatedCloud->getPoint(i) - *G;
 
-			float lX = (float)P.u[idx_X];
-			float lY = (float)P.u[idx_Y];
-			float lZ = (float)P.u[idx_Z];
+			float lX = static_cast<float>(P.u[idx_X]);
+			float lY = static_cast<float>(P.u[idx_Y]);
+			float lZ = static_cast<float>(P.u[idx_Z]);
 
-			*_A++ = 1.0;
+			*_A++ = 1.0f;
 			*_A++ = lX;
 			*_A++ = lY;
 			*_A = lX*lX;
 			//by the way, we track the max 'X' squared dimension
-			if (*_A>lmax2)
-				lmax2=*_A;
+			if (*_A > lmax2)
+				lmax2 = *_A;
 			++_A;
 			*_A++ = lX*lY;
 			*_A = lY*lY;
 			//by the way, we track the max 'Y' squared dimension
-			if (*_A>lmax2)
-				lmax2=*_A;
+			if (*_A > lmax2)
+				lmax2 = *_A;
 			++_A;
 
 			*_b++ = lZ;
 			lZ *= lZ;
 			//and don't forget to track the max 'Z' squared dimension as well
-			if (lZ>lmax2)
-				lmax2=lZ;
+			if (lZ > lmax2)
+				lmax2 = lZ;
 		}
 	}
 
@@ -411,7 +408,7 @@ bool Neighbourhood::computeHeightFunction()
 				for (unsigned k=0; k<count; ++k)
 				{
 					//tmp += A[(6*k)+i]*A[(6*k)+j];
-					tmp += (double)((*_Ai) * (*_Aj));
+					tmp += static_cast<double>((*_Ai) * (*_Aj));
 					_Ai += 6;
 					_Aj += 6;
 				}
@@ -426,7 +423,7 @@ bool Neighbourhood::computeHeightFunction()
 				for (unsigned k=0; k<count; ++k)
 				{
 					//tmp += A[(6*k)+i]*b[k];
-					tmp += (double)((*_Ai) * (*_b++));
+					tmp += static_cast<double>((*_Ai) * (*_b++));
 					_Ai += 6;
 				}
 				tAb[i] = tmp;
@@ -435,16 +432,15 @@ bool Neighbourhood::computeHeightFunction()
 	}
 
 	//first guess for X: plane equation (a0.x+a1.y+a2.z=a3 --> z = a3/a2 - a0/a2.x - a1/a2.y)
-	double X0[6];
-	X0[0] = (double)/*lsq[3]/lsq[idx_Z]*/0; //DGM: warning, points have already been recentred around the gravity center! So forget about a3
-	X0[1] = (double)(-lsq[idx_X]/lsq[idx_Z]);
-	X0[2] = (double)(-lsq[idx_Y]/lsq[idx_Z]);
-	X0[3] = 0;
-	X0[4] = 0;
-	X0[5] = 0;
+	double X0[6] = {	static_cast<double>(/*lsq[3]/lsq[idx_Z]*/0), //DGM: warning, points have already been recentred around the gravity center! So forget about a3
+						static_cast<double>(-lsq[idx_X]/lsq[idx_Z]),
+						static_cast<double>(-lsq[idx_Y]/lsq[idx_Z]),
+						0,
+						0,
+						0 };
 
 	//special case: a0 = a1 = a2 = 0! //happens for perfectly flat surfaces!
-	if (X0[1] == 0.0 && X0[2] == 0.0)
+	if (X0[1] == 0 && X0[2] == 0)
 		X0[0] = 1.0;
 
 	//init. conjugate gradient
@@ -452,7 +448,7 @@ bool Neighbourhood::computeHeightFunction()
 
     //conjugate gradient iterations
 	{
-		double convergenceThreshold = (double)lmax2 * 1e-8;  //max. error for convergence = 1e-8 of largest cloud dimension (empirical!)
+		double convergenceThreshold = static_cast<double>(lmax2) * 1.0e-8;  //max. error for convergence = 1e-8 of largest cloud dimension (empirical!)
 		for (unsigned i=0; i<1500; ++i)
 		{
 			double lastError = cg.iterConjugateGradient(X0);
@@ -465,17 +461,19 @@ bool Neighbourhood::computeHeightFunction()
 	//fclose(fp);
 
 	delete[] A;
-	A=0;
+	A = 0;
 	delete[] b;
-	b=0;
+	b = 0;
 
 	//output
 	{
-		for (unsigned i=0;i<6;++i)
-			theHeightFunction[i]=(PointCoordinateType)X0[i];
-		theHeightFunctionDirections[0]=idx_X;
-		theHeightFunctionDirections[1]=idx_Y;
-		theHeightFunctionDirections[2]=idx_Z;
+		for (unsigned i=0; i<6; ++i)
+		{
+			theHeightFunction[i] = static_cast<PointCoordinateType>(X0[i]);
+		}
+		theHeightFunctionDirections[0] = idx_X;
+		theHeightFunctionDirections[1] = idx_Y;
+		theHeightFunctionDirections[2] = idx_Z;
 
 		structuresValidity |= HEIGHT_FUNCTION;
 	}
@@ -485,7 +483,7 @@ bool Neighbourhood::computeHeightFunction()
 
 bool Neighbourhood::compute3DQuadric()
 {
-	//invalidate precedent quadric (if any)
+	//invalidate previous quadric (if any)
 	structuresValidity &= (~QUADRIC_3D);
 
 	assert(m_associatedCloud);
@@ -502,8 +500,7 @@ bool Neighbourhood::compute3DQuadric()
     //we look for the eigen vector associated to the minimum eigen value of a matrix A
     //where A=transpose(D)*D, and D=[xi^2 yi^2 zi^2 xiyi yizi xizi xi yi zi 1] (i=1..N)
 
-	unsigned i,l,c,count = m_associatedCloud->size();
-	CCVector3 P;
+	unsigned count = m_associatedCloud->size();
 
     //we compute M = [x2 y2 z2 xy yz xz x y z 1] for all points
     PointCoordinateType* M = new PointCoordinateType[count*10];
@@ -511,9 +508,9 @@ bool Neighbourhood::compute3DQuadric()
         return false;
 
 	PointCoordinateType* _M = M;
-	for (i=0;i<count;++i)
+	for (unsigned i=0; i<count; ++i)
 	{
-		P = *m_associatedCloud->getPoint(i) - *G;
+		CCVector3 P = *m_associatedCloud->getPoint(i) - *G;
 
         //we fill the ith line
 	    (*_M++) = P.x * P.x;
@@ -530,17 +527,14 @@ bool Neighbourhood::compute3DQuadric()
 
     //D = tM.M
     SquareMatrixd D(10);
-	for (l=0; l<10; ++l)
+	for (unsigned l=0; l<10; ++l)
 	{
-        for (c=0; c<10; ++c)
+        for (unsigned c=0; c<10; ++c)
         {
-            double sum=0.0;
+            double sum = 0;
             _M = M;
-            for (i=0; i<count; ++i)
-            {
-                sum += (double)(_M[l] * _M[c]);
-                _M+=10;
-            }
+            for (unsigned i=0; i<count; ++i, _M+=10)
+                sum += static_cast<double>(_M[l] * _M[c]);
 
             D.m_values[l][c] = sum;
         }
@@ -561,8 +555,10 @@ bool Neighbourhood::compute3DQuadric()
 	/*double lambdaMin = */eig.getMinEigenValueAndVector(vec);
 
     //we store result
-	for (i=0;i<10;++i)
-        the3DQuadric[i]=vec[i];
+	{
+		for (unsigned i=0; i<10; ++i)
+			the3DQuadric[i] = vec[i];
+	}
 
 	structuresValidity |= QUADRIC_3D;
 
@@ -737,28 +733,30 @@ ScalarType Neighbourhood::computeCurvature(unsigned neighbourIndex, CC_CURVATURE
 	const PointCoordinateType& f = H[5];
 
     //See "CURVATURE OF CURVES AND SURFACES – A PARABOLIC APPROACH" by ZVI HAR’EL
-	const PointCoordinateType fxx = 2.0f*d; // 2d
-	const PointCoordinateType& fxy = e; // e
-	const PointCoordinateType fyy = 2.0f*f; // 2f
-	const PointCoordinateType fx = b+fxx*Q.u[X]+fxy*Q.u[Y]; // b+2d*X+eY
-	const PointCoordinateType fy = c+fyy*Q.u[Y]+fxy*Q.u[X]; // c+2f*Y+eX
+	const PointCoordinateType  fx	= b + (d*2) * Q.u[X] + (e  ) * Q.u[Y];	// b+2d*X+eY
+	const PointCoordinateType  fy	= c + (e  ) * Q.u[X] + (f*2) * Q.u[Y];	// c+2f*Y+eX
+	const PointCoordinateType  fxx	= d*2;									// 2d
+	const PointCoordinateType  fyy	= f*2;									// 2f
+	const PointCoordinateType& fxy	= e;									// e
+
+	const PointCoordinateType fx2 = fx*fx;
+	const PointCoordinateType fy2 = fy*fy;
+	const PointCoordinateType q = (1 + fx2 + fy2);
 
     switch (cType)
     {
         case GAUSSIAN_CURV:
 			{
 				//to sign the curvature, we need a normal!
-				PointCoordinateType c = fabs((fxx*fyy - fxy*fxy)/(1 + fx*fx + fy*fy));
-				return static_cast<ScalarType>(c);
+				PointCoordinateType K = fabs( fxx*fyy - fxy*fxy ) / (q*q);
+				return static_cast<ScalarType>(K);
 			}
 
         case MEAN_CURV:
             {
-                PointCoordinateType fx2 = fx*fx;
-                PointCoordinateType fy2 = fy*fy;
                 //to sign the curvature, we need a normal!
-				PointCoordinateType c = fabs(((1+fx2)*fyy - 2*fx*fy*fxy + (1+fy2)*fxx)/(2*pow(1+fx2+fy2,static_cast<PointCoordinateType>(1.5))));
-				return static_cast<ScalarType>(c);
+				PointCoordinateType H = fabs( ((1+fx2)*fyy - 2*fx*fy*fxy + (1+fy2)*fxx) )  / (2*sqrt(q)*q);
+				return static_cast<ScalarType>(H);
             }
 
 		default:
@@ -767,186 +765,3 @@ ScalarType Neighbourhood::computeCurvature(unsigned neighbourIndex, CC_CURVATURE
 
 	return NAN_VALUE;
 }
-
-ScalarType Neighbourhood::computeCurvature2(unsigned neighbourIndex, CC_CURVATURE_TYPE cType)
-{
-	//we get 3D quadric parameters
-	const double* Q = get3DQuadric();
-	if (!Q)
-        return NAN_VALUE;
-
-	//we get centroid (should have already been computed during Quadric computation)
-	const CCVector3* Gc = getGravityCenter();
-
-    //we compute curvature at the input neighbour position + we recenter it by the way
-	CCVector3 Pc = *m_associatedCloud->getPoint(neighbourIndex) - *Gc;
-
-    double a=Q[0];
-    const double b=Q[1]/a;
-    const double c=Q[2]/a;
-    const double e=Q[3]/a;
-    const double f=Q[4]/a;
-    const double g=Q[5]/a;
-    const double l=Q[6]/a;
-    const double m=Q[7]/a;
-    const double n=Q[8]/a;
-    //const double d=Q[9]/a;
-    a=1.0;
-
-    const double& x=Pc.x;
-    const double& y=Pc.y;
-    const double& z=Pc.z;
-
-    //first order partial derivatives
-    const double Fx = 2.*a*x+e*y+g*z+l;
-    const double Fy = 2.*b*y+e*x+f*z+m;
-    const double Fz = 2.*c*z+f*y+g*x+n;
-
-    const double Fx2 = Fx*Fx;
-    const double Fy2 = Fy*Fy;
-    const double Fz2 = Fz*Fz;
-
-    //coefficients E,F,G
-    const double E = 1.+Fx2/Fz2;
-    const double F = Fx2/Fz2;
-    const double G = 1.+Fy2/Fz2;
-
-    //second order partial derivatives
-    //const double Fxx = 2.*a;
-    //const double Fyy = 2.*b;
-    //const double Fzz = 2.*c;
-    //const double Fxy = e;
-    //const double Fyx = e;
-    //const double Fyz = f;
-    //const double Fzy = f;
-    //const double Fxz = g;
-    //const double Fzx = g;
-
-    //gradient norm
-    const double gradF = sqrt(Fx2+Fy2+Fz2);
-
-    //coefficients L,M,N
-    SquareMatrixd D(3);
-    D.m_values[0][0] = 2.*a;//Fxx;
-    D.m_values[0][1] = g;//Fxz;
-    D.m_values[0][2] = Fx;
-    D.m_values[1][0] = g;//Fzx;
-    D.m_values[1][1] = 2.*c;//Fzz;
-    D.m_values[1][2] = Fz;
-    D.m_values[2][0] = Fx;
-    D.m_values[2][1] = Fz;
-    D.m_values[2][2] = 0.0;
-    const double L = D.computeDet()/(Fz2*gradF);
-
-    D.m_values[0][0] = e;//Fxy;
-    D.m_values[0][1] = f;//Fyz;
-    D.m_values[0][2] = Fy;
-    /*D.m_values[1][0] = Fzx;
-    D.m_values[1][1] = Fzz;
-    D.m_values[1][2] = Fz;
-    D.m_values[2][0] = Fx;
-    D.m_values[2][1] = Fz;
-    D.m_values[2][2] = 0.0;
-    //*/
-    const double M = D.computeDet()/(Fz2*gradF);
-
-      D.m_values[0][0] = 2.*b;//Fyy;
-    //D.m_values[0][1] = f;//Fyz;
-    //D.m_values[0][2] = Fy;
-      D.m_values[1][0] = f;//Fzy;
-    //D.m_values[1][1] = Fzz;
-    //D.m_values[1][2] = Fz;
-      D.m_values[2][0] = Fy;
-    //D.m_values[2][1] = Fz;
-    //D.m_values[2][2] = 0.0;
-    const double N = D.computeDet()/(Fz2*gradF);
-
-    //compute curvature
-    SquareMatrixd A(2);
-    A.m_values[0][0] = L;
-    A.m_values[0][1] = M;
-    A.m_values[1][0] = M;
-    A.m_values[1][1] = N;
-
-    SquareMatrixd B(2);
-    B.m_values[0][0] = E;
-    B.m_values[0][1] = F;
-    B.m_values[1][0] = F;
-    B.m_values[1][1] = G;
-
-    /*FILE* fp = fopen("computeCurvature2_trace.txt","wt");
-    fprintf(fp,"Fx=%f\n",Fx);
-    fprintf(fp,"Fy=%f\n",Fx);
-    fprintf(fp,"Fz=%f\n",Fx);
-    fprintf(fp,"E=%f\n",E);
-    fprintf(fp,"F=%f\n",F);
-    fprintf(fp,"G=%f\n",G);
-    fprintf(fp,"L=%f\n",L);
-    fprintf(fp,"M=%f\n",M);
-    fprintf(fp,"N=%f\n",N);
-    fprintf(fp,"A:\n%f %f\n%f %f\n",A.m_values[0][0],A.m_values[0][1],A.m_values[1][0],A.m_values[1][1]);
-    fprintf(fp,"B:\n%f %f\n%f %f\n",B.m_values[0][0],B.m_values[0][1],B.m_values[1][0],B.m_values[1][1]);
-    //fclose(fp);
-    //*/
-
-    //Gaussian curvature K = det(A)/det(B)
-    if (cType==GAUSSIAN_CURV)
-    {
-        ScalarType K = (ScalarType)(A.computeDet() / B.computeDet());
-        if (K<-1.0)
-            K=-1.0;
-        else if (K>1.0)
-            K=1.0;
-        return K;
-    }
-    //*/
-
-    SquareMatrixd Binv = B.inv();
-    if (!Binv.isValid())
-        return NAN_VALUE;
-
-    SquareMatrixd C = B.inv() * A;
-
-    //Mean curvature H = 1/2 trace(B^-1 * A)
-    if (cType==MEAN_CURV)
-    {
-        ScalarType H = (ScalarType)(0.5*C.trace());
-        if (H<-1.0)
-            H=-1.0;
-        else if (H>1.0)
-            H=1.0;
-        return fabs(H);
-    }
-    //*/
-
-    //principal curvatures are the eigenvalues k1 and k2 of B^-1 * A
-    /*SquareMatrixd eig = C.computeJacobianEigenValuesAndVectors();
-	if (!eig.isValid())
-		return NAN_VALUE;
-
-    const double k1 = eig.getEigenValueAndVector(0);
-    const double k2 = eig.getEigenValueAndVector(1);
-    //*/
-
-    /*FILE* fp = fopen("computeCurvature2_trace.txt","a");
-    fprintf(fp,"Binv:\n%f %f\n%f %f\n",Binv.values[0][0],Binv.values[0][1],Binv.values[1][0],Binv.values[1][1]);
-    fprintf(fp,"C:\n%f %f\n%f %f\n",C.values[0][0],C.values[0][1],C.values[1][0],C.values[1][1]);
-    fprintf(fp,"k1=%f\n",k1);
-    fprintf(fp,"k2=%f\n",k2);
-    fclose(fp);
-    //*/
-
-    /*switch (cType)
-    {
-        case GAUSSIAN_CURV:
-            //Gaussian curvature
-            return k1*k2;
-        case MEAN_CURV:
-            //Mean curvature
-            return (k1+k2)/2.0;
-    }
-    //*/
-
-    return NAN_VALUE;
-}
-

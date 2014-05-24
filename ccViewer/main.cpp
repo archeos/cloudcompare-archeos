@@ -2,9 +2,9 @@
 //#                                                                        #
 //#                   CLOUDCOMPARE LIGHT VIEWER                            #
 //#                                                                        #
-//#  This project has been initated under funding from ANR/CIFRE           #
-//#  This program is free software; you can redistribute it and/or modify  #
+//#  This project has been initiated under funding from ANR/CIFRE          #
 //#                                                                        #
+//#  This program is free software; you can redistribute it and/or modify  #
 //#  it under the terms of the GNU General Public License as published by  #
 //#  the Free Software Foundation; version 2 of the License.               #
 //#                                                                        #
@@ -32,8 +32,12 @@
 #include <ccNormalVectors.h>
 #include <ccColorScalesManager.h>
 
-#include "ccviewer.h"
+#ifdef USE_VLD
+//VLD
+#include <vld.h>
+#endif
 
+#include "ccviewer.h"
 
 class ccApplication : public QApplication
 {
@@ -83,6 +87,10 @@ class ccApplication : public QApplication
 int main(int argc, char *argv[])
 {
 	ccApplication a(argc, argv);
+
+#ifdef USE_VLD
+	VLDEnable();
+#endif
 
 	//OpenGL?
     if (!QGLFormat::hasOpenGL())
@@ -162,9 +170,6 @@ int main(int argc, char *argv[])
     w.checkForLoadedEntities();
 
 	int result = a.exec();
-
-	ccNormalVectors::ReleaseUniqueInstance();
-    ccColorScalesManager::ReleaseUniqueInstance();
 
 	return result;
 }

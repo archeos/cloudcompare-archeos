@@ -42,24 +42,20 @@ static CCVector3 ComputeRobustAverageNorm(	CCLib::ReferenceCloud* subset,
 	assert(subset->getAssociatedCloud() == static_cast<CCLib::GenericIndexedCloud*>(sourceCloud));
 
 	//we simply take the first normal as reference (DGM: seems to work better than the LSQ plane!)
-	const PointCoordinateType* N = sourceCloud->getPointNormal(subset->getPointGlobalIndex(0));
+	const CCVector3& N = sourceCloud->getPointNormal(subset->getPointGlobalIndex(0));
 
 	//now we can compute the mean normal, using the first normal as reference for the sign
 	CCVector3 Nout(0,0,0);
 	unsigned n = subset->size();
 	for (unsigned i=0; i<n; ++i)
 	{
-		const PointCoordinateType* Ni = sourceCloud->getPointNormal(subset->getPointGlobalIndex(i));
+		const CCVector3& Ni = sourceCloud->getPointNormal(subset->getPointGlobalIndex(i));
 		//compute the scalar product between the ith point normal and the robust one
-		PointCoordinateType ps = CCVector3::vdot(Ni,N);
+		PointCoordinateType ps = Ni.dot(N);
 		if (ps < 0)
-		{
-			CCVector3::vsubstract(Nout.u,Ni,Nout.u);
-		}
+			Nout -= Ni;
 		else
-		{
-			CCVector3::vadd(Nout.u,Ni,Nout.u);
-		}
+			Nout += Ni;
 	}
 
 	Nout.normalize();
@@ -80,29 +76,33 @@ int ccFastMarchingForNormsDirection::init(ccGenericPointCloud* cloud,
 	CCLib::DgmOctree::cellCodesContainer cellCodes;
 	theOctree->getCellCodes(level,cellCodes,true);
 
+	CCLib::ReferenceCloud Yk(theOctree->associatedCloud());
+
 	while (!cellCodes.empty())
 	{
-		CCLib::ReferenceCloud* Yk = theOctree->getPointsInCell(cellCodes.back(),level,true);
-		if (Yk)
+		if (!theOctree->getPointsInCell(cellCodes.back(),level,&Yk,true))
 		{
-			//convert the octree cell code to grid position
-			int cellPos[3];
-			theOctree->getCellPos(cellCodes.back(),level,cellPos,true);
-
-			//convert it to FM cell pos index
-			unsigned gridPos = FM_pos2index(cellPos);
-
-			//create corresponding cell
-			DirectionCell* aCell = new DirectionCell;
-			{
-				//aCell->signConfidence = 1;
-				aCell->cellCode = cellCodes.back();
-				aCell->N = ComputeRobustAverageNorm(Yk,cloud);
-				aCell->C = *(CCLib::Neighbourhood(Yk).getGravityCenter());
-			}
-			
-			m_theGrid[gridPos] = aCell;
+			//not enough memory
+			return -1;
 		}
+		
+		//convert the octree cell code to grid position
+		int cellPos[3];
+		theOctree->getCellPos(cellCodes.back(),level,cellPos,true);
+
+		//convert it to FM cell pos index
+		unsigned gridPos = FM_pos2index(cellPos);
+
+		//create corresponding cell
+		DirectionCell* aCell = new DirectionCell;
+		{
+			//aCell->signConfidence = 1;
+			aCell->cellCode = cellCodes.back();
+			aCell->N = ComputeRobustAverageNorm(&Yk,cloud);
+			aCell->C = *CCLib::Neighbourhood(&Yk).getGravityCenter();
+		}
+
+		m_theGrid[gridPos] = aCell;
 
 		cellCodes.pop_back();
 	}
@@ -286,27 +286,30 @@ unsigned ccFastMarchingForNormsDirection::updateResolvedTable(	ccGenericPointClo
 	if (!m_initialized || !m_octree || m_gridLevel > CCLib::DgmOctree::MAX_OCTREE_LEVEL)
 		return 0;
 
+	CCLib::ReferenceCloud Yk(m_octree->associatedCloud());
+
 	unsigned count = 0;
 	for (size_t i=0; i<m_activeCells.size(); ++i)
 	{
 		DirectionCell* aCell = static_cast<DirectionCell*>(m_theGrid[m_activeCells[i]]);
-		CCLib::ReferenceCloud* Yk = m_octree->getPointsInCell(aCell->cellCode,m_gridLevel,true);
-		if (!Yk)
-			continue;
-
-		for (unsigned k=0; k<Yk->size(); ++k)
+		if (!m_octree->getPointsInCell(aCell->cellCode,m_gridLevel,&Yk,true))
 		{
-			unsigned index = Yk->getPointGlobalIndex(k);
+			//not enough memory
+			return 0;
+		}
+
+		for (unsigned k=0; k<Yk.size(); ++k)
+		{
+			unsigned index = Yk.getPointGlobalIndex(k);
 			resolved.setValue(index,1);
 
 			const normsType& norm = theNorms->getValue(index);
-			const PointCoordinateType* N = ccNormalVectors::GetNormal(norm);
+			const CCVector3& N = ccNormalVectors::GetNormal(norm);
 
 			//inverse point normal if necessary
-			if (CCVector3::vdot(N,aCell->N.u) < 0)
+			if (N.dot(aCell->N) < 0)
 			{
-				PointCoordinateType newN[3]= { -N[0], -N[1], -N[2] };
-				theNorms->setValue(index,ccNormalVectors::GetNormIndex(newN));
+				theNorms->setValue(index,ccNormalVectors::GetNormIndex(-N));
 			}
 
 #ifdef _DEBUG
@@ -359,7 +362,7 @@ int ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(ccP
                                                                                 NormsIndexesTableType* theNorms,
                                                                                 uchar octreeLevel,
                                                                                 CCLib::GenericProgressCallback* progressCb,
-                                                                                CCLib::DgmOctree* _theOctree)
+                                                                                CCLib::DgmOctree* inputOctree)
 {
     assert(theCloud);
 
@@ -368,7 +371,7 @@ int ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(ccP
         return -1;
 
 	//we compute the octree if none is provided
-	CCLib::DgmOctree* theOctree = _theOctree;
+	CCLib::DgmOctree* theOctree = inputOctree;
 	if (!theOctree)
 	{
 		theOctree = new CCLib::DgmOctree(theCloud);
@@ -385,11 +388,13 @@ int ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(ccP
 	if (sfIdx < 0)
 		sfIdx = theCloud->addScalarField("FM_Propagation");
 	if (sfIdx >= 0)
+	{
 		theCloud->setCurrentScalarField(sfIdx);
+	}
 	else
 	{
 		ccLog::Warning("[ccFastMarchingForNormsDirection] Couldn't create temporary scalar field! Not enough memory?");
-		if (!_theOctree)
+		if (!inputOctree)
 			delete theOctree;
 		return -3;
 	}
@@ -399,7 +404,7 @@ int ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(ccP
 		ccLog::Warning("[ccFastMarchingForNormsDirection] Couldn't enable temporary scalar field! Not enough memory?");
 		theCloud->deleteScalarField(sfIdx);
 		theCloud->setCurrentScalarField(oldSfIdx);
-		if (!_theOctree)
+		if (!inputOctree)
 			delete theOctree;
 		return -4;
 	}
@@ -411,7 +416,7 @@ int ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(ccP
 		ccLog::Warning("[ccFastMarchingForNormsDirection] Not enough memory!");
 		theCloud->deleteScalarField(sfIdx);
 		theCloud->setCurrentScalarField(oldSfIdx);
-		if (!_theOctree)
+		if (!inputOctree)
 			delete theOctree;
 		resolved->release();
 		return -5;
@@ -427,7 +432,7 @@ int ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(ccP
 		theCloud->deleteScalarField(sfIdx);
 		theCloud->setCurrentScalarField(oldSfIdx);
 		resolved->release();
-		if (!_theOctree)
+		if (!inputOctree)
 			delete theOctree;
 		return -6;
 	}
@@ -507,7 +512,7 @@ int ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(ccP
 	resolved->release();
 	resolved = 0;
 
-	if (!_theOctree)
+	if (!inputOctree)
 		delete theOctree;
 
 	theCloud->showNormals(true);

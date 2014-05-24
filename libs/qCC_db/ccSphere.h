@@ -27,8 +27,8 @@
 /** 3D sphere primitive
 **/
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccSphere : public ccGenericPrimitive
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccSphere : public ccGenericPrimitive
 #else
 class ccSphere : public ccGenericPrimitive
 #endif
@@ -52,7 +52,7 @@ public:
 	ccSphere(QString name = QString("Sphere"));
 
 	//! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const { return CC_SPHERE; }
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::SPHERE; }
 
 	//inherited from ccGenericPrimitive
 	virtual QString getTypeName() const { return "Sphere"; }

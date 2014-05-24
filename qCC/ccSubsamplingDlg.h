@@ -34,29 +34,36 @@ class ccSubsamplingDlg : public QDialog, public Ui::SubsamplingDialog
 
 public:
 
-    typedef enum
+	//! Sub-sampling method
+    enum CC_SUBSAMPLING_METHOD
     {
         RANDOM  = 0,
         SPACE   = 1,
         OCTREE  = 2,
-    } CC_SUBSAMPLING_METHOD;
+    };
 
 	//! Default constructor
-    ccSubsamplingDlg(ccGenericPointCloud* cloud, QWidget* parent=0);
+    ccSubsamplingDlg(unsigned maxPointCount, double maxCloudRadius, QWidget* parent = 0);
 
-	//! Returns subsampled cloud (once dialog as been validated)
-    CCLib::ReferenceCloud* getSampledCloud(CCLib::GenericProgressCallback *progressCb=NULL);
+	//! Returns subsampled version of a cloud according to current parameters
+	/** Should be called only once the dialog has been validated.
+	**/
+    CCLib::ReferenceCloud* getSampledCloud(ccGenericPointCloud* cloud, CCLib::GenericProgressCallback* progressCb = 0);
 
 protected slots:
-    void sliderReleased();
-    void sliderMoved(int sliderPos);
+
+	void sliderMoved(int sliderPos);
     void samplingRateChanged(double value);
     void changeSamplingMethod(int index);
 
 protected:
 
-	//! Associated cloud
-    ccGenericPointCloud* m_pointCloud;
+	//! Max point count (for RANDOM method)
+	unsigned m_maxPointCount;
+
+	//! Max radius (for SPACE method)
+	double m_maxRadius;
+
 
     void updateLabels();
 };

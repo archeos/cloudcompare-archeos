@@ -27,8 +27,8 @@ ccViewportParameters::ccViewportParameters()
 	, defaultLineWidth(1)
 	, perspectiveView(false)
 	, objectCenteredView(true)
-	, pivotPoint(0.0f)
-	, cameraCenter(0.0f)
+	, pivotPoint(0,0,0)
+	, cameraCenter(0,0,0)
 	, fov(30.0f)
 	, perspectiveAspectRatio(1.0f)
 	, orthoAspectRatio(1.0f)
@@ -97,14 +97,10 @@ bool ccViewportParameters::fromFile(QFile& in, short dataVersion, int flags)
     inStream >> defaultLineWidth;
 	inStream >> perspectiveView;
 	inStream >> objectCenteredView;
-	inStream >> pivotPoint.x;
-	inStream >> pivotPoint.y;
-	inStream >> pivotPoint.z;
+	ccSerializationHelper::CoordsFromDataStream(inStream,flags,pivotPoint.u,3);
 	if (dataVersion >= 25) //we now save the camera center as a separate point!
 	{
-		inStream >> cameraCenter.x;
-		inStream >> cameraCenter.y;
-		inStream >> cameraCenter.z;
+		ccSerializationHelper::CoordsFromDataStream(inStream,flags,cameraCenter.u,3);
 	}
 	else
 	{
@@ -121,8 +117,8 @@ bool ccViewportParameters::fromFile(QFile& in, short dataVersion, int flags)
 
 		if (objectCenteredView)
 		{
-			cameraCenter.x += screenPan[0];
-			cameraCenter.y += screenPan[1];
+			cameraCenter.x += static_cast<PointCoordinateType>(screenPan[0]);
+			cameraCenter.y += static_cast<PointCoordinateType>(screenPan[1]);
 		}
 	}
 

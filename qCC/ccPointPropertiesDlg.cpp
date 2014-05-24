@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2187                                                              $
-//$LastChangedDate:: 2012-07-03 15:22:55 +0200 (mar., 03 juil. 2012)       $
-//**************************************************************************
-//
 
 #include "ccPointPropertiesDlg.h"
 
@@ -74,11 +67,11 @@ ccPointPropertiesDlg::~ccPointPropertiesDlg()
 {
 	if (m_label)
 		delete m_label;
-	m_label=0;
+	m_label = 0;
 
 	if (m_rect2DLabel)
         delete m_rect2DLabel;
-    m_rect2DLabel=0;
+    m_rect2DLabel = 0;
 }
 
 bool ccPointPropertiesDlg::linkWith(ccGLWindow* win)

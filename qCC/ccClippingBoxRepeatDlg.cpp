@@ -17,10 +17,97 @@
 
 #include "ccClippingBoxRepeatDlg.h"
 
-ccClippingBoxRepeatDlg::ccClippingBoxRepeatDlg(QWidget* parent)
+//Qt
+#include <QPushButton>
+
+//system
+#include <assert.h>
+
+ccClippingBoxRepeatDlg::ccClippingBoxRepeatDlg(bool singleContourMode/*=false*/, QWidget* parent/*=0*/)
 	: QDialog(parent)
 {
 	setupUi(this);
 
 	//setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
+
+	if (!singleContourMode)
+	{
+		connect( xRepeatCheckBox, SIGNAL(toggled(bool)), this, SLOT(onDimChecked(bool)));
+		connect( yRepeatCheckBox, SIGNAL(toggled(bool)), this, SLOT(onDimChecked(bool)));
+		connect( zRepeatCheckBox, SIGNAL(toggled(bool)), this, SLOT(onDimChecked(bool)));
+	}
+	else
+	{
+		//single contour extraction mode!
+		repeatDimGroupBox->setTitle("Flat dimension");
+
+		connect( xRepeatCheckBox, SIGNAL(toggled(bool)), this, SLOT(onDimXChecked(bool)));
+		connect( yRepeatCheckBox, SIGNAL(toggled(bool)), this, SLOT(onDimYChecked(bool)));
+		connect( zRepeatCheckBox, SIGNAL(toggled(bool)), this, SLOT(onDimZChecked(bool)));
+		setFlatDim(0);
+
+		extractContoursGroupBox->setChecked(true);
+		extractContoursGroupBox->setCheckable(false);
+		projectOnBestFitCheckBox->setEnabled(true);
+		projectOnBestFitCheckBox->setChecked(false);
+
+		randomColorCheckBox->setChecked(false);
+		otherOptionsGroupBox->setVisible(false);
+	}
+}
+
+void ccClippingBoxRepeatDlg::setRepeatDim(unsigned char dim)
+{
+	assert(dim < 3);
+	QCheckBox* boxes[3] = { xRepeatCheckBox,
+							yRepeatCheckBox,
+							zRepeatCheckBox };
+
+	for (unsigned char d=0; d<3; ++d)
+		boxes[d]->setChecked(d == dim );
+}
+
+void ccClippingBoxRepeatDlg::onDimXChecked(bool state) { assert(state); setFlatDim(0); }
+void ccClippingBoxRepeatDlg::onDimYChecked(bool state) { assert(state); setFlatDim(1); }
+void ccClippingBoxRepeatDlg::onDimZChecked(bool state) { assert(state); setFlatDim(2); }
+
+void ccClippingBoxRepeatDlg::setFlatDim(unsigned char dim)
+{
+	assert(dim < 3);
+	QCheckBox* boxes[3] = { xRepeatCheckBox,
+							yRepeatCheckBox,
+							zRepeatCheckBox };
+
+	for (unsigned char d=0; d<3; ++d)
+	{
+		boxes[d]->blockSignals(true);
+		//disable the current dimension
+		//and uncheck the other dimensions
+		boxes[d]->setChecked(d == dim);
+		boxes[d]->setEnabled(d != dim);
+		boxes[d]->blockSignals(false);
+	}
+}
+
+void ccClippingBoxRepeatDlg::onDimChecked(bool)
+{
+	//if only one dimension is checked, then the user can choose to project
+	//the points along this dimension
+	int sum =	static_cast<int>(xRepeatCheckBox->isChecked())
+			+	static_cast<int>(yRepeatCheckBox->isChecked())
+			+	static_cast<int>(zRepeatCheckBox->isChecked());
+
+	if (sum == 1)
+	{
+		if (!projectOnBestFitCheckBox->isEnabled())
+			projectOnBestFitCheckBox->setChecked(false);
+		projectOnBestFitCheckBox->setEnabled(true);
+	}
+	else
+	{
+		projectOnBestFitCheckBox->setEnabled(false);
+		projectOnBestFitCheckBox->setChecked(true);
+	}
+
+	buttonBox->button(QDialogButtonBox::Ok)->setEnabled(sum != 0);
 }

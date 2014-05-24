@@ -2,9 +2,9 @@
 //#                                                                        #
 //#                   CLOUDCOMPARE LIGHT VIEWER                            #
 //#                                                                        #
-//#  This project has been initated under funding from ANR/CIFRE           #
-//#  This program is free software; you can redistribute it and/or modify  #
+//#  This project has been initiated under funding from ANR/CIFRE          #
 //#                                                                        #
+//#  This program is free software; you can redistribute it and/or modify  #
 //#  it under the terms of the GNU General Public License as published by  #
 //#  the Free Software Foundation; version 2 of the License.               #
 //#                                                                        #
@@ -23,10 +23,17 @@
 #include <QVBoxLayout>
 #include <QMessageBox>
 
-//qCC
+//plugins handling
+#include <QPluginLoader>
+#include <QDir>
+#include <ccGLFilterPluginInterface.h>
+
+//qCC_glWindow
 #include <ccGLWindow.h>
-#include <fileIO/FileIOFilter.h>
 #include <ccGuiParameters.h>
+
+//qCC_io
+#include <FileIOFilter.h>
 
 //dialogs
 #include <ccDisplayOptionsDlg.h>
@@ -48,7 +55,9 @@
 #include <assert.h>
 
 //! Current version
-const double CC_VIEWER_VERSION = 1.29;
+//const double CC_VIEWER_VERSION = 1.31;
+//const QString CC_VIEWER_VERSION_STR = QString::number(CC_VIEWER_VERSION,'f',2);
+const QString CC_VIEWER_VERSION_STR = "1.30.1"; //Special version (1.30 + ply file bug fix)
 
 //Camera parameters dialog
 ccCameraParamEditDlg* s_cpeDlg = 0;
@@ -60,6 +69,8 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 	, m_3dMouseInput(0)
 {
 	ui.setupUi(this);
+
+	setWindowTitle(QString("ccViewer V%1").arg(CC_VIEWER_VERSION_STR));
 
 	//insert GL window in a vertical layout
 	QVBoxLayout* verticalLayout_2 = new QVBoxLayout(ui.GLframe);
@@ -91,8 +102,8 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 	//Signals & slots connection
 	connect(m_glWindow,								SIGNAL(filesDropped(const QStringList&)),			this,		SLOT(addToDB(const QStringList&)));
 	connect(m_glWindow,								SIGNAL(entitySelectionChanged(int)),				this,		SLOT(selectEntity(int)));
-    //connect(m_glWindow,								SIGNAL(entitiesSelectionChanged(std::set<int>)),	this,		SLOT(selectEntities(std::set<int>))); //not supported!
-	//connect(m_glWindow,								SIGNAL(newLabel(ccHObject*),					this,		SLOT(handleNewEntity(ccHObject*))); //nothing to do in ccViewer!
+    //connect(m_glWindow,							SIGNAL(entitiesSelectionChanged(std::set<int>)),	this,		SLOT(selectEntities(std::set<int>))); //not supported!
+	//connect(m_glWindow,							SIGNAL(newLabel(ccHObject*),						this,		SLOT(handleNewEntity(ccHObject*))); //nothing to do in ccViewer!
 
 	//"Options" menu
 	connect(ui.actionDisplayParameters,				SIGNAL(triggered()),						this,	SLOT(showDisplayParameters()));
@@ -132,9 +143,14 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 	connect(ui.actionZoomOnSelectedEntity,			SIGNAL(triggered()),						this,	SLOT(zoomOnSelectedEntity()));
     connect(ui.actionDelete,						SIGNAL(triggered()),						this,	SLOT(doActionDeleteSelectedEntity()));
 
+	//"Shaders" menu
+    connect(ui.actionNoFilter,						SIGNAL(triggered()),						this,	SLOT(doDisableGLFilter()));
+
 	//"Help" menu
     connect(ui.actionAbout,							SIGNAL(triggered()),						this,	SLOT(doActionAbout()));
     connect(ui.actionHelpShortctus,					SIGNAL(triggered()),						this,	SLOT(doActionDisplayShortcuts()));
+
+	loadPlugins();
 }
 
 ccViewer::~ccViewer()
@@ -156,6 +172,132 @@ ccViewer::~ccViewer()
 	}
 }
 
+void ccViewer::loadPlugins()
+{
+	ui.menuPlugins->setEnabled(false);
+
+	//"static" plugins
+    foreach (QObject *plugin, QPluginLoader::staticInstances())
+		loadPlugin(plugin);
+
+    ccLog::Print(QString("Application path: ")+QCoreApplication::applicationDirPath());
+
+#if defined(Q_OS_MAC)
+    // plugins are in the bundle
+    QString  path = QCoreApplication::applicationDirPath();
+    path.remove( "MacOS" );
+    QString pluginsPath = path + "Plugins/ccViewerPlugins";
+#else
+    //plugins are in bin/plugins
+    QString pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
+#endif
+
+    ccLog::Print(QString("Plugins lookup dir.: %1").arg(pluginsPath));
+
+    QStringList filters;
+#if defined(Q_OS_WIN)
+    filters << "*.dll";
+#elif defined(Q_OS_LINUX)
+    filters << "*.so";
+#elif defined(Q_OS_MAC)
+    filters << "*.dylib";
+#endif
+    QDir pluginsDir(pluginsPath);
+    pluginsDir.setNameFilters(filters);
+    foreach (QString filename, pluginsDir.entryList(filters))
+    {
+        QPluginLoader loader(pluginsDir.absoluteFilePath(filename));
+        QObject* plugin = loader.instance();
+        if (plugin)
+        {
+            ccLog::Print(QString("Found new plugin! ('%1')").arg(filename));
+            if (!loadPlugin(plugin))
+            {
+                ccLog::Warning("Unsupported or invalid plugin type");
+            }
+        }
+        else
+        {
+            ccLog::Warning(QString("[Plugin] %1")/*.arg(pluginsDir.absoluteFilePath(filename))*/.arg(loader.errorString()));
+        }
+    }
+}
+
+bool ccViewer::loadPlugin(QObject *plugin)
+{
+	ccGLFilterPluginInterface* ccPlugin = qobject_cast<ccGLFilterPluginInterface*>(plugin);
+	if (!ccPlugin)
+	{
+		ccLog::Warning("Only 'GL filter' plugins are supported for now!");
+		return false;
+	}
+	plugin->setParent(this);
+
+	QString pluginName = ccPlugin->getName();
+	if (pluginName.isEmpty())
+	{
+		ccLog::Warning("Plugin has an invalid (empty) name!");
+		return false;
+	}
+    ccLog::Print("Plugin name: [%s]",qPrintable(pluginName));
+
+	//(auto)create action
+	QAction* action = new QAction(pluginName,plugin);
+	action->setToolTip(ccPlugin->getDescription());
+	action->setIcon(ccPlugin->getIcon());
+	//connect default signal
+	connect(action, SIGNAL(triggered()), this, SLOT(doEnableGLFilter()));
+
+	ui.menuPlugins->addAction(action);
+	ui.menuPlugins->setEnabled(true);
+	ui.menuPlugins->setVisible(true);
+
+    return true;
+}
+
+void ccViewer::doDisableGLFilter()
+{
+    if (m_glWindow)
+    {
+        m_glWindow->setGlFilter(0);
+        m_glWindow->redraw();
+    }
+}
+
+void ccViewer::doEnableGLFilter()
+{
+	if (!m_glWindow)
+	{
+		ccLog::Warning("[GL filter] No active 3D view!");
+		return;
+	}
+
+    QAction *action = qobject_cast<QAction*>(sender());
+    if (!action)
+        return;
+    ccGLFilterPluginInterface* ccPlugin = qobject_cast<ccGLFilterPluginInterface*>(action->parent());
+    if (!ccPlugin)
+        return;
+
+    assert(ccPlugin->getType() == CC_GL_FILTER_PLUGIN);
+
+	ccGlFilter* filter = ccPlugin->getFilter();
+	if (filter)
+	{
+		if (m_glWindow->areGLFiltersEnabled())
+		{
+			m_glWindow->setGlFilter(filter);
+			ccLog::Print("Note: go to << Display > Shaders & Filters > No filter >> to disable GL filter");
+		}
+		else
+			ccLog::Error("GL filters not supported!");
+	}
+	else
+	{
+		ccLog::Error("Can't load GL filter (an error occurred)!");
+	}
+}
+
 void ccViewer::doActionDeleteSelectedEntity()
 {
 	ccHObject* currentRoot = m_glWindow->getSceneDB();
@@ -172,15 +314,15 @@ void ccViewer::doActionDeleteSelectedEntity()
 		
 		if (obj->isSelected())
 		{
-			bool fatherDependant = false;
 			if (obj->getParent())
 			{
-				//Warning: we must ask the object if it is fatehr dependant BEFORE removing it ;)
-				fatherDependant = obj->getFlagState(CC_FATHER_DEPENDENT);
+				obj->getParent()->addDependency(obj,ccHObject::DP_DELETE_OTHER); //we force deletion!
 				obj->getParent()->removeChild(obj);
 			}
-			if (!fatherDependant)
+			else
+			{
 				delete obj;
+			}
 		}
 		else
 		{
@@ -281,7 +423,7 @@ void ccViewer::selectEntity(int uniqueID)
 //			if (obj)
 //			{
 //				entities.push_back(obj);
-//				if (obj->isA(CC_2D_LABEL))
+//				if (obj->isA(CC_TYPES::LABEL_2D))
 //					++labelCount;
 //			}
 //		}
@@ -357,7 +499,7 @@ void ccViewer::addToDB(const QStringList& filenames)
 				for (unsigned i=0;i<newEntities->getChildrenNumber();++i)
 				{
 					ccHObject* ent = newEntities->getChild(i);
-					if (ent->isA(CC_POINT_CLOUD))
+					if (ent->isA(CC_TYPES::POINT_CLOUD))
 					{
 						ccPointCloud* pc = static_cast<ccPointCloud*>(ent);
 						if (pc->hasScalarFields())
@@ -367,7 +509,7 @@ void ccViewer::addToDB(const QStringList& filenames)
 							scaleAlreadyDisplayed=true;
 						}
 					}
-					else if (ent->isKindOf(CC_MESH))
+					else if (ent->isKindOf(CC_TYPES::MESH))
 					{
 						ccGenericMesh* mesh = static_cast<ccGenericMesh*>(ent);
 						if (mesh->hasScalarFields())
@@ -396,7 +538,7 @@ void ccViewer::addToDB(ccHObject* entity)
 	if (currentRoot)
 	{
 		//already a pure 'root'
-		if (currentRoot->isA(CC_HIERARCHY_OBJECT))
+		if (currentRoot->isA(CC_TYPES::HIERARCHY_OBJECT))
 		{
 			currentRoot->addChild(entity);
 		}
@@ -717,7 +859,7 @@ void ccViewer::doActionAbout()
 
 	Ui::AboutDialog ui;
 	ui.setupUi(&aboutDialog);
-	ui.textEdit->setHtml(ui.textEdit->toHtml().arg(CC_VIEWER_VERSION,0,'f',2));
+	ui.textEdit->setHtml(ui.textEdit->toHtml().arg(CC_VIEWER_VERSION_STR));
 
 	aboutDialog.exec();
 }
@@ -870,10 +1012,10 @@ void ccViewer::on3DMouseKeyDown(int key)
 		{
 			if (m_glWindow)
 			{
-				CCVector3 axis(0.0f,0.0f,-1.0f);
-				CCVector3 trans(0.0f);
+				CCVector3 axis(0,0,-PC_ONE);
+				CCVector3 trans(0,0,0);
 				ccGLMatrix mat;
-				float angle = (float)(M_PI/2.0);
+				PointCoordinateType angle = static_cast<PointCoordinateType>(M_PI/2.0);
 				if (key == Mouse3DInput::V3DK_CCW)
 					angle = -angle;
 				mat.initFromParameters(angle,axis,trans);

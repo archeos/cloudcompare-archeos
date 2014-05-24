@@ -23,8 +23,8 @@
 
 //! 2D viewport label
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API cc2DViewportLabel : public cc2DViewportObject
+#include "qCC_db.h"
+class QCC_DB_LIB_API cc2DViewportLabel : public cc2DViewportObject
 #else
 class cc2DViewportLabel : public cc2DViewportObject
 #endif
@@ -35,7 +35,7 @@ public:
 	cc2DViewportLabel(const char* name=0);
 
 	//inherited from ccHObject
-    virtual CC_CLASS_ENUM getClassID() const {return CC_2D_VIEWPORT_LABEL;};
+    virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::VIEWPORT_2D_LABEL; }
 	virtual bool isSerializable() const { return true; }
 
 	//! Returns ROI (relative to screen)

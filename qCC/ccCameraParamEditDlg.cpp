@@ -214,7 +214,7 @@ void ccCameraParamEditDlg::processPickedPoint(int cloudUniqueID, unsigned pointI
 	ccHObject* db = m_associatedWin->getSceneDB();
 	if (db)
 		obj = db->find(cloudUniqueID);
-	if (obj && obj->isKindOf(CC_POINT_CLOUD))
+	if (obj && obj->isKindOf(CC_TYPES::POINT_CLOUD))
 	{
 		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(obj);
 		const CCVector3* P = cloud->getPoint(pointIndex);
@@ -320,7 +320,6 @@ bool ccCameraParamEditDlg::linkWith(ccGLWindow* win)
         initWithMatrix(m_associatedWin->getBaseViewMat());
         connect(m_associatedWin,	SIGNAL(baseViewMatChanged(const ccGLMatrix&)),	this,	SLOT(initWithMatrix(const ccGLMatrix&)));
         connect(m_associatedWin,	SIGNAL(cameraPosChanged(const CCVector3&)),		this,	SLOT(updateCameraCenter(const CCVector3&)));
-        connect(m_associatedWin,	SIGNAL(pivotPointChanged(const CCVector3&)),	this,	SLOT(updatePivotPoint(const CCVector3&)));
         connect(m_associatedWin,	SIGNAL(pivotPointChanged(const CCVector3&)),	this,	SLOT(updatePivotPoint(const CCVector3&)));
         connect(m_associatedWin,	SIGNAL(perspectiveStateChanged()),				this,	SLOT(updateViewMode()));
         connect(m_associatedWin,	SIGNAL(destroyed(QObject*)),					this,	SLOT(hide()));

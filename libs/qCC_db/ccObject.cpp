@@ -20,6 +20,11 @@
 //Qt
 #include <QSettings>
 
+#ifdef USE_VLD
+//VLD
+#include <vld.h>
+#endif
+
 //System
 #include <string.h>
 #include <assert.h>
@@ -41,8 +46,13 @@
    v3.1 - 09/25/2013 - ccPolyline width added
    v3.2 - 10/11/2013 - ccFacet (2D polygons) are now supported
    v3.3 - 12/19/2013 - global scale information is now saved for point clouds
+   v3.4 - 01/09/2014 - ccIndexedTransformation and ccIndexedTransformationBuffer added + CC_CLASS_ENUM is now coded on 64 bits
+   v3.5 - 02/13/2014 - ccSensor class updated
 **/
-const unsigned c_currentDBVersion = 33; //3.3
+const unsigned c_currentDBVersion = 35; //3.5
+
+// Persistent settings key for storing the last generated entity ID
+static const QString s_uniqueIDKey("UniqueID");
 
 unsigned ccObject::GetCurrentDBVersion()
 {
@@ -52,9 +62,7 @@ unsigned ccObject::GetCurrentDBVersion()
 void ccObject::ResetUniqueIDCounter()
 {
     QSettings settings;
-    //settings.beginGroup("UniqueID");
-	settings.setValue("UniqueID",(unsigned)0);
-	//settings.endGroup();
+	settings.setValue(s_uniqueIDKey,static_cast<unsigned>(0));
 }
 
 unsigned ccObject::GetNextUniqueID()
@@ -68,34 +76,19 @@ unsigned ccObject::GetNextUniqueID()
 
 unsigned ccObject::GetLastUniqueID()
 {
-    return QSettings().value("UniqueID", 0).toInt();
+    return QSettings().value(s_uniqueIDKey, 0).toInt();
 }
 
 void ccObject::UpdateLastUniqueID(unsigned lastID)
 {
-    QSettings().setValue("UniqueID", lastID);
+    QSettings().setValue(s_uniqueIDKey, lastID);
 }
 
 ccObject::ccObject(QString name)
+	: m_name(name.isEmpty() ? "unnamed" : name)
+	, m_flags(CC_ENABLED)
+	, m_uniqueID(GetNextUniqueID())
 {
-    m_flags = CC_ENABLED;
-    m_uniqueID = GetNextUniqueID();
-    setName(name.isEmpty() ? "unnamed" : name);
-}
-
-QString ccObject::getName() const
-{
-    return m_name;
-}
-
-void ccObject::setName(const QString& name)
-{
-	m_name = name;
-}
-
-unsigned ccObject::getUniqueID() const
-{
-    return m_uniqueID;
 }
 
 void ccObject::setUniqueID(unsigned ID)
@@ -107,11 +100,6 @@ void ccObject::setUniqueID(unsigned ID)
 		UpdateLastUniqueID(m_uniqueID);
 }
 
-bool ccObject::getFlagState(CC_OBJECT_FLAG flag) const
-{
-    return (m_flags & flag);
-}
-
 void ccObject::setFlagState(CC_OBJECT_FLAG flag, bool state)
 {
     if (state)
@@ -120,33 +108,14 @@ void ccObject::setFlagState(CC_OBJECT_FLAG flag, bool state)
         m_flags &= (~unsigned(flag));
 }
 
-bool ccObject::isEnabled() const
-{
-    return getFlagState(CC_ENABLED);
-}
-
-void ccObject::setEnabled(bool state)
-{
-    setFlagState(CC_ENABLED,state);
-}
-
-bool ccObject::isLocked() const
-{
-    return getFlagState(CC_LOCKED);
-}
-
-void ccObject::setLocked(bool state)
-{
-    setFlagState(CC_LOCKED,state);
-}
-
 bool ccObject::toFile(QFile& out) const
 {
 	assert(out.isOpen() && (out.openMode() & QIODevice::WriteOnly));
 
 	//class ID (dataVersion>=20)
-	uint32_t classID = getClassID();
-	if (out.write((const char*)&classID,4)<0)
+	//DGM: on 64 bits since version 34
+	uint64_t classID = static_cast<uint64_t>(getClassID());
+	if (out.write((const char*)&classID,8)<0)
 		return WriteError();
 
 	//unique ID (dataVersion>=20)
@@ -180,23 +149,33 @@ bool ccObject::toFile(QFile& out) const
 			outStream << it.key();
 			outStream << it.value();
 		}
-	}	
+	}
 
 	return true;
 }
 
-bool ccObject::ReadClassIDFromFile(unsigned& classID, QFile& in, short dataVersion)
+CC_CLASS_ENUM ccObject::ReadClassIDFromFile(QFile& in, short dataVersion)
 {
 	assert(in.isOpen() && (in.openMode() & QIODevice::ReadOnly));
 
-	//class ID (dataVersion>=20)
-	uint32_t _classID = 0;
-	if (in.read((char*)&_classID,4)<0)
-		return ReadError();
-	
-	classID = (unsigned)_classID;
-	
-	return true;
+	//class ID (on 32 bits between version 2.0 and 3.3, then 64 bits from version 3.4)
+	CC_CLASS_ENUM classID = CC_TYPES::OBJECT;
+	if (dataVersion < 34)
+	{
+		uint32_t _classID = 0;
+		if (in.read((char*)&_classID,4)<0)
+			return ReadError();
+		classID = static_cast<CC_CLASS_ENUM>(_classID);
+	}
+	else
+	{
+		uint64_t _classID = 0;
+		if (in.read((char*)&_classID,8)<0)
+			return ReadError();
+		classID = static_cast<CC_CLASS_ENUM>(_classID);
+	}
+
+	return classID;
 }
 
 QVariant ccObject::getMetaData(QString key) const
@@ -209,9 +188,14 @@ bool ccObject::removeMetaData(QString key)
 	return m_metaData.remove(key) != 0;
 }
 
-void ccObject::setMetaData(QString key, QVariant& data)
+void ccObject::setMetaData(QString key, QVariant data)
 {
-	m_metaData.insert(key,data);
+    m_metaData.insert(key,data);
+}
+
+bool ccObject::hasMetaData(QString key)
+{
+    return ( m_metaData.find(key) != m_metaData.end());
 }
 
 bool ccObject::fromFile(QFile& in, short dataVersion, int flags)
@@ -273,7 +257,7 @@ bool ccObject::fromFile(QFile& in, short dataVersion, int flags)
 			inStream >> value;
 			setMetaData(key,value);
 		}
-	}	
+	}
 
 	return true;
 }

@@ -30,7 +30,7 @@ namespace CCLib
 #ifdef CC_USE_AS_DLL
 #include "CloudCompareDll.h"
 
-class CC_DLL_API DebugProgressCallback : public GenericProgressCallback
+class CC_CORE_LIB_API DebugProgressCallback : public GenericProgressCallback
 #else
 class DebugProgressCallback : public GenericProgressCallback
 #endif
@@ -48,7 +48,7 @@ public:
 	virtual void update(float percent);
 	virtual void setMethodTitle(const char* methodTitle);
 	virtual void setInfo(const char* infoStr);
-	virtual bool isCancelRequested() {return false;}; //no cancel request mechanism available in "console" mode
+	virtual bool isCancelRequested() { return false; } //no cancel request mechanism available in "console" mode
 	virtual void start();
 	virtual void stop();
 

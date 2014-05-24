@@ -24,8 +24,8 @@ class ccPointCloud;
 
 //! Generic primitive interface
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccGenericPrimitive : public ccMesh
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccGenericPrimitive : public ccMesh
 #else
 class ccGenericPrimitive : public ccMesh
 #endif
@@ -47,7 +47,7 @@ public:
 	virtual ccGenericPrimitive* clone() const = 0;
 
     //! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const { return CC_PRIMITIVE; }
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::PRIMITIVE; }
 
     //! Sets primitive color (shortcut)
     /** \param col rgb color
@@ -73,9 +73,6 @@ public:
 	//! Returns drawing precision (or 0 if feature is not supported)
 	virtual unsigned getDrawingPrecision() const { return m_drawPrecision; }
 
-	//! Inherited from ccGenericMesh
-    virtual void applyGLTransformation(const ccGLMatrix& trans);
-
 	//! Returns the transformation that is currently applied to the vertices
 	virtual ccGLMatrix& getTransformation() { return m_transformation; }
 
@@ -84,6 +81,9 @@ public:
 
 protected:
     
+	//! Inherited from ccGenericMesh
+    virtual void applyGLTransformation(const ccGLMatrix& trans);
+
     //inherited from ccMesh
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
@@ -113,7 +113,9 @@ protected:
 	//! Returns vertices
 	ccPointCloud* vertices();
 
-    //! Associated GL transformation (applied to vertices)
+    //! Associated transformation (applied to vertices)
+	/** Different from ccDrawableObject::m_glTrans!
+	**/
     ccGLMatrix m_transformation;
 
 	//! Drawing precision (for primitives that support this feature)

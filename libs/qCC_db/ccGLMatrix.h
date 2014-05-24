@@ -52,13 +52,13 @@ static const unsigned OPENGL_MATRIX_SIZE = 16;
 #define CC_MAT_R34 m_mat[14]
 #define CC_MAT_R44 m_mat[15]
 
-//! A 4x4 OpenGL float matrix
+//! A 4x4 'transformation' matrix (column major order)
 /** Transformation (M) is composed by a rotation (R) and a translation (T):
 	M*X = R*X + T
 **/
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccGLMatrix : public ccSerializableObject
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccGLMatrix : public ccSerializableObject
 #else
 class ccGLMatrix : public ccSerializableObject
 #endif
@@ -71,13 +71,13 @@ public:
 	ccGLMatrix();
 
 	//! Constructor from a float GL matrix array
-	/** \param mat16 a 16 elements array (column major order)
+	/** \param mat16f a 16 elements array (column major order)
 	**/
 	ccGLMatrix(const float* mat16f);
 
 	//! Constructor from a double GL matrix array
 	/** \warning Will implicitly cast the elements to float!
-		\param mat16 a 16 elements array (column major order)
+		\param mat16d a 16 elements array (column major order)
 	**/
 	ccGLMatrix(const double* mat16d);
 
@@ -130,6 +130,7 @@ public:
 
 	//! Returns matrix as a string
 	/** \param precision numerical precision
+		\param separator separator
 		\return string
 	**/
 	QString toString(int precision = 12, QChar separator = ' ') const;

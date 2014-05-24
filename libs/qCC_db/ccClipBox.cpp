@@ -181,7 +181,7 @@ ccClipBox::~ccClipBox()
 void ccClipBox::reset()
 {
 	m_box.clear();
-	razGLTransformation();
+	resetGLTransformation();
 
 	if (m_associatedEntity)
 	{
@@ -197,7 +197,7 @@ void ccClipBox::reset()
 void ccClipBox::setAssociatedEntity(ccHObject* associatedEntity)
 {
 	//release precedent one
-	if (m_associatedEntity && m_associatedEntity->isKindOf(CC_POINT_CLOUD))
+	if (m_associatedEntity && m_associatedEntity->isKindOf(CC_TYPES::POINT_CLOUD))
 	{
 		ccHObjectCaster::ToGenericPointCloud(m_associatedEntity)->unallocateVisibilityArray();
 	}
@@ -206,13 +206,13 @@ void ccClipBox::setAssociatedEntity(ccHObject* associatedEntity)
 	//try to initialize new one
 	if (associatedEntity)
 	{
-		if (!associatedEntity->isKindOf(CC_POINT_CLOUD))
+		if (!associatedEntity->isKindOf(CC_TYPES::POINT_CLOUD))
 		{
 			ccLog::Error("Unhandled entity! Clipping box will be deactivated...");
 		}
 		else
 		{
-			if (ccHObjectCaster::ToGenericPointCloud(associatedEntity)->razVisibilityArray())
+			if (ccHObjectCaster::ToGenericPointCloud(associatedEntity)->resetVisibilityArray())
 			{
 				m_associatedEntity = associatedEntity;
 			}
@@ -498,7 +498,7 @@ void ccClipBox::shift(const CCVector3& v)
 
 void ccClipBox::update(bool shrink/*=false*/)
 {
-	if (!m_associatedEntity || !m_associatedEntity->isKindOf(CC_POINT_CLOUD))
+	if (!m_associatedEntity || !m_associatedEntity->isKindOf(CC_TYPES::POINT_CLOUD))
 		return;
 
 	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(m_associatedEntity);

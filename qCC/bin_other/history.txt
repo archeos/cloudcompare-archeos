@@ -1,9 +1,162 @@
 *** CloudCompare versions history ***
 
-v2.5.3 12/21/2013
+v2.5.4.1 04/22/2014
 - Bug fix:
+	* Loading a PLY file with scalar field(s) would make CC crash
+
+v2.5.4 04/19/2014
+- New file format supported:
+	* OFF meshes
+	* PTX clouds (import only)
+- Enhancements:
+	* 'Sensor' framework upgraded:
+		- Camera 'projective' sensors added (early support)
+		- 'View from sensor' method added
+	* STL import filter is smarter (collapsed triangle after vertex fusion are now automatically removed)
+	* Global shift:
+		- a new button 'use last' will now appear on the 'Global shift/scale' dialog that
+			popups when loading a file with very big coordinates (current session only - the button
+			will appear when the dialog has been "accepted" at least once before)
+		- the Z coordinate (if small) is not shifted by default anymore
+		- shift/scale information should be (more) properly handled by both the Point pair based and
+			ICP registration tools
+	* The console visibility is now forced when a warning message is generated
+	* The 'Point-pair based align' tool keeps the activated GL filter (if any)
+	* Normal vectors can now be converted to two scalar fields:
+		- 'dip' and 'dip direction' (see http://en.wikipedia.org/wiki/Structural_geology#Measurement_conventions)
+			(the north is assumed to be +Y, and the altitude is +Z)
+		- this new method is now in a common sub-menu with the "conversion to HSV" method
+			(in 'Edit > Normals > Convert to')
+	* The way the 'roughness' is computed (Tools > Other > Roughness) has been slightly changed:
+		- for each point, the best fit plane is computed on all the neighbors except the point itself
+			(this gives a less biased measure). The roughness value is then computed as the distance
+			between the point and this plane.
+	* New 'sand box' method: "Export cloud(s) info"
+		- exports various pieces of information for all selected clouds in a CSV file (cloud name, size,
+			mean, std.dev. and sum of all scalar fields, etc.)
+	* 'Camera link' feature enhanced:
+		- modification of the global zoom (magnifier icon) is now propagated
+		- modification of the rotation center is now propagated
+	* 'Command line' mode enhanced:
+		- loaded clouds and meshes can be now saved anytime with the '-SAVE_CLOUDS' and '-SAVE_MESHES' options
+			(this is not necessary by default as all modified or newly created entities are automatically saved,
+			but it can be useful for performing format conversion through the command line)
+		- ASCII files with less than 6 columns are now loaded silently (i.e. no dialog should pop-up)
+		- new option '-CROP2D' to crop a cloud inside a 2D polygon (either in the XY, XZ or YZ planes)
+	* New method: 'Edit > Colors > Interpolate from another entity'
+		- set the colors of a cloud (or mesh vertices) by interpolating the colors of another cloud (or mesh vertices)
+		- right now the only interpolation mode available consists in taking the nearest neighbor's color
+	* New method: 'Tools > Fit > 2D1/2 Quadric'
+		- fits a 2D1/2 quadric on the selected cloud(s)
+		- this quadric is represented as a 'primitive' (kind of mesh) and its equation is displayed in the console
+	* The 'Subsample' method can now be called on multiple clouds at once
+	* Cross Section tool:
+		- contour extraction parametrization is much more clever (for 'single' and 'multiple' contour extraction modes)
+		- the extraction with a rotated clipping box is now properly handled
+
+- Bug fixes:
+	* Information displayed in 2D labels was 'shifted' ( 'P(index,x,y)' was displayed instead of 'P(x,y,z)')
+	* Depending on the selection order, CC could crash when merging two clouds (one with normals and
+		the other without)
+	* A too big step (causing a 1x1 cell grid) would make the Rasterize tool crash!
+	* When scaling a cloud (with 'Edit > Apply scale') the 'global scale' information was (wrongly) updated.
+		Therefore the cloud was rescaled to its original state at export time!
+	* EDL / SSAO filters were performing badly on entities not centered on Z=0
+		(OpenGL Z-buffer was badly initialized in ortho. mode)
+	* When GL filters were enabled, labels text or the color ramp title were shifted in the Y direction
+	* Command Line mode:
+		- when loading a BIN file with multiple clouds inside, only the first one was kept!
+		- when saving multiple clouds coming from the same file, all files had the same name
+			(and were therefore overwritten)
+	* Gaussian curvature formula was wrong (missing square exponent)
+	* Several memory leaks have been fixed (2D1/2 mesh triangulation, etc.)
+	* Cloning a mesh which was a child of its vertices would cause the duplication of the mesh structure
+		in the resulting entity
+		
+
+v2.5.3 02/21/2014
+- New method: "Edit > Normals > Orient > With Minimum Spanning Tree"
+	* This is an alternative method to find the correct orientation of normals based on the
+		determination of a Minimum Spanning Tree
+	* It may require a lot of memory but it works better on smooth shapes than the former
+		method based on Fast-Marching (formerly called "Resolve normals direction" and now
+		renamed and move to "Edit > Normals > Orient > With Fast-Marching")
+	* It is also automatically suggested by CC if no preferred orientation has been set in
+		the Normals computation tool.
+- New method: "Tools > Other > Density > Accurate (at a given scale)"
+	* More accurate method to compute the local density (= number of points inside a sphere
+		centered on each point)
+	* The old version is now accessible via "Tools > Other > Density > Approximate"
+		(and it simply outputs the distance to the nearest neighbor now)
+	* Command line options have been changed accordingly
+		(see http://www.cloudcompare.org/doc/wiki/index.php5?title=CommandLine)
+- New method: "Tools > Other > Remove duplicate points"
+	* Removes duplicate points (creates a new cloud)
+- New method: "Edit > Crop"
+	* To crop a point cloud inside a box
+- New method: "Color banding" (thanks to M.J. Smith)
+	* New option of the 'Edit > Color > Height Ramp' method
+- Enhancements:
+	* Spatial sub-sampling tool ('SPACE' mode):
+		- about twice as fast
+		- consumes much less memory
+		- now the default method when the dialog opens
+		- the slider has now a 'logarithmic' behavior (i.e. spacing value will grow much slower)
+	* The ASCII file loading dialog is a bit smarter: you can now open ASCII files with
+		invalid columns (such as text labels, etc.) as long as the column is not assigned
+		to any property.
+	* The OBJ importer now supports polylines ('l' tag)
+	* Global shift/scale:
+		- CC will ask the user when exporting points with the 'Point List Picking' tool if he wishes
+			to keep global shift/scale information
+		- CC will warn the user if the translation applied with the 'Edit > Apply transformation' tool
+			is too big (in which case it can be set as 'global shift' instead)
+	* New 'preferred' orientations for the Normals computation tool:
+		- relatively to (0,0,0) (positive or negative)
+	* Distance computation accuracy slightly enhanced (use of double precision internally)
+	* The DXF I/O filter can now even load polylines with no descriptor
+	* Command line mode has a lots of new options (thanks to A. Bevan, University College London)
+		- computation of the best fitting plane
+		- ICP registration
+		- crop
+		- make the (bounding-box) centers of loaded entities match
+		- specify export format (clouds or meshes) as well as the extension
+		- prevent CC from automatically a timestamp as suffix for output files
+		(see the updated documentation here: http://www.cloudcompare.org/doc/wiki/index.php5?title=CommandLine)
+	* ccViewer now supports GL filters (i.e. 'shader' plugins: qEDL and qSSAO)
+	* The GL filter banner (yellow) is now smaller, and is displayed at the top of the 3D view
+		(it doesn't hide the scale anymore!)
+	* Normals are no longer computed by default when loading a mesh without normals
+	* Normals can now be computed on a mesh either 'per-vertex' (mean normal vector of
+		all connected triangles) or 'per-triangle' (gives a 'faceted' look)
+	* The 'Point pair-based registration' tool now handles virtual points with very large coordinates
+		(useful to register a cloud with GPS control points for instance)
+	* Labels now display both the shifted and the original points coordinates if
+		the cloud is shifted/scaled
+	* The VTK I/O filter now handles TRIANGLE_STRIP elements
+	* Cross section tool: the box position can now be edited ('advanced' button)
+- Other:
+	* ATOM feed enabled on the forum (http://www.cloudcompare.org/forum/)
+		(use the native ATOM support on IE or Firefox, or install an ATOM feed reader app
+		on Chrome, e.g. "RSS Feed Reader")
+- Bug fixes:
 	* Deleting a 3D view and then selecting an entity previously displayed in this view
 		would make CC crash
+	* The default value for scaling of the 'shift on load' dialog was 0.
+	* A bug in the (spatial) sub-sampling tool has been fixed (could make CC crash)
+	* The cloud/cloud distance computation dialog was always computing the octrees twice!
+	* DXF files generated by CloudCompare were corrupted (bug from dxflib)
+	* The Z coordinate of polyline vertices exported in DXF format was wrongly replaced by the Y coordinate
+	* Vertical profiles generated by the qSRA plugin were all the same
+	* In some cases no SF or invalid SF were generated by the Rasterize tool (point cloud export)
+	* The translation obtained by ICP registration with adaptive scale was wrong! (scale was not applied)
+	* The 'repetitive slice extraction' option of the 'Cross section' tool was behaving strangely (some slices
+		were sometimes fused together)
+	* Pixel distances were squared twice in the Bilateral filter (shader) 
+	* The 'Point pair-based registration' dialog was not automatically reset
+	* Wrong error code returned by PLY I/O Filter when failing to create the output file
+	* Meshes color couldn't be changed anymore (with 'Edit > Set color')	
+	* GL filters rendering was downgraded when switching from perspective to ortho. view
 
 v2.5.2 12/19/2013
 - GDAL library support added:
@@ -41,6 +194,13 @@ v2.5.2 12/19/2013
 	- exports resulting map as an image, a textured mesh or a point cloud
 	- can generate vertical and horizontal profiles in DXF format
 - Other enhancements:
+	- 'Clipping-box' tool:
+		* the clipping box position and extension can now be edited
+			(see the 'advanced' button in the 'Box thicnkess' frame)
+		* when extracting contours, CC will now ask the user if he wishes/accepts
+			to split the initial contour in several parts so as to really respect
+			the 'max edge length' parameter (this gives a much nicer result).
+			This feature works both with the single and multiple slice extractors.
 	- the qPoissonRecon plugin is now based on the latest version of PoissonRecon (5.5)
 		* see http://www.cs.jhu.edu/~misha/Code/PoissonRecon/Version5.5/
 		* new parameters dialog
@@ -94,7 +254,7 @@ v2.5.2 12/19/2013
 		* the components are automatically 'selected' in order to clearly identify them without random colors
 			(the 'random colors' checkbox is not selected by default anymore)
 		* the components are sorted by their size (starting from the biggest)
-	- new command lines options (see http://www.danielgm.net/cc/doc/wiki/index.php5?title=CommandLine):
+	- new command lines options (see http://www.cloudcompare.org/doc/wiki/index.php5?title=CommandLine):
 		* C2C_DIST: cloud to cloud distance computation
 		* C2M_DIST: cloud to mesh distance computation
 		* SAMPLE_MESH: to sample points on a mesh
@@ -389,7 +549,7 @@ v2.4 12/16/2012
 - Introducing a new alignment/registration method: "Align (point pairs picking)"
 	* aligns clouds by interactively picking 'equivalent' points in both clouds (3 pairs at least)
 	* replaces the old "Align (auto)" research tool in the main toolbar (same icon)
-	* more information on the wiki: http://www.danielgm.net/cc/doc/wiki/index.php5?title=Alignment_and_Registration
+	* more information on the wiki: http://www.cloudcompare.org/doc/wiki/index.php5?title=Alignment_and_Registration
 - Perspective mode and lights activation state are now automatically saved and restored (on the creation of a new 3D view or when CC restarts)
 - Overlay dialogs (manual segmentation and transformation, point picking, etc.) don't prevent CC from being closed anymore
 - 'Height grid generation' tool now gives more choice for the management of empty cells
@@ -456,7 +616,7 @@ v2.4 09/22/2012
 	radius that will be used to compute local models. One can also choose to compute a model for every points or, as an approximation,
 	to "share" local models between neighbors (faster... but noisier - in fact this was done by default before!).
 - New tools accessible in command line mode: density, roughness, curvature and SF gradient.
-	(see wiki: http://www.danielgm.net/cc/doc/wiki/index.php5?title=CommandLine)
+	(see wiki: http://www.cloudcompare.org/doc/wiki/index.php5?title=CommandLine)
 - When exporting a cloud to a LAS file, any scalar field named 'LAS classification' will now be handled as a proper LAS classification
 	field.
 - PCV plugin (ShadeVis-like global illumination algorithm) can now take a point cloud with normals as input. The normals will be used
@@ -549,7 +709,7 @@ v2.4 06/24/2012
   * bug fix: the previous version was generating ortho-rectified images with a non constant pixel scale!
   * a 'ortho_rectification_log.txt' file is now generated along the images with relative position for each (in pixels, relatively to the first image)
   * images are now processed sequentially, and the user can choose whether they should be kept in memory or not
-  * ortho-rectification as images (on disk) is now available through command line arguments (see wiki: http://www.danielgm.net/cc/doc/wiki/index.php5?title=CommandLine)
+  * ortho-rectification as images (on disk) is now available through command line arguments (see wiki: http://www.cloudcompare.org/doc/wiki/index.php5?title=CommandLine)
 - Multiple clouds can now be automatically saved in multiple ASCII files
 	* select several clouds then 'Save' them as ASCII files
 	* enter a base name with an extension (hint: any occurrence of the string 'cloudname' will be replaced by each cloud name)
@@ -575,7 +735,7 @@ v2.4 01/04/2012
 - Bug in Delaunay 2D triangulation on least square best fitting plane fixed.
 - Crash during OBJ files loading fixed (the crash occurred when the file was referring to materials but no material file was declared)
 - The Windows release has been compiled with Visual Studio 2008. You may have to install Visual C++ 2008 Redistributable Package (x86) to launch CloudCompare.
-- Project can/should now be compiled with CMake (www.cmake.org). See http://www.danielgm.net/cc/doc/wiki/index.php5?title=Compilation_CMake
+- Project can/should now be compiled with CMake (www.cmake.org). See http://www.cloudcompare.org/doc/wiki/index.php5?title=Compilation_CMake
 
 v2.3 02/14/2012
 - Noah Snavely's Bundler import filter is now able to use an alternative cloud (or mesh) as keypoints source.

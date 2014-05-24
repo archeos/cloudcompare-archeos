@@ -24,7 +24,16 @@
 
 //system
 #include <math.h>
+#include <assert.h>
 #include <algorithm>
+
+//! Max kernel size
+/** Can't add this as a static const definition (in the header file)
+	as this causes a 'double definition' link error on Windows - if
+	the definition is done in the cpp file - or a 'missing definition'
+	link error on MacOS - if the definition is not done in the cpp file ;)
+**/
+#define KERNEL_MAX_HALF_SIZE 7
 
 ccBilateralFilter::ccBilateralFilter()
 	: ccGlFilter("Bilateral smooth")
@@ -34,14 +43,29 @@ ccBilateralFilter::ccBilateralFilter()
 	, m_shader(0)
 	, m_useCurrentViewport(false)
 {
-	memset(m_dampingPixelDist, 0, KERNEL_MAX_SIZE*KERNEL_MAX_SIZE); //will be updated right away by 'setParameters'
+	unsigned maxCoefListSize = (KERNEL_MAX_HALF_SIZE+1)*(KERNEL_MAX_HALF_SIZE+1); //must be inferior to 64 to fit the equivalent array size on the shader's side
+	m_dampingPixelDist = new float[maxCoefListSize];
+	memset(m_dampingPixelDist, 0, maxCoefListSize); //will be updated right away by 'setParameters'
 
-	setParameters(5,2.0f,0.4f);
+	setParams(2,2.0f,0.4f);
+}
+
+ccGlFilter* ccBilateralFilter::clone() const
+{
+	ccBilateralFilter* filter = new ccBilateralFilter();
+	//copy parameters
+	filter->setParams(m_halfSpatialSize,m_spatialSigma,m_depthSigma);
+	filter->m_useCurrentViewport = m_useCurrentViewport;
+
+	return filter;
 }
 
 ccBilateralFilter::~ccBilateralFilter()
 {
     reset();
+
+	if (m_dampingPixelDist)
+		delete[] m_dampingPixelDist;
 }
 
 void ccBilateralFilter::useExistingViewport(bool state)
@@ -53,13 +77,13 @@ void ccBilateralFilter::reset()
 {
     if (m_fbo)
         delete m_fbo;
-    m_fbo=0;
+    m_fbo = 0;
 
     if (m_shader)
         delete m_shader;
-    m_shader=0;
+    m_shader = 0;
 
-    m_width=m_height=0;
+    m_width = m_height = 0;
 }
 
 bool ccBilateralFilter::init(int width, int height, const char* shadersPath)
@@ -92,11 +116,12 @@ bool ccBilateralFilter::init(int width, int height, const char* shadersPath)
     return true;
 }
 
-void ccBilateralFilter::setParameters(int spatialSize, float spatialSigma, float depthSigma)
+void ccBilateralFilter::setParams(unsigned halfSpatialSize, float spatialSigma, float depthSigma)
 {
-    m_filterSpatialSize		= std::min<int>(spatialSize,KERNEL_MAX_SIZE);
-    m_filterSpatialSigma	= spatialSigma;
-    m_filterDepthSigma		= depthSigma;
+    m_halfSpatialSize	= std::min<unsigned>(halfSpatialSize,KERNEL_MAX_HALF_SIZE);
+    m_spatialSigma		= spatialSigma;
+    m_depthSigma		= depthSigma;
+
 	updateDampingTable();
 }
 
@@ -126,13 +151,11 @@ void ccBilateralFilter::shade(GLuint texDepth, GLuint texColor, float zoom)
     m_shader->start();
     m_shader->setUniform1i("s2_I",0);	// image to blur
     m_shader->setUniform1i("s2_D",1);	// image to modulate filter
-    m_shader->setUniform1f("SX",1.0f/(float)m_width);
-    m_shader->setUniform1f("SY",1.0f/(float)m_height);
-    m_shader->setUniform1i("N",m_filterSpatialSize);
-    m_shader->setUniform1f("sigma",m_filterSpatialSigma);
-    m_shader->setUniform1i("use_gauss_p",1);
-	m_shader->setTabUniform1fv("gauss_p",225,m_dampingPixelDist);
-    m_shader->setUniform1f("sigmaz",m_filterDepthSigma);
+    m_shader->setUniform1f("SX",static_cast<float>(m_width));
+    m_shader->setUniform1f("SY",static_cast<float>(m_height));
+    m_shader->setUniform1i("NHalf",m_halfSpatialSize);
+	m_shader->setTabUniform1fv("DistCoefs",64,m_dampingPixelDist);
+    m_shader->setUniform1f("SigmaDepth",m_depthSigma);
 
     //Texture 1 --> 2D
     glActiveTexture(GL_TEXTURE1);
@@ -177,16 +200,18 @@ GLuint ccBilateralFilter::getTexture()
 
 void ccBilateralFilter::updateDampingTable()
 {
-	const int& N = m_filterSpatialSize;
-	int hN = (N>>1); // filter half width (N should be odd)
+	assert(m_halfSpatialSize <= KERNEL_MAX_HALF_SIZE);
 
-	for(int c=-hN; c<=hN; c++)
+	//constant quotient
+	float q = static_cast<float>(m_halfSpatialSize) * m_spatialSigma;
+	q = 2.0f * (q*q);
+
+	for (unsigned c=0; c<=m_halfSpatialSize; c++)
 	{
-        for(int d=-hN; d<=hN; d++)
+        for (unsigned d=0; d<=m_halfSpatialSize; d++)
         {
             //pixel distance based damping
-            float dist = float(c*c+d*d)/(m_filterSpatialSigma*(float)(hN*hN));
-            m_dampingPixelDist[(c+hN)*N+(d+hN)] = exp(-dist*dist/2.0f);
+            m_dampingPixelDist[c*(m_halfSpatialSize+1)+d] = exp(-static_cast<float>(c*c+d*d)/q);
 		}
 	}
 }

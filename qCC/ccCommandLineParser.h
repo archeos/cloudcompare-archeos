@@ -1,6 +1,14 @@
 #ifndef CC_COMMAND_LINE_PARSER_HEADER
 #define CC_COMMAND_LINE_PARSER_HEADER
 
+//qCC_io
+#include <FileIOFilter.h>
+
+//qCC_db
+#include <ccHObject.h>
+#include <ccGenericMesh.h>
+#include <ccPointCloud.h>
+
 //Qt
 #include <QString>
 #include <QStringList>
@@ -8,8 +16,6 @@
 //STL
 #include <vector>
 
-class ccPointCloud;
-class ccGenericMesh;
 class ccProgressDialog;
 class QDialog;
 
@@ -21,18 +27,27 @@ public:
 
 protected:
 
-	bool commandLoad			(QStringList& arguments);
-	bool commandSubsample		(QStringList& arguments, ccProgressDialog* pDlg = 0);
-	bool commandCurvature		(QStringList& arguments, QDialog* parent = 0);
-	bool commandDensity			(QStringList& arguments, QDialog* parent = 0);
-	bool commandSFGradient		(QStringList& arguments, QDialog* parent = 0);
-	bool commandRoughness		(QStringList& arguments, QDialog* parent = 0);
-	bool commandSampleMesh		(QStringList& arguments, ccProgressDialog* pDlg = 0);
-	bool commandBundler			(QStringList& arguments);
-	bool commandDist			(QStringList& arguments, bool cloud2meshDist, QDialog* parent = 0);
-	bool commandFilterSFByValue	(QStringList& arguments);
-	bool commandMergeClouds		(QStringList& arguments);
-	bool commandStatTest		(QStringList& arguments, ccProgressDialog* pDlg = 0);
+	bool commandLoad						(QStringList& arguments);
+	bool commandSubsample					(QStringList& arguments, ccProgressDialog* pDlg = 0);
+	bool commandCurvature					(QStringList& arguments, QDialog* parent = 0);
+	bool commandDensity						(QStringList& arguments, QDialog* parent = 0);
+	bool commandApproxDensity				(QStringList& arguments, QDialog* parent = 0);
+	bool commandSFGradient					(QStringList& arguments, QDialog* parent = 0);
+	bool commandRoughness					(QStringList& arguments, QDialog* parent = 0);
+	bool commandSampleMesh					(QStringList& arguments, ccProgressDialog* pDlg = 0);
+	bool commandBundler						(QStringList& arguments);
+	bool commandDist						(QStringList& arguments, bool cloud2meshDist, QDialog* parent = 0);
+	bool commandFilterSFByValue				(QStringList& arguments);
+	bool commandMergeClouds					(QStringList& arguments);
+	bool commandStatTest					(QStringList& arguments, ccProgressDialog* pDlg = 0);
+	bool commandBestFitPlane				(QStringList& arguments);
+	bool commandCrop						(QStringList& arguments);
+	bool commandCrop2D						(QStringList& arguments);
+	bool matchBBCenters						(QStringList& arguments);
+	bool commandICP							(QStringList& arguments, QDialog* parent = 0);
+	bool commandChangeCloudOutputFormat		(QStringList& arguments);
+	bool commandChangeMeshOutputFormat		(QStringList& arguments);
+	bool setActiveSF						(QStringList& arguments);
 
 protected:
 
@@ -47,7 +62,7 @@ protected:
 	~ccCommandLineParser();
 
 	//! Parses command line
-	int parse(QStringList& arguments, bool silent, QDialog* parent = 0);
+	int parse(QStringList& arguments, QDialog* parent = 0);
 
 	//! Loaded entity description
 	struct EntityDesc
@@ -57,6 +72,7 @@ protected:
 
 		EntityDesc(QString filename);
 		EntityDesc(QString basename, QString path);
+		virtual ccHObject* getEntity() = 0;
 	};
 
 	//! Loaded cloud description
@@ -71,7 +87,7 @@ protected:
 			, indexInFile(-1)
 		{}
 
-		CloudDesc(ccPointCloud* cloud,
+		CloudDesc(	ccPointCloud* cloud,
 					QString filename,
 					int index = -1)
 			: EntityDesc(filename)
@@ -79,7 +95,7 @@ protected:
 			, indexInFile(index)
 		{}
 
-		CloudDesc(ccPointCloud* cloud,
+		CloudDesc(	ccPointCloud* cloud,
 					QString basename,
 					QString path,
 					int index = -1)
@@ -88,6 +104,7 @@ protected:
 			, indexInFile(index)
 		{}
 		
+		virtual ccHObject* getEntity() { return static_cast<ccHObject*>(pc); }
 	};
 
 	//! Loaded mesh description
@@ -100,19 +117,36 @@ protected:
 			, mesh(0)
 		{}
 
-		MeshDesc(ccGenericMesh* _mesh,
+		MeshDesc(	ccGenericMesh* _mesh,
 					QString filename)
 			: EntityDesc(filename)
 			, mesh(_mesh)
 		{}
+
+		virtual ccHObject* getEntity() { return static_cast<ccHObject*>(mesh); }
 	};
 
-	//! Exports a cloud
+	//! Exports a cloud or a mesh
 	/** \return error string (if any)
 	**/
-	static QString Export2BIN(CloudDesc& cloudDesc, QString suffix = QString());
+	static QString Export(EntityDesc& cloudDesc, QString suffix = QString(), QString* outputFilename = 0);
 
-    //! Removes all clouds
+	//! Reads out file format
+	static CC_FILE_TYPES getFileFormat(QStringList& arguments);
+
+    //! Saves all clouds
+	/** \param suffix optional suffix
+		\return success
+	**/
+	bool saveClouds(QString suffix = QString());
+
+    //! Saves all meshes
+	/** \param suffix optional suffix
+		\return success
+	**/
+	bool saveMeshes(QString suffix = QString());
+
+	//! Removes all clouds
 	void removeClouds();
 
     //! Removes all meshes

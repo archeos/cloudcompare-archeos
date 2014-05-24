@@ -26,8 +26,8 @@
 
 //! Color scales manager/container
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccColorScalesManager
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccColorScalesManager
 #else
 class ccColorScalesManager
 #endif
@@ -40,6 +40,9 @@ public:
 	//! Releases unique instance
 	static void ReleaseUniqueInstance();
 
+	//! Destructor
+	virtual ~ccColorScalesManager();
+
 	//! Pre-defined color scales (all relative - i.e. expand to actual SF)
 	enum DEFAULT_SCALES	{	BGYR			=	0,		/**< Blue-Green-Yellow-Red ramp (default for distances display) */
 							GREY			=	1,		/**< Grey ramp (default for Global Illumination) */
@@ -47,6 +50,7 @@ public:
 							RY				=	3,		/**< Red-Yellow ramp */
 							RW				=	4,		/**< Red-White ramp */
 							ABS_NORM_GREY	=	5,		/**< Absolute normalized grey ramp (intensities between 0 and 1) */
+							HSV_360_DEG		=	6,		/**< HSV colors between 0 and 360 degrees */
 	};
 
 	//! Returns a pre-defined color scale UUID
@@ -92,9 +96,6 @@ protected:
 
 	//! Default constructor
 	ccColorScalesManager();
-
-	//! Destructor
-	virtual ~ccColorScalesManager();
 
 	//! Creates a pre-defined color scale
 	static ccColorScale::Shared Create(DEFAULT_SCALES scaleType);

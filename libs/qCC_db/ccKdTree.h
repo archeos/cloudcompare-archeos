@@ -33,8 +33,8 @@ class ccGenericPointCloud;
 /** Extends the CCLib::TrueKdTree class.
 **/
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccKdTree : public CCLib::TrueKdTree, public ccHObject
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccKdTree : public CCLib::TrueKdTree, public ccHObject
 #else
 class ccKdTree : public CCLib::TrueKdTree, public ccHObject
 #endif
@@ -62,7 +62,7 @@ public:
 	void translateBoundingBox(const CCVector3& T);
 
     //! Returns class ID
-    virtual CC_CLASS_ENUM getClassID() const { return CC_POINT_KDTREE; }
+    virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::POINT_KDTREE; }
 
     //Inherited from ccHObject
     virtual ccBBox getMyOwnBB();

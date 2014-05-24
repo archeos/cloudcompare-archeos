@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1691                                                              $
-//$LastChangedDate:: 2010-10-22 16:52:55 +0200 (ven., 22 oct. 2010)        $
-//**************************************************************************
-//
 
 #ifndef CC_SF_FROM_COLOR_DLG_HEADER
 #define CC_SF_FROM_COLOR_DLG_HEADER
@@ -35,7 +28,7 @@ class ccScalarFieldFromColorDlg : public QDialog, public Ui::scalarFieldFromColo
 public:
 
     //! Default constructor
-    ccScalarFieldFromColorDlg(QWidget* parent=0);
+    ccScalarFieldFromColorDlg(QWidget* parent = 0);
 
     //! Returns if to export R channel as SF
     bool getRStatus();

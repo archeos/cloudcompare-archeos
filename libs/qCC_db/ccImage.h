@@ -28,8 +28,8 @@ class ccGenericGLDisplay;
 
 //! Generic image
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccImage : public ccHObject
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccImage : public ccHObject
 #else
 class ccImage : public ccHObject
 #endif
@@ -43,7 +43,7 @@ public:
 	ccImage(const QImage& image, const QString& name = QString("unknown"));
 
     //! Returns unique class ID
-    virtual CC_CLASS_ENUM getClassID() const {return CC_IMAGE;};
+    virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::IMAGE; }
 
     //! Loads image from file
 	/** \param filename image filename

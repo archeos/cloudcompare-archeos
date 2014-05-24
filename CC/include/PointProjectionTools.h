@@ -21,6 +21,7 @@
 //Local
 #include "CCToolbox.h"
 #include "Matrix.h"
+#include "CCConst.h"
 
 //System
 #include <vector>
@@ -46,7 +47,7 @@ class SimpleCloud;
 #ifdef CC_USE_AS_DLL
 #include "CloudCompareDll.h"
 
-class CC_DLL_API PointProjectionTools : public CCToolbox
+class CC_CORE_LIB_API PointProjectionTools : public CCToolbox
 #else
 class PointProjectionTools : public CCToolbox
 #endif
@@ -66,7 +67,7 @@ public:
         PointCoordinateType s;
 
 		//! Default constructor
-        Transformation() : s((PointCoordinateType)1.0) {}
+        Transformation() : s(PC_ONE) {}
 	};
 
 	//! Develops a cylinder-shaped point cloud around its main axis
