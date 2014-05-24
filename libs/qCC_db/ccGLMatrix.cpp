@@ -98,7 +98,7 @@ ccGLMatrix::ccGLMatrix(const CCLib::SquareMatrix& R, const CCVector3& T)
 {
     toIdentity();
 
-	if (R.size()==3)
+	if (R.isValid() && R.size() == 3)
 	{
 		//we copy each column
 		float* mat = m_mat;
@@ -118,7 +118,7 @@ ccGLMatrix::ccGLMatrix(const CCLib::SquareMatrix& R, const CCVector3& T, PointCo
 {
     toIdentity();
 
-    if (R.size() == 3)
+    if (R.isValid() && R.size() == 3)
     {
         //we copy each column
         float* mat = m_mat;
@@ -179,15 +179,13 @@ bool ccGLMatrix::toAsciiFile(const char* filename) const
 	if (!fp)
 		return false;
 
-	const float* mat = m_mat;
 	for (unsigned i=0; i<4; ++i)
 	{
-		if (fprintf(fp,"%f %f %f %f\n",mat[0],mat[4],mat[8],mat[12]) < 4)
+		if (fprintf(fp,"%f %f %f %f\n",m_mat[i],m_mat[i+4],m_mat[i+8],m_mat[i+12]) < 4)
 		{
 			fclose(fp);
 			return false;
 		}
-		++mat;
 	}
 	fclose(fp);
 
@@ -471,10 +469,10 @@ void ccGLMatrix::invert()
 
 ccGLMatrix ccGLMatrix::inverse() const
 {
-	ccGLMatrix result = *this;
-	result.invert();
+	ccGLMatrix t(*this);
+	t.invert();
 
-	return result;
+	return t;
 }
 
 ccGLMatrix ccGLMatrix::Interpolate(	PointCoordinateType coef,

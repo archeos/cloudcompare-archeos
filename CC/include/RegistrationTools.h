@@ -28,7 +28,6 @@
 #include "PointProjectionTools.h"
 #include "KdTree.h"
 
-
 //system
 #include <vector>
 
@@ -43,7 +42,7 @@ class ScalarField;
 //! Common point cloud registration algorithms
 #ifdef CC_USE_AS_DLL
 #include "CloudCompareDll.h"
-class CC_DLL_API RegistrationTools : public CCToolbox
+class CC_CORE_LIB_API RegistrationTools : public CCToolbox
 #else
 class RegistrationTools : public CCToolbox
 #endif
@@ -87,7 +86,7 @@ protected:
 
 //! Horn point cloud registration algorithm (Horn).
 #ifdef CC_USE_AS_DLL
-class CC_DLL_API HornRegistrationTools : public RegistrationTools
+class CC_CORE_LIB_API HornRegistrationTools : public RegistrationTools
 #else
 class HornRegistrationTools : public RegistrationTools
 #endif
@@ -124,7 +123,7 @@ public:
 
 //! ICP point cloud registration algorithm (Besl et al.).
 #ifdef CC_USE_AS_DLL
-class CC_DLL_API ICPRegistrationTools : public RegistrationTools
+class CC_CORE_LIB_API ICPRegistrationTools : public RegistrationTools
 #else
 class ICPRegistrationTools : public RegistrationTools
 #endif
@@ -186,7 +185,7 @@ public:
 
 //! Four Points Congruent Sets (4PCS) registration algorithm (Dror Aiger, Niloy J. Mitra, Daniel Cohen-Or)
 #ifdef CC_USE_AS_DLL
-class CC_DLL_API FPCSRegistrationTools : public RegistrationTools
+class CC_CORE_LIB_API FPCSRegistrationTools : public RegistrationTools
 #else
 class FPCSRegistrationTools : public RegistrationTools
 #endif

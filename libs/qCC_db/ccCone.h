@@ -27,8 +27,8 @@
 /** 3D cone primitive
 **/
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccCone : public ccGenericPrimitive
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccCone : public ccGenericPrimitive
 #else
 class ccCone : public ccGenericPrimitive
 #endif
@@ -61,7 +61,7 @@ public:
 	ccCone(QString name = QString("Cone"));
 
     //! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const { return CC_CONE; }
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::CONE; }
 
 	//inherited from ccGenericPrimitive
 	virtual QString getTypeName() const { return "Cone"; }

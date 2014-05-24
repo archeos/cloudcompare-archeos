@@ -150,7 +150,7 @@ typedef glDrawContext CC_DRAW_CONTEXT;
 
 //! Generic interface for (3D) drawable entities
 #ifdef QCC_DB_USE_AS_DLL
-class QCC_DB_DLL_API ccDrawableObject
+class QCC_DB_LIB_API ccDrawableObject
 #else
 class ccDrawableObject
 #endif
@@ -349,7 +349,7 @@ public:
         Note: GL transformation is automatically disabled.
         See ccDrawableObject::setGLTransformation.
     **/
-    virtual void razGLTransformation();
+    virtual void resetGLTransformation();
 
     //! Mutliplies (left) current GL transformation by a rotation matrix
     /** 'GLtrans = M * GLtrans'

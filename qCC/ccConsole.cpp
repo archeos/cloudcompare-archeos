@@ -17,6 +17,12 @@
 
 #include "ccConsole.h"
 
+//Local
+#include "mainwindow.h"
+
+//qCC_db
+#include <ccSingleton.h>
+
 //Qt
 #include <QListWidget>
 #include <QMessageBox>
@@ -32,41 +38,41 @@
  ***************/
 
 //unique console instance
-static ccConsole* s_console = 0;
+static ccSingleton<ccConsole> s_console;
 
 ccConsole* ccConsole::TheInstance()
 {
-    if (!s_console)
+	if (!s_console.instance)
 	{
-        s_console = new ccConsole();
-		ccLog::RegisterInstance(s_console);
+        s_console.instance = new ccConsole();
+		ccLog::RegisterInstance(s_console.instance);
 	}
 
-    return s_console;
+    return s_console.instance;
 }
 
 void ccConsole::ReleaseInstance()
 {
-    if (s_console)
-	{
-		ccLog::RegisterInstance(0);
-        delete s_console;
-    s_console=0;
-	}
+	s_console.release();
+	ccLog::RegisterInstance(0);
 }
 
 ccConsole::ccConsole()
 	: m_textDisplay(0)
 	, m_parentWidget(0)
+	, m_parentWindow(0)
 {
 }
 
-void ccConsole::Init(QListWidget* textDisplay/*=0*/, QWidget* parentWidget/*=0*/)
+void ccConsole::Init(	QListWidget* textDisplay/*=0*/,
+						QWidget* parentWidget/*=0*/,
+						MainWindow* parentWindow/*=0*/)
 {
     ccConsole* console = TheInstance();
     assert(console);
     console->m_textDisplay = textDisplay;
 	console->m_parentWidget = parentWidget;
+	console->m_parentWindow = parentWindow;
 	if (textDisplay)
 		//auto-start
 		console->setAutoRefresh(true);
@@ -92,10 +98,49 @@ void ccConsole::refresh()
 	
 	if (m_textDisplay && !m_queue.isEmpty())
 	{
-		for (QVector<ConsoleItemType>::const_iterator it = m_queue.begin();it!=m_queue.end();++it)
+		for (QVector<ConsoleItemType>::const_iterator it = m_queue.begin(); it!=m_queue.end(); ++it)
 		{
-			QListWidgetItem* item = new QListWidgetItem(it->first);
-			item->setForeground(QBrush(it->second));
+			QListWidgetItem* item = new QListWidgetItem(it->first); //first = message text
+
+			//set color based on the message severity
+			Qt::GlobalColor color = Qt::black;
+			switch (it->second) //second = message severity
+			{
+			case LOG_STANDARD:
+				//color = Qt::black;
+				break;
+#ifdef _DEBUG
+			case LOG_STANDARD_DEBUG:
+#endif
+				color = Qt::blue;
+				break;
+			case LOG_WARNING:	
+#ifdef _DEBUG
+			case LOG_WARNING_DEBUG:
+#endif
+				color = Qt::darkRed;
+				//we also force the console visibility if a warning message arrives!
+				if (m_parentWindow)
+					m_parentWindow->forceConsoleDisplay();
+				break;
+			case LOG_ERROR:	
+#ifdef _DEBUG
+			case LOG_ERROR_DEBUG:
+#endif
+				color = Qt::red;
+				break;
+			default:
+#ifndef _DEBUG
+				//skip debug message in debug mode
+				continue;
+#else
+				//we shoudn't fall here in debug mode!
+				assert(false);
+				break;
+#endif
+			}
+			item->setForeground(color);
+
 			m_textDisplay->addItem(item);
 		}
 
@@ -109,41 +154,12 @@ void ccConsole::refresh()
 
 void ccConsole::displayMessage(const QString& message, MessageLevel level)
 {
-	Qt::GlobalColor color = Qt::black;
-	switch(level)
-	{
-	case LOG_STANDARD:
-		//color = Qt::black;
-		break;
-#ifdef _DEBUG
-	case LOG_STANDARD_DEBUG:
-#endif
-		color = Qt::blue;
-		break;
-	case LOG_WARNING:	
-#ifdef _DEBUG
-	case LOG_WARNING_DEBUG:
-#endif
-		color = Qt::darkRed;
-		break;
-	case LOG_ERROR:	
-#ifdef _DEBUG
-	case LOG_ERROR_DEBUG:
-#endif
-		color = Qt::red;
-		break;
-#ifndef _DEBUG
-	default:
-		return;
-#endif
-	}
-
 	QString formatedMessage = QString("[")+QTime::currentTime().toString()+QString("] ")+message;
 
     if (m_textDisplay)
     {
 		m_mutex.lock();
-		m_queue.push_back(ConsoleItemType(formatedMessage,color));
+		m_queue.push_back(ConsoleItemType(formatedMessage,level));
 		m_mutex.unlock();
     }
 #ifdef _DEBUG

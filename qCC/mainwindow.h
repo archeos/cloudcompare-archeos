@@ -18,8 +18,8 @@
 #ifndef CC_MAIN_WINDOW_HEADER
 #define CC_MAIN_WINDOW_HEADER
 
-//Virtual interface (for plugins)
-#include "plugins/ccMainAppInterface.h"
+//qCC_plugins
+#include <ccMainAppInterface.h>
 
 //Qt
 #include <QMainWindow>
@@ -38,9 +38,11 @@
 //qCC_db
 #include <ccMesh.h>
 
-//db
+//qCC_io
+#include <FileIOFilter.h>
+
+//internal db
 #include "db_tree/ccDBRoot.h"
-#include "fileIO/FileIOFilter.h"
 
 class QMdiArea;
 class QSignalMapper;
@@ -104,28 +106,31 @@ public:
     //! Deletes current main window instance
     static void DestroyInstance();
 
-    //! Static shortcut to MainwWindow::addToDB
-    static void AddToDB(const QString& filename, CC_FILE_TYPES fType = UNKNOWN_FILE);
-
     //! Returns active GL sub-window (if any)
     virtual ccGLWindow* getActiveGLWindow();
 
-    //! Tries to load (and then adds to main db) several files
+    //! Tries to load several files (and then pushes them into main DB)
     /** \param filenames list of all filenames
         \param fType file type
 		\param destWin destination window (0 = active one)
     **/
-	virtual void addToDB(const QStringList& filenames, CC_FILE_TYPES fType = UNKNOWN_FILE, ccGLWindow* destWin = 0);
+	virtual void addToDB(	const QStringList& filenames,
+							CC_FILE_TYPES fType = UNKNOWN_FILE,
+							ccGLWindow* destWin = 0);
 
 	//inherited from ccMainAppInterface
-    virtual void addToDB(ccHObject* obj, bool autoExpandDBTree=true, const char* statusMessage=NULL, bool addToDisplay=true, bool updateZoom=true, ccGLWindow* winDest=0, bool* coordinatesTransEnabled = 0, CCVector3d* coordinatesShift = 0, double* coordinatesScale = 0);
-	virtual void removeFromDB(ccHObject* obj, bool autoDelete=true);
+    virtual void addToDB(	ccHObject* obj,
+							bool updateZoom = false,
+							bool autoExpandDBTree = true,
+							bool checkDimensions = false );
+
+	virtual void removeFromDB(ccHObject* obj, bool autoDelete = true);
 	virtual void setSelectedInDB(ccHObject* obj, bool selected);
-    virtual void dispToConsole(QString message, ConsoleMessageLevel level=STD_CONSOLE_MESSAGE);
+    virtual void dispToConsole(QString message, ConsoleMessageLevel level = STD_CONSOLE_MESSAGE);
 	virtual void forceConsoleDisplay();
 	virtual ccHObject* dbRootObject();
-	virtual QMainWindow* getMainWindow() {return this;}
-	virtual const ccHObject::Container& getSelectedEntities() const { return m_selectedEntities; }
+	inline virtual QMainWindow* getMainWindow() { return this; }
+	inline virtual const ccHObject::Container& getSelectedEntities() const { return m_selectedEntities; }
 	virtual ccColorScalesManager* getColorScalesManager();
 
 	//! Returns real 'dbRoot' object
@@ -134,38 +139,52 @@ public:
     /*** CCLib "standalone" algorithms ***/
 	
 	//CCLib algorithms handled by the 'ApplyCCLibAlgortihm' method
-	enum CC_LIB_ALGORITHM { CCLIB_ALGO_DENSITY      = 0,
-							CCLIB_ALGO_CURVATURE    = 1,
-							CCLIB_ALGO_SF_GRADIENT  = 2,
-							CCLIB_ALGO_ROUGHNESS    = 3,
+	enum CC_LIB_ALGORITHM { CCLIB_ALGO_CURVATURE		= 1,
+							CCLIB_ALGO_SF_GRADIENT		= 2,
+							CCLIB_ALGO_ROUGHNESS		= 3,
+							CCLIB_ALGO_APPROX_DENSITY	= 4,
+							CCLIB_ALGO_ACCURATE_DENSITY	= 5,
 							CCLIB_SPHERICAL_NEIGHBOURHOOD_EXTRACTION_TEST = 255,
 	};
 
-    static bool ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container& entities, QWidget* parent = 0, void** additionalParameters = 0);
-    
+	//! Applies a standard CCLib algorithm (see CC_LIB_ALGORITHM) on a set of entities
+	static bool ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo,
+									ccHObject::Container& entities,
+									QWidget* parent = 0,
+									void** additionalParameters = 0);
+
 	//! Returns MDI area subwindow corresponding to a given 3D view
 	QMdiSubWindow* getMDISubWindow(ccGLWindow* win);
+
+	//! Backup "context" for an object
+	/** Used with removeObjectTemporarilyFromDBTree/putObjectBackIntoDBTree.
+	**/
+	struct ccHObjectContext
+	{
+		ccHObjectContext() : parent(0), childFlags(0), parentFlags(0) {}
+		ccHObject* parent;
+		int childFlags;
+		int parentFlags;
+	};
 
 	//! Removes object temporarily from DB tree
 	/** This method must be called before any modification to the db tree
 		WARNING: may change 'selectedEntities' container!
 	**/
-	void removeObjectTemporarilyFromDBTree(ccHObject* obj, ccHObject* &parent);
+	ccHObjectContext removeObjectTemporarilyFromDBTree(ccHObject* obj);
 
 	//! Adds back object to DB tree
 	/** This method should be called once modifications to the db tree are finished
 		(see removeObjectTemporarilyFromDBTree).
 	**/
-	void putObjectBackIntoDBTree(ccHObject* obj, ccHObject* parent);
+	void putObjectBackIntoDBTree(ccHObject* obj, const ccHObjectContext& context);
 
-public slots:
+protected slots:
 
     //! Creates a new 3D GL sub-window
     ccGLWindow* new3DView();
 
-protected slots:
-
-    //! Displays 'about' dialog
+	//! Displays 'about' dialog
     void about();
     //! Displays 'help' dialog
     void help();
@@ -224,7 +243,7 @@ protected slots:
     void addToDBAuto(const QStringList& filenames);
 
 	//! Handles new label
-	void handleNewEntity(ccHObject*);
+	void handleNewLabel(ccHObject*);
 
     void setActiveSubWindow(QWidget* window);
     void setLightsAndMaterials();
@@ -239,6 +258,9 @@ protected slots:
 	void echoMouseWheelRotate(float);
     void echoCameraDisplaced(float ddx, float ddy);
     void echoBaseViewMatRotation(const ccGLMatrix& rotMat);
+	void echoCameraPosChanged(const CCVector3&);
+	void echoPivotPointChanged(const CCVector3&);
+	void echoPixelSizeChanged(float);
 
 	void toggleSelectedEntitiesVisibility();
     void toggleSelectedEntitiesNormals();
@@ -254,6 +276,7 @@ protected slots:
     void doActionColorize();
     void doActionSetColor(bool colorize);
     void doActionSetColorGradient();
+	void doActionInterpolateColors();
 
     void doActionSFGaussianFilter();
     void doActionSFBilateralFilter();
@@ -263,18 +286,23 @@ protected slots:
     void doActionAddIdField();
 	void doActionSetSFAsCoord();
 
-	void doComputeDensity();
+	void doComputeApproximateDensity();
+	void doComputeAccurateDensity();
     void doComputeCurvature();
     void doActionSFGradient();
     void doComputeRoughness();
+    void doRemoveDuplicatePoints();
 	void doSphericalNeighbourhoodExtractionTest(); //DGM TODO: remove after test
+	void doCylindricalNeighbourhoodExtractionTest(); //DGM TODO: remove after test
 	void doActionFitPlane();
 	void doActionFitFacet();
+    void doActionFitQuadric();
 	void doShowPrimitiveFactory();
 
     void doActionComputeNormals();
     void doActionInvertNormals();
 	void doActionConvertNormalsToHSV();
+	void doActionConvertNormalsToDipDir();
     void doActionComputeOctree();
 	void doActionComputeKdTree();
     void doActionApplyTransformation();
@@ -296,12 +324,13 @@ protected slots:
     void doActionScalarFieldArithmetic();
     void doActionScalarFieldFromColor();
     void doActionClearColor();
-    void doActionResolveNormalsDirection();
+    void doActionOrientNormalsFM();
+    void doActionOrientNormalsMST();
     void doActionClearNormals();
     void doActionResampleWithOctree();
     void doActionComputeMeshAA();
     void doActionComputeMeshLS();
-    void doActionComputeQuadric3D();
+    void doActionComputeDistToBestFitQuadric3D();
     void doActionMeasureMeshSurface();
     void doActionSmoothMeshLaplacian();
 	void doActionSubdivideMesh();
@@ -309,26 +338,37 @@ protected slots:
     void doActionDeleteAllSF();
     void doActionKMeans();
     void doActionFrontPropagation();
-    void doActionMultiply();
+    void doActionApplyScale();
 	void doActionEditGlobalShift();
 	void doActionEditGlobalScale();
-    void doActionMatchBarycenters();
+    void doActionMatchBBCenters();
     void doActionUnroll();
-    void doActionProjectSensor();
+    void doActionCreateGBLSensor();
+	void doActionCreateCameraSensor();
     void doActionModifySensor();
-    void doActionComputeDistancesFromSensor(); 
-    void doActionComputeScatteringAngles(); 
+	void doActionProjectUncertainty();
+	void doActionCheckPointsInsideFrustrum();
+    void doActionComputeDistancesFromSensor();
+    void doActionComputeScatteringAngles();
+	void doActionSetViewFromSensor();
     void doActionShowDepthBuffer();
     void doActionExportDepthBuffer();
     void doActionHeightGridGeneration();
 	void doActionExportCoordToSF();
     void doComputeBestFitBB();
+	void doActionCrop();
 
     void doActionEditCamera();
 	void doActionAdjustZoom();
 	void doActionSaveViewportAsCamera();
 
+    //Shaders & plugins
+    void doActionLoadShader();
+    void doActionDeleteShader();
     void doEnableGLFilter();
+    void doDisableGLFilter();
+
+	void doActionFindBiggestInnerRectangle();
 
 	//Clipping box
 	void activateClippingBoxMode();
@@ -347,9 +387,9 @@ protected slots:
     void doActionCloudMeshDist();
     void deactivateComparisonMode(int);
 
-    //Display points properties
-    void activatePointsPropertiesMode();
-    void deactivatePointsPropertiesMode(bool);
+    //Point picking mechanism
+    void activatePointPickingMode();
+    void deactivatePointPickingMode(bool);
 
     //Point list picking mechanism
     void activatePointListPickingMode();
@@ -358,11 +398,6 @@ protected slots:
 	//Point-pair registration mechanism
 	void activateRegisterPointPairTool();
     void deactivateRegisterPointPairTool(bool);
-
-    //Shaders & plugins
-    void doActionLoadShader();
-    void doActionDeleteShader();
-    void doActionDeactivateGlFilter();
 
 	//Current active scalar field
 	void doActionToggleActiveSFColorScale();
@@ -380,7 +415,15 @@ protected slots:
 	//! Removes all entiites currently loaded in the DB tree
 	void closeAll();
 
+	//! Batch export some pieces of info from a set of selected clouds
+	void doActionExportCloudsInfo();
+
 protected:
+
+	//! Normals conversion destinations
+	enum NORMAL_CONVERSION_DEST	{ HSV_COLORS, DIP_DIR_SFS };
+	//! Converts a cloud's normals
+	void doActionConvertNormalsTo(NORMAL_CONVERSION_DEST dest);
 
     //! Removes from a list all elements that are sibling of others
     /** List is updated in place.
@@ -510,10 +553,9 @@ protected:
 
         //! Constructor with dialog and position
         ccMDIDialogs(ccOverlayDialog* dlg, Qt::Corner pos)
-        {
-            dialog = dlg;
-            position = pos;
-        }
+			: dialog(dlg)
+			, position(pos)
+        {}
     };
 
     //! Replaces an MDI dialog at its right position
@@ -521,6 +563,8 @@ protected:
 
     //! Registers a MDI area overlay dialog
     void registerMDIDialog(ccOverlayDialog* dlg, Qt::Corner pos);
+    //! Unregisters a MDI area overlay dialog
+	void unregisterMDIDialog(ccOverlayDialog* dlg);
 
     //! Automatically updates all registered MDI dialogs placement
     void updateMDIDialogsPlacement();

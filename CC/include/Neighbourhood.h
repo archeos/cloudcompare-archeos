@@ -42,7 +42,7 @@ class GenericIndexedMesh;
 
 #ifdef CC_USE_AS_DLL
 #include "CloudCompareDll.h"
-class CC_DLL_API Neighbourhood
+class CC_CORE_LIB_API Neighbourhood
 #else
 class Neighbourhood
 #endif
@@ -72,7 +72,7 @@ class Neighbourhood
 		virtual void reset();
 
 		//! Returns associated cloud
-		GenericIndexedCloudPersist* associatedCloud() const {return m_associatedCloud;}
+		GenericIndexedCloudPersist* associatedCloud() const { return m_associatedCloud; }
 
 		//! Applies 2D Delaunay triangulation
 		/** Cloud selection is first projected on the best least-square plane.
@@ -158,11 +158,6 @@ class Neighbourhood
 		**/
 		ScalarType computeCurvature(unsigned neighbourIndex, CC_CURVATURE_TYPE cType);
 
-		//! Computes point set curvature with 3D Quadric (WORK IN PROGRESS)
-		/** \return curvature (signed) value or NAN_VALUE if computation failed.
-        **/
-		ScalarType computeCurvature2(unsigned neighbourIndex, CC_CURVATURE_TYPE cType);
-
 		/**** GETTERS ****/
 
 		//! Returns gravity center
@@ -170,12 +165,31 @@ class Neighbourhood
 		**/
 		const CCVector3* getGravityCenter();
 
-		//! Returns best interpolating plane (Least-square)
+		//! Sets gravity center
+		/** Handle with care!
+			\param G gravity center
+		**/
+		void setGravityCenter(const CCVector3& G);
+
+		//! Returns best interpolating plane equation (Least-square)
 		/** Returns an array of the form [a,b,c,d] such as:
-				ax+by+cz=d
+				ax + by + cz = d
 			\return 0 if computation failed
 		**/
 		const PointCoordinateType* getLSQPlane();
+
+		//! Sets the best interpolating plane equation (Least-square)
+		/** Handle with care!
+			\param eq plane equation (ax + by + cz = d)
+			\param X local base X vector
+			\param Y local base Y vector
+			\param N normal vector
+		**/
+		void setLSQPlane(	const PointCoordinateType eq[4],
+							const CCVector3& X,
+							const CCVector3& Y,
+							const CCVector3& N);
+
 		//! Returns best interpolating plane (Least-square) 'X' base vector
 		/** This corresponds to the largest eigen value (i.e. the largest cloud dimension)
 			\return 0 if computation failed
@@ -199,7 +213,7 @@ class Neighbourhood
 				dimsHF=[index(X),index(Y),index(Z)] where: 0=x, 1=y, 2=z
 			\return 0 if computation failed
 		**/
-		const PointCoordinateType* getHeightFunction(uchar* dimsHF=0);
+		const PointCoordinateType* getHeightFunction(uchar* dimsHF = 0);
 
 		//! Returns the best interpolating quadric (Least-square)
 		/** Returns an array [a,b,c,d,e,f,g,l,m,n] such as

@@ -37,7 +37,7 @@ ccDrawableObject::ccDrawableObject()
 
     enableTempColor(false);
     setTempColor(ccColor::white,false);
-    razGLTransformation();
+    resetGLTransformation();
 }
 
 bool ccDrawableObject::isVisible() const
@@ -77,14 +77,14 @@ void ccDrawableObject::setSelected(bool state)
 
 void ccDrawableObject::drawBB(const colorType col[])
 {
-    getBB(true,false,m_currentDisplay).draw(col);
+    getBB(true,true,m_currentDisplay).draw(col);
 }
 
 ccBBox ccDrawableObject::getFitBB(ccGLMatrix& trans)
 {
 	//Default behavior: returns axis aligned bounding box!
 	trans.toIdentity();
-	return getBB(true,false,m_currentDisplay);
+	return getBB(true,true,m_currentDisplay);
 
 }
 
@@ -148,7 +148,7 @@ void ccDrawableObject::translateGL(const CCVector3& trans)
     enableGLTransformation(true);
 }
 
-void ccDrawableObject::razGLTransformation()
+void ccDrawableObject::resetGLTransformation()
 {
     enableGLTransformation(false);
     m_glTrans.toIdentity();

@@ -27,7 +27,7 @@ if( MSVC )
 endif()
 
 # Default install folders
-# (_debug suffix is automatically added for debug configurations)
+# (on Windows the '_debug' suffix is automatically added for debug configurations)
 set( INSTALL_DESTINATIONS CloudCompare )
 
 # CCViewer
@@ -43,27 +43,29 @@ add_subdirectory( CC )
 
 # Add external libraries
 include( CMakeExternalLibs.cmake )
+
+# Contrib. libraries (mainly for I/O)
+include( contrib/AllSupport.cmake )
+
 # Libs requested by both qCC & ccViewer
 add_subdirectory( libs/Glew )
 add_subdirectory( libs/CCFbo )
 add_subdirectory( libs/qCC_db ) # must always be included after CCFbo (dependency)
+add_subdirectory( libs/qCC_io ) # must always be included after qCC_db (dependency)
+add_subdirectory( libs/qCC_glWindow ) # must always be included after qCC_db (dependency)
 
-# liblas support
-include( contrib/LiblasSupport.cmake )
-# XIOT support
-include( contrib/XIOTSupport.cmake )
-# E57 support
-include( contrib/E57Support.cmake )
-# 3DXWARE (3dConnexion devices) support
-include( contrib/3DXSupport.cmake )
-# PDMS support
-OPTION( OPTION_SUPPORT_MAC_PDMS_FORMAT "Build with .mac PDMS format" OFF )
-# DXF support
-include( contrib/DxfLibSupport.cmake )
-# GDAL support
-include( contrib/GDALSupport.cmake )
-# FBX support
-include( contrib/FBXSupport.cmake )
+# Define target folders
+# (now that ccViewer can have its own plugins, qCC and ccViewer must fall in separate folders!
+#  Therefore the target folder is the same for Windows and Unix/Linux)
+set( CLOUDCOMPARE_DEST_FOLDER CloudCompare )
+set( CCVIEWER_DEST_FOLDER ccViewer )
+if (APPLE)
+	set( CLOUDCOMPARE_MAC_BASE_DIR ${CMAKE_INSTALL_PREFIX}/${CLOUDCOMPARE_DEST_FOLDER}/CloudCompare.app  CACHE INTERNAL "CloudCompare bundle dir.")
+	set( CCVIEWER_MAC_BASE_DIR ${CMAKE_INSTALL_PREFIX}/${CCVIEWER_DEST_FOLDER}/ccViewer.app CACHE INTERNAL "ccViewer bundle dir.")
+endif()
+
+#load plugins (potentially used by qCC and ccViewer below
+add_subdirectory( plugins )
 
 # qCC
 add_subdirectory( qCC )
@@ -71,4 +73,44 @@ add_subdirectory( qCC )
 # CCViewer
 if( ${OPTION_BUILD_CCVIEWER} )
 	add_subdirectory( ccViewer )
+endif()
+
+
+# Experimental targets exporting from the build tree
+# Note: target exporting from the install tree still need to be implemented
+OPTION( OPTION_EXPORT_TARGETS "Check to export a CCPConfig.cmake and related targets from the build tree" OFF )
+if( ${OPTION_EXPORT_TARGETS} )
+    # NOTES
+    # once CloudCompareProjects (CCP) will be exported from the build tree other people that whant to
+    # use cloudcompare code - or e.g. write plugins they will be able to find the package in this way
+    # from within their cmakelists:
+        #-> find_package(CCP REQUIRED) # CloudCompareProjects
+        #-> include_directories(${CCP_INCLUDE_DIRS})
+    # and then they just need to link their plugins against ${CCP_LIBRARIES}
+
+    set(TARGETS_TO_EXPORT CC_CORE_LIB CC_FBO_LIB GLEW_LIB QCC_DB_LIB QCC_GL_LIB QCC_IO_LIB triangle)
+	
+	# add our own contrib dependencies!
+	if( ${OPTION_USE_DXF_LIB} )
+		list( APPEND TARGETS_TO_EXPORT DXF_LIB )
+	endif()
+
+    if( ${INSTALL_QPCL_PLUGIN} )
+        # we also export the shared lib produced by that
+        set(TARGETS_TO_EXPORT ${TARGETS_TO_EXPORT} QPCL_PLUGIN QPCL_PLUGIN_UTILS_LIB)
+    endif()
+
+    if( ${OPTION_BUILD_CCVIEWER} )
+        # we also export the shared lib produced by that
+        set(TARGETS_TO_EXPORT ${TARGETS_TO_EXPORT} ccViewer)
+    endif()
+
+    export(PACKAGE CCP) # this will make CCP build-tree locable from anywhere on the system for the user
+                        # how? read here: http://www.cmake.org/Wiki/CMake/Tutorials/Package_Registry
+
+    # this exports targets from the build tree. See install(EXPORT) command to export targets from an installation tree.
+    export(TARGETS ${TARGETS_TO_EXPORT} FILE "${PROJECT_BINARY_DIR}/CCPTargets.cmake")
+
+    # configure the cmake.in file and place in the build tree so external apps may find it
+    configure_file(CCPConfig.cmake.in "${PROJECT_BINARY_DIR}/CCPConfig.cmake" @ONLY)
 endif()

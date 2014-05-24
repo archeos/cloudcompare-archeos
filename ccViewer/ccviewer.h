@@ -2,9 +2,9 @@
 //#                                                                        #
 //#                   CLOUDCOMPARE LIGHT VIEWER                            #
 //#                                                                        #
-//#  This project has been initated under funding from ANR/CIFRE           #
-//#  This program is free software; you can redistribute it and/or modify  #
+//#  This project has been initiated under funding from ANR/CIFRE          #
 //#                                                                        #
+//#  This program is free software; you can redistribute it and/or modify  #
 //#  it under the terms of the GNU General Public License as published by  #
 //#  the Free Software Foundation; version 2 of the License.               #
 //#                                                                        #
@@ -117,7 +117,16 @@ protected slots:
 	void on3DMouseKeyDown(int);
 	void setup3DMouse(bool);
 
+	//GL filters
+    void doEnableGLFilter();
+    void doDisableGLFilter();
+
 protected:
+
+	//! Loads plugins (from files)
+    void loadPlugins();
+	//! Loads a specific plugin
+    bool loadPlugin(QObject* plugin);
 
 	//! Makes the GL frame background gradient match the OpenGL window one
 	void updateGLFrameGradient();

@@ -25,88 +25,131 @@
 #include <QString>
 #include <QVariant>
 
+//System
+#include <stdint.h>
+
 //! Object state flag
 enum CC_OBJECT_FLAG {
-    CC_FATHER_DEPENDENT     =   1,
+    //CC_UNUSED				=   1, //DGM: not used anymore (former CC_FATHER_DEPENDENT)
     CC_ENABLED              =   2,
     CC_LOCKED               =   4,
 };
 
-//Bits for object type flags
-#define CC_HIERARCH_BIT					0x00000001      //Hierarchical object
-#define CC_LEAF_BIT						0x00000002      //Tree leaf (no children)
-#define CC_GROUP_BIT					0x00000004      //Group (no data, aggregation only)
-#define CC_PRIMITIVE_BIT				0x00000008		//Primitive (sphere, plane, torus, cylinder, etc.)
-#define CC_ARRAY_BIT					0x00000010		//Array
-#define CC_LABEL_BIT					0x00000020		//2D label
-#define CC_VIEWPORT_BIT					0x00000040		//2D viewport
-//#define CC_FREE_BIT					0x00000080
-#define CC_CLOUD_BIT					0x00000100      //Point Cloud
-#define CC_MESH_BIT						0x00000200      //Mesh
-#define CC_OCTREE_BIT					0x00000400      //Octree
-#define CC_POLYLINE_BIT					0x00000800      //Polyline
-#define CC_IMAGE_BIT					0x00001000      //Picture
-#define CC_SENSOR_BIT					0x00002000      //Sensor def.
-#define CC_PLANE_BIT					0x00004000		//Plane (primitive)
-#define CC_SPHERE_BIT					0x00008000		//Sphere (primitive)
-#define CC_TORUS_BIT					0x00010000		//Torus (primitive)
-#define CC_CYLINDER_BIT					0x00020000		//Cylinder (primitive)
-#define CC_CONE_BIT						0x00040000		//Cone (primitive)
-#define CC_BOX_BIT						0x00080000		//Box (primitive)
-#define CC_DISH_BIT						0x00100000		//Dish (primitive)
-#define CC_EXTRU_BIT					0x00200000		//Extrusion (primitive)
-#define CC_KDTREE_BIT					0x00400000		//Kd-tree
-#define CC_FACET_BIT					0x00800000		//Facet (composite object: cloud + 2D1/2 mesh + 2D1/2 polyline)
-#define CC_MATERIAL_BIT					0x01000000		//Material
-#define CC_CLIP_BOX_BIT					0x02000000		//Clipping box
-//#define CC_FREE_BIT					0x04000000
-//#define CC_FREE_BIT					0x08000000
-#define CC_RGB_COLOR_BIT				0x10000000		//Color (R,G,B)
-#define CC_NORMAL_BIT					0x20000000		//Normal (Nx,Ny,Nz)
-#define CC_COMPRESSED_NORMAL_BIT		0x40000000		//Compressed normal (index)
-#define CC_TEX_COORDS_BIT				0x80000000		//Texture coordinates (u,v)
+//Bits for object type flags (64 bits)
+#define CC_HIERARCH_BIT					0x00000000000001	//Hierarchical object
+#define CC_LEAF_BIT						0x00000000000002	//Tree leaf (no children)
+#define CC_GROUP_BIT					0x00000000000004	//Group (no data, aggregation only)
+#define CC_PRIMITIVE_BIT				0x00000000000008	//Primitive (sphere, plane, torus, cylinder, etc.)
+#define CC_ARRAY_BIT					0x00000000000010	//Array
+#define CC_LABEL_BIT					0x00000000000020	//2D label
+#define CC_VIEWPORT_BIT					0x00000000000040	//2D viewport
+#define CC_CUSTOM_BIT					0x00000000000080	//For custom (plugin defined) objects
+#define CC_CLOUD_BIT					0x00000000000100	//Point Cloud
+#define CC_MESH_BIT						0x00000000000200	//Mesh
+#define CC_OCTREE_BIT					0x00000000000400	//Octree
+#define CC_POLYLINE_BIT					0x00000000000800	//Polyline
+#define CC_IMAGE_BIT					0x00000000001000	//Picture
+#define CC_SENSOR_BIT					0x00000000002000	//Sensor def.
+#define CC_PLANE_BIT					0x00000000004000	//Plane (primitive)
+#define CC_SPHERE_BIT					0x00000000008000	//Sphere (primitive)
+#define CC_TORUS_BIT					0x00000000010000	//Torus (primitive)
+#define CC_CYLINDER_BIT					0x00000000020000	//Cylinder (primitive)
+#define CC_CONE_BIT						0x00000000040000	//Cone (primitive)
+#define CC_BOX_BIT						0x00000000080000	//Box (primitive)
+#define CC_DISH_BIT						0x00000000100000	//Dish (primitive)
+#define CC_EXTRU_BIT					0x00000000200000	//Extrusion (primitive)
+#define CC_KDTREE_BIT					0x00000000400000	//Kd-tree
+#define CC_FACET_BIT					0x00000000800000	//Facet (composite object: cloud + 2D1/2 mesh + 2D1/2 polyline)
+#define CC_MATERIAL_BIT					0x00000001000000	//Material
+#define CC_CLIP_BOX_BIT					0x00000002000000	//Clipping box
+#define CC_TRANS_BUFFER_BIT				0x00000004000000	//Indexed transformation buffer
+#define CC_GROUND_BASED_BIT				0x00000008000000	//For Ground Based Lidar Sensors
+#define CC_RGB_COLOR_BIT				0x00000010000000	//Color (R,G,B)
+#define CC_NORMAL_BIT					0x00000020000000	//Normal (Nx,Ny,Nz)
+#define CC_COMPRESSED_NORMAL_BIT		0x00000040000000	//Compressed normal (index)
+#define CC_TEX_COORDS_BIT				0x00000080000000	//Texture coordinates (u,v)
+#define CC_CAMERA_BIT					0x00000100000080	//For camera sensors (projective sensors)
+#define CC_QUADRIC_BIT					0x00000200000080	//Quadric (primitive)
+//#define CC_FREE_BIT					0x00000400000080
+//#define CC_FREE_BIT					0x00000800000080
+//#define CC_FREE_BIT					0x00000400000080
+//#define CC_FREE_BIT					0x00001000000080
+//#define CC_FREE_BIT					0x00002000000080
+//#define CC_FREE_BIT					0x00004000000080
+//#define CC_FREE_BIT					0x00008000000080
+//#define CC_FREE_BIT					0x00004000000080
+//#define CC_FREE_BIT					...
+
+//! Type of object type flags (64 bits)
+typedef int64_t CC_CLASS_ENUM;
 
 //! CloudCompare object type flags
-enum CC_CLASS_ENUM {
-    CC_OBJECT               =   0,
-    CC_HIERARCHY_OBJECT     =   CC_HIERARCH_BIT,
-    CC_POINT_CLOUD          =   CC_HIERARCHY_OBJECT | CC_CLOUD_BIT,
-    CC_MESH                 =   CC_HIERARCHY_OBJECT | CC_MESH_BIT,
-    CC_SUB_MESH             =   CC_HIERARCHY_OBJECT | CC_MESH_BIT | CC_LEAF_BIT,
-    CC_MESH_GROUP           =   CC_MESH | CC_GROUP_BIT, //DEPRECATED, DEFINITION REMAINS FOR BACKWARD COMPATIBILITY ONLY!
-	CC_FACET				=   CC_HIERARCHY_OBJECT | CC_FACET_BIT,
-    CC_POINT_OCTREE         =   CC_HIERARCHY_OBJECT | CC_OCTREE_BIT | CC_LEAF_BIT,
-    CC_POINT_KDTREE         =   CC_HIERARCHY_OBJECT | CC_KDTREE_BIT | CC_LEAF_BIT,
-    CC_POLY_LINE            =   CC_HIERARCHY_OBJECT | CC_POLYLINE_BIT,
-    CC_IMAGE				=   CC_HIERARCH_BIT | CC_IMAGE_BIT,
-    CC_CALIBRATED_IMAGE		=   CC_IMAGE  | CC_LEAF_BIT,
-    CC_SENSOR				=   CC_HIERARCH_BIT | CC_SENSOR_BIT,
-    CC_GBL_SENSOR			=	CC_SENSOR | CC_LEAF_BIT,
-	CC_PRIMITIVE			=   CC_MESH | CC_PRIMITIVE_BIT, //primitives are meshes!
-	CC_PLANE				=	CC_PRIMITIVE | CC_PLANE_BIT,
-	CC_SPHERE				=	CC_PRIMITIVE | CC_SPHERE_BIT,
-	CC_TORUS				=	CC_PRIMITIVE | CC_TORUS_BIT,
-	CC_CYLINDER				=	CC_PRIMITIVE | CC_CYLINDER_BIT,
-	CC_CONE					=	CC_PRIMITIVE | CC_CONE_BIT,
-	CC_BOX					=	CC_PRIMITIVE | CC_BOX_BIT,
-	CC_DISH					=	CC_PRIMITIVE | CC_DISH_BIT,
-	CC_EXTRU				=	CC_PRIMITIVE | CC_EXTRU_BIT,
-	CC_MATERIAL_SET			=	CC_MATERIAL_BIT | CC_GROUP_BIT | CC_LEAF_BIT,
-	CC_CHUNKED_ARRAY		=	CC_ARRAY_BIT,
-	CC_NORMALS_ARRAY		=	CC_ARRAY_BIT | CC_NORMAL_BIT | CC_LEAF_BIT,
-	CC_NORMAL_INDEXES_ARRAY	=	CC_ARRAY_BIT | CC_COMPRESSED_NORMAL_BIT | CC_LEAF_BIT,
-	CC_RGB_COLOR_ARRAY		=	CC_ARRAY_BIT | CC_RGB_COLOR_BIT | CC_LEAF_BIT,
-	CC_TEX_COORDS_ARRAY		=	CC_ARRAY_BIT | CC_TEX_COORDS_BIT | CC_LEAF_BIT,
-	CC_2D_LABEL				=	CC_HIERARCHY_OBJECT | CC_LABEL_BIT | CC_LEAF_BIT,
-	CC_2D_VIEWPORT_OBJECT	=	CC_HIERARCHY_OBJECT | CC_VIEWPORT_BIT | CC_LEAF_BIT,
-	CC_2D_VIEWPORT_LABEL	=	CC_2D_VIEWPORT_OBJECT | CC_LABEL_BIT,
-	CC_CLIPPING_BOX			=	CC_CLIP_BOX_BIT | CC_LEAF_BIT,
+class CC_TYPES
+{
+public:
+	static const CC_CLASS_ENUM OBJECT				=	0;
+	static const CC_CLASS_ENUM HIERARCHY_OBJECT		=	CC_HIERARCH_BIT;
+	static const CC_CLASS_ENUM POINT_CLOUD			=	HIERARCHY_OBJECT	| CC_CLOUD_BIT;
+	static const CC_CLASS_ENUM MESH					=	HIERARCHY_OBJECT	| CC_MESH_BIT;
+	static const CC_CLASS_ENUM SUB_MESH				=	HIERARCHY_OBJECT	| CC_MESH_BIT				| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM MESH_GROUP			=	MESH				| CC_GROUP_BIT;				//DEPRECATED; DEFINITION REMAINS FOR BACKWARD COMPATIBILITY ONLY!
+	static const CC_CLASS_ENUM FACET				=	HIERARCHY_OBJECT	| CC_FACET_BIT;
+	static const CC_CLASS_ENUM POINT_OCTREE			=	HIERARCHY_OBJECT	| CC_OCTREE_BIT				| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM POINT_KDTREE			=	HIERARCHY_OBJECT	| CC_KDTREE_BIT				| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM POLY_LINE			=	HIERARCHY_OBJECT	| CC_POLYLINE_BIT;
+	static const CC_CLASS_ENUM IMAGE				=	CC_HIERARCH_BIT		| CC_IMAGE_BIT;
+	static const CC_CLASS_ENUM CALIBRATED_IMAGE		=	IMAGE				| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM SENSOR				=	CC_HIERARCH_BIT		| CC_SENSOR_BIT;
+	static const CC_CLASS_ENUM GBL_SENSOR			=	SENSOR				| CC_GROUND_BASED_BIT;
+	static const CC_CLASS_ENUM CAMERA_SENSOR		=	SENSOR				| CC_CAMERA_BIT;
+	static const CC_CLASS_ENUM PRIMITIVE			=	MESH				| CC_PRIMITIVE_BIT;			//primitives are meshes!
+	static const CC_CLASS_ENUM PLANE				=	PRIMITIVE			| CC_PLANE_BIT;
+	static const CC_CLASS_ENUM SPHERE				=	PRIMITIVE			| CC_SPHERE_BIT;
+	static const CC_CLASS_ENUM TORUS				=	PRIMITIVE			| CC_TORUS_BIT;
+	static const CC_CLASS_ENUM CYLINDER				=	PRIMITIVE			| CC_CYLINDER_BIT;
+	static const CC_CLASS_ENUM CONE					=	PRIMITIVE			| CC_CONE_BIT;
+	static const CC_CLASS_ENUM BOX					=	PRIMITIVE			| CC_BOX_BIT;
+	static const CC_CLASS_ENUM DISH					=	PRIMITIVE			| CC_DISH_BIT;
+	static const CC_CLASS_ENUM EXTRU				=	PRIMITIVE			| CC_EXTRU_BIT;
+	static const CC_CLASS_ENUM QUADRIC				=	PRIMITIVE			| CC_QUADRIC_BIT;
+	static const CC_CLASS_ENUM MATERIAL_SET			=	CC_MATERIAL_BIT		| CC_GROUP_BIT				| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM CHUNKED_ARRAY		=	CC_ARRAY_BIT;
+	static const CC_CLASS_ENUM NORMALS_ARRAY		=	CC_ARRAY_BIT		| CC_NORMAL_BIT				| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM NORMAL_INDEXES_ARRAY	=	CC_ARRAY_BIT		| CC_COMPRESSED_NORMAL_BIT	| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM RGB_COLOR_ARRAY		=	CC_ARRAY_BIT		| CC_RGB_COLOR_BIT			| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM TEX_COORDS_ARRAY		=	CC_ARRAY_BIT		| CC_TEX_COORDS_BIT			| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM LABEL_2D				=	HIERARCHY_OBJECT	| CC_LABEL_BIT				| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM VIEWPORT_2D_OBJECT	=	HIERARCHY_OBJECT	| CC_VIEWPORT_BIT			| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM VIEWPORT_2D_LABEL	=	VIEWPORT_2D_OBJECT	| CC_LABEL_BIT;
+	static const CC_CLASS_ENUM CLIPPING_BOX			=	CC_CLIP_BOX_BIT		| CC_LEAF_BIT;
+	static const CC_CLASS_ENUM TRANS_BUFFER			=	HIERARCHY_OBJECT	| CC_TRANS_BUFFER_BIT		| CC_LEAF_BIT;
+
+	//  Custom types
+	/**	Custom objects are typically defined by plugins. They can be inserted in an object
+		hierarchy or displayed in an OpenGL context like any other ccHObject.
+		To differentiate custom objects, use the meta-data mechanism (see ccOBject::getMetaData
+		and ccOBject::setMetaData). You can also define a custom icon (see ccHObject::getIcon).
+
+		It is highly advised to use the ccCustomHObject and ccCustomLeafObject interfaces to
+		define a custom types. Carefully read the ccCustomHObject::isDeserialized method's
+		description and the warning below!
+
+		Warning: custom objects can't be 'fully' serialized. Don't overload the
+		'ccSerializableObject::toFile' method for them as this would break the deserialization mechanism!
+		They can only be serialized as plain ccHObject instances (CC_TYPES::HIERARCHY_OBJECT).
+		Hierarchical custom objects (CC_TYPES::CUSTOM_H_OBJECT) will be deserialized as ccCustomHObject
+		instances. Leaf custom objects (CC_TYPES::CUSTOM_LEAF_OBJECT) will be deserialized as
+		ccCustomLeafObject instances.
+	**/
+	static const CC_CLASS_ENUM CUSTOM_H_OBJECT		=	HIERARCHY_OBJECT | CC_CUSTOM_BIT;
+	static const CC_CLASS_ENUM CUSTOM_LEAF_OBJECT	=	CUSTOM_H_OBJECT | CC_LEAF_BIT;
+
 };
 
 //! Generic "CloudCompare Object" template
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccObject : public ccSerializableObject
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccObject : public ccSerializableObject
 #else
 class ccObject : public ccSerializableObject
 #endif
@@ -125,13 +168,13 @@ public:
     virtual CC_CLASS_ENUM getClassID() const = 0;
 
     //! Returns object name
-    virtual QString getName() const;
+	virtual inline QString getName() const { return m_name; }
 
     //! Sets object name
-    virtual void setName(const QString& name);
+	virtual inline void setName(const QString& name) { m_name = name; }
 
-    //! Returns object unqiue ID
-    virtual unsigned getUniqueID() const;
+    //! Returns object unique ID
+	virtual inline unsigned getUniqueID() const { return m_uniqueID; }
 
 	//! Changes unique ID
 	/** WARNING: HANDLE WITH CARE!
@@ -139,38 +182,30 @@ public:
 	**/
     virtual void setUniqueID(unsigned ID);
 
-    //! Returns flag state
-    virtual bool getFlagState(CC_OBJECT_FLAG flag) const;
-
-    //! Sets flag state
-    /** \param flag object flag to set
-        \param state flag state
-    **/
-    virtual void setFlagState(CC_OBJECT_FLAG flag, bool state);
-
     //! Returns whether the object is enabled or not
     /** Shortcut to access flag CC_ENABLED
     **/
-    virtual bool isEnabled() const;
+	virtual inline bool isEnabled() const { return getFlagState(CC_ENABLED); }
 
     //! Sets the "enabled" property
     /** Shortcut to modify flag CC_ENABLED
     **/
-    virtual void setEnabled(bool state);
+	virtual inline void setEnabled(bool state) { setFlagState(CC_ENABLED,state); }
 
     //! Returns whether the object is locked  or not
     /** Shortcut to access flag CC_LOCKED
     **/
-    virtual bool isLocked() const;
+	virtual inline bool isLocked() const { return getFlagState(CC_LOCKED); }
 
     //! Sets the "enabled" property
     /** Shortcut to modify flag CC_LOCKED
     **/
-    virtual void setLocked(bool state);
+	virtual inline void setLocked(bool state) { setFlagState(CC_LOCKED,state); }
 
     //shortcuts
     inline bool isGroup() const { return (getClassID() & CC_GROUP_BIT) != 0; }
     inline bool isLeaf() const {return (getClassID() & CC_LEAF_BIT) != 0; }
+    inline bool isCustom() const {return (getClassID() & CC_CUSTOM_BIT) != 0; }
     inline bool isHierarchy() const { return (getClassID() & CC_HIERARCH_BIT) != 0; }
 
     inline bool isKindOf(CC_CLASS_ENUM type) const { return (getClassID() & type) == type; }
@@ -183,14 +218,14 @@ public:
 
 	//! Returns a new unassigned unique ID
 	/** Unique IDs are handled with persistent settings
-		in order to assure consistency between main app 
+		in order to assure consistency between main app
 		and plugins!
 	**/
 	static unsigned GetNextUniqueID();
 
 	//! Returns last assigned unique ID
 	/** Unique IDs are handled with persistent settings
-		in order to assure consistency between main app 
+		in order to assure consistency between main app
 		and plugins!
 	**/
 	static unsigned GetLastUniqueID();
@@ -198,7 +233,7 @@ public:
 	//! Helper: reads out class ID from a binary stream
 	/** Must be called before 'fromFile'!
 	**/
-	static bool ReadClassIDFromFile(unsigned& classID, QFile& in, short dataVersion);
+	static CC_CLASS_ENUM ReadClassIDFromFile(QFile& in, short dataVersion);
 
 	//! Returns a given associated meta data
 	/** \param key meta data unique identifier (case sensitive!)
@@ -216,12 +251,27 @@ public:
 	/** \param key meta data unique identifier (case sensitive!)
 		\param data data
 	**/
-	void setMetaData(QString key, QVariant& data);
+	void setMetaData(QString key, QVariant data);
+
+    //! Says if a metadata with the given key exists or not
+    /** \param key is the key to look for
+        \return true, if exists
+    **/
+    bool hasMetaData(QString key);
 
 	//! Returns meta-data map (const only)
 	const QVariantMap& metaData() const { return m_metaData; }
 
 protected:
+
+    //! Returns flag state
+	virtual inline bool getFlagState(CC_OBJECT_FLAG flag) const { return (m_flags & flag); }
+
+    //! Sets flag state
+    /** \param flag object flag to set
+        \param state flag state
+    **/
+    virtual void setFlagState(CC_OBJECT_FLAG flag, bool state);
 
 	//inherited from ccSerializableObject
 	virtual bool toFile(QFile& out) const;
@@ -235,7 +285,7 @@ protected:
 
 	//! Sets last assigned unique ID
 	/** Unique IDs are handled with persistent settings
-		in order to assure consistency between main app 
+		in order to assure consistency between main app
 		and plugins!
 	**/
 	static void UpdateLastUniqueID(unsigned lastID);

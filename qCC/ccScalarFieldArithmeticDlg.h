@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1691                                                              $
-//$LastChangedDate:: 2010-10-22 16:52:55 +0200 (ven., 22 oct. 2010)        $
-//**************************************************************************
-//
 
 #ifndef CC_SF_ARITMETHIC_DLG_HEADER
 #define CC_SF_ARITMETHIC_DLG_HEADER
@@ -35,7 +28,7 @@ class ccScalarFieldArithmeticDlg : public QDialog, public Ui::SFComparisonDlg
 public:
 
     //! Default constructor
-    ccScalarFieldArithmeticDlg(ccPointCloud* cloud, QWidget* parent=0);
+    ccScalarFieldArithmeticDlg(ccPointCloud* cloud, QWidget* parent = 0);
 
     //! Returns first selected SF index
     int getSF1Index();

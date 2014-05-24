@@ -146,6 +146,9 @@
      <property name="title">
       <string>Scalar fields</string>
      </property>
+     <addaction name="actionShowHistogram"/>
+     <addaction name="actionComputeStatParams"/>
+     <addaction name="separator"/>
      <addaction name="actionSFGradient"/>
      <addaction name="actionGaussianFilter"/>
      <addaction name="actionBilateralFilter"/>
@@ -172,6 +175,7 @@
      <addaction name="actionColorize"/>
      <addaction name="actionSetColorGradient"/>
      <addaction name="actionScalarFieldFromColor"/>
+     <addaction name="actionInterpolateColors"/>
      <addaction name="separator"/>
      <addaction name="actionClearColor"/>
     </widget>
@@ -179,10 +183,24 @@
      <property name="title">
       <string>Normals</string>
      </property>
+     <widget class="QMenu" name="menuOrientNormals">
+      <property name="title">
+       <string>Orient normals</string>
+      </property>
+      <addaction name="actionOrientNormalsMST"/>
+      <addaction name="actionOrientNormalsFM"/>
+     </widget>
+     <widget class="QMenu" name="menuConvert_to">
+      <property name="title">
+       <string>Convert to</string>
+      </property>
+      <addaction name="actionConvertNormalToHSV"/>
+      <addaction name="actionConvertNormalToDipDir"/>
+     </widget>
      <addaction name="actionComputeNormals"/>
-     <addaction name="actionConvertNormalToHSV"/>
      <addaction name="actionInvertNormals"/>
-     <addaction name="actionResolveNormalsDirection"/>
+     <addaction name="menuOrientNormals"/>
+     <addaction name="menuConvert_to"/>
      <addaction name="separator"/>
      <addaction name="actionClearNormals"/>
     </widget>
@@ -227,11 +245,28 @@
       <addaction name="actionShowDepthBuffer"/>
       <addaction name="actionExportDepthBuffer"/>
      </widget>
-     <addaction name="menuGroundBasedLidar"/>
-     <addaction name="actionProjectSensor"/>
+     <widget class="QMenu" name="menuCreateSensor">
+      <property name="title">
+       <string>Create</string>
+      </property>
+      <addaction name="actionCreateGBLSensor"/>
+      <addaction name="actionCreateCameraSensor"/>
+     </widget>
+     <widget class="QMenu" name="menuCameraSensor">
+      <property name="title">
+       <string>Camera Sensor</string>
+      </property>
+      <addaction name="actionProjectUncertainty"/>
+      <addaction name="actionCheckPointsInsideFrustrum"/>
+     </widget>
+     <addaction name="menuCreateSensor"/>
      <addaction name="actionModifySensor"/>
+     <addaction name="menuGroundBasedLidar"/>
+     <addaction name="menuCameraSensor"/>
+     <addaction name="separator"/>
      <addaction name="actionComputeDistancesFromSensor"/>
      <addaction name="actionComputeScatteringAngles"/>
+     <addaction name="actionViewFromSensor"/>
     </widget>
     <widget class="QMenu" name="menuToggle">
      <property name="title">
@@ -255,7 +290,11 @@
     <addaction name="actionMerge"/>
     <addaction name="actionSubsample"/>
     <addaction name="actionApplyTransformation"/>
-    <addaction name="actionMultiply"/>
+    <addaction name="actionApplyScale"/>
+    <addaction name="separator"/>
+    <addaction name="actionTranslateRotate"/>
+    <addaction name="actionSegment"/>
+    <addaction name="actionCrop"/>
     <addaction name="separator"/>
     <addaction name="actionEditGlobalShift"/>
     <addaction name="actionEditGlobalScale"/>
@@ -296,9 +335,10 @@
       <string>Segmentation</string>
      </property>
      <addaction name="actionLabelConnectedComponents"/>
+     <addaction name="actionCrossSection"/>
+     <addaction name="separator"/>
      <addaction name="actionKMeans"/>
      <addaction name="actionFrontPropagation"/>
-     <addaction name="actionCrossSection"/>
     </widget>
     <widget class="QMenu" name="menuProjection">
      <property name="title">
@@ -327,7 +367,7 @@
      <property name="title">
       <string>Registration</string>
      </property>
-     <addaction name="actionMatchBarycenters"/>
+     <addaction name="actionMatchBBCenters"/>
      <addaction name="actionPointPairsAlign"/>
      <addaction name="actionRegister"/>
     </widget>
@@ -335,23 +375,36 @@
      <property name="title">
       <string>Other</string>
      </property>
-     <addaction name="actionDensity"/>
+     <widget class="QMenu" name="menuDensity">
+      <property name="title">
+       <string>Density</string>
+      </property>
+      <addaction name="actionAccurateDensity"/>
+      <addaction name="actionApproximateDensity"/>
+     </widget>
+     <addaction name="menuDensity"/>
      <addaction name="actionCurvature"/>
      <addaction name="actionRoughness"/>
+     <addaction name="actionRemoveDuplicatePoints"/>
     </widget>
-    <widget class="QMenu" name="menuSand_Box">
+    <widget class="QMenu" name="menuSandBox">
      <property name="title">
       <string>Sand box (research)</string>
      </property>
      <addaction name="actionComputeKdTree"/>
      <addaction name="separator"/>
-     <addaction name="actionMeshBestFittingQuadric"/>
      <addaction name="separator"/>
      <addaction name="actionComputeBestFitBB"/>
+     <addaction name="actionDistanceToBestFitQuadric3D"/>
      <addaction name="separator"/>
      <addaction name="actionAlign"/>
      <addaction name="separator"/>
      <addaction name="actionSNETest"/>
+     <addaction name="actionCNETest"/>
+     <addaction name="separator"/>
+     <addaction name="actionFindBiggestInnerRectangle"/>
+     <addaction name="separator"/>
+     <addaction name="actionExportCloudsInfo"/>
     </widget>
     <widget class="QMenu" name="menuFit">
      <property name="title">
@@ -359,6 +412,7 @@
      </property>
      <addaction name="actionFitPlane"/>
      <addaction name="actionFitFacet"/>
+     <addaction name="actionFitQuadric"/>
     </widget>
     <addaction name="menuProjection"/>
     <addaction name="menuRegistration"/>
@@ -371,7 +425,7 @@
     <addaction name="actionPointPicking"/>
     <addaction name="actionPointListPicking"/>
     <addaction name="separator"/>
-    <addaction name="menuSand_Box"/>
+    <addaction name="menuSandBox"/>
    </widget>
    <addaction name="menu_File"/>
    <addaction name="menuEdit"/>
@@ -1237,17 +1291,6 @@
     <string>Clear colors</string>
    </property>
   </action>
-  <action name="actionResolveNormalsDirection">
-   <property name="text">
-    <string>Resolve direction</string>
-   </property>
-   <property name="toolTip">
-    <string>Resolve normals directions</string>
-   </property>
-   <property name="statusTip">
-    <string>Resolve normals directions</string>
-   </property>
-  </action>
   <action name="actionClearNormals">
    <property name="icon">
     <iconset resource="../icones.qrc">
@@ -1344,6 +1387,9 @@
    </property>
   </action>
   <action name="actionKMeans">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="text">
     <string>K-Means</string>
    </property>
@@ -1355,6 +1401,9 @@
    </property>
   </action>
   <action name="actionFrontPropagation">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="text">
     <string>Front propagation</string>
    </property>
@@ -1365,7 +1414,7 @@
     <string>Classify points by propagating a front on a scalar field</string>
    </property>
   </action>
-  <action name="actionMultiply">
+  <action name="actionApplyScale">
    <property name="text">
     <string>Multiply/Scale</string>
    </property>
@@ -1376,9 +1425,9 @@
     <string>Multiply coordinates (separately)</string>
    </property>
   </action>
-  <action name="actionMatchBarycenters">
+  <action name="actionMatchBBCenters">
    <property name="text">
-    <string>Match barycenters</string>
+    <string>Match bounding-box centers</string>
    </property>
    <property name="toolTip">
     <string>Synchronize selected entities bbox centers</string>
@@ -1738,15 +1787,6 @@
     <string>Convert current scalar field to RGB colors</string>
    </property>
   </action>
-  <action name="actionProjectSensor">
-   <property name="icon">
-    <iconset resource="../icones.qrc">
-     <normaloff>:/CC/images/dbSensorSymbol.png</normaloff>:/CC/images/dbSensorSymbol.png</iconset>
-   </property>
-   <property name="text">
-    <string>Create</string>
-   </property>
-  </action>
   <action name="actionShowDepthBuffer">
    <property name="text">
     <string>Show depth buffer</string>
@@ -1875,11 +1915,6 @@
     <string>Pick several points (and export them to ASCII file, a new cloud, etc.)</string>
    </property>
   </action>
-  <action name="actionDensity">
-   <property name="text">
-    <string>Density</string>
-   </property>
-  </action>
   <action name="actionCurvature">
    <property name="text">
     <string>Curvature</string>
@@ -1906,14 +1941,20 @@
     <string>Rename</string>
    </property>
   </action>
-  <action name="actionMeshBestFittingQuadric">
+  <action name="actionFitQuadric">
    <property name="text">
-    <string>Best fitting quadric</string>
+    <string>2D1/2 quadric</string>
    </property>
   </action>
   <action name="actionSNETest">
    <property name="text">
     <string>SNE test</string>
+   </property>
+   <property name="toolTip">
+    <string>Spherical Neighbourhood Extraction test</string>
+   </property>
+   <property name="statusTip">
+    <string>Spherical Neighbourhood Extraction test</string>
    </property>
   </action>
   <action name="actionToggleVisibility">
@@ -1975,7 +2016,7 @@
   </action>
   <action name="actionConvertNormalToHSV">
    <property name="text">
-    <string>Convert to HSV</string>
+    <string>HSV colors</string>
    </property>
   </action>
   <action name="actionSaveViewportAsObject">
@@ -2382,6 +2423,100 @@
   <action name="actionEditGlobalScale">
    <property name="text">
     <string>Edit global scale</string>
+   </property>
+  </action>
+  <action name="actionViewFromSensor">
+   <property name="text">
+    <string>View from sensor</string>
+   </property>
+  </action>
+  <action name="actionFindBiggestInnerRectangle">
+   <property name="text">
+    <string>Find biggest inner rectangle (2D)</string>
+   </property>
+  </action>
+  <action name="actionCreateGBLSensor">
+   <property name="text">
+    <string>GBL Sensor</string>
+   </property>
+  </action>
+  <action name="actionCreateCameraSensor">
+   <property name="text">
+    <string>Camera Sensor</string>
+   </property>
+  </action>
+  <action name="actionCheckPointsInsideFrustrum">
+   <property name="text">
+    <string>Compute points visibility (with octree)</string>
+   </property>
+  </action>
+  <action name="actionProjectUncertainty">
+   <property name="text">
+    <string>Project Uncertainty</string>
+   </property>
+  </action>
+  <action name="actionOrientNormalsMST">
+   <property name="text">
+    <string>With Minimum Spanning Tree</string>
+   </property>
+  </action>
+  <action name="actionOrientNormalsFM">
+   <property name="text">
+    <string>With Fast Marching</string>
+   </property>
+  </action>
+  <action name="actionCNETest">
+   <property name="text">
+    <string>CNE test</string>
+   </property>
+   <property name="iconText">
+    <string>Cylindrical Neighbourhood Extraction test</string>
+   </property>
+   <property name="toolTip">
+    <string>Cylindrical Neighbourhood Extraction test</string>
+   </property>
+  </action>
+  <action name="actionApproximateDensity">
+   <property name="text">
+    <string>Approximate (dist. to nearest neighbor)</string>
+   </property>
+  </action>
+  <action name="actionAccurateDensity">
+   <property name="text">
+    <string>Accurate (at a given scale)</string>
+   </property>
+  </action>
+  <action name="actionRemoveDuplicatePoints">
+   <property name="text">
+    <string>Remove duplicate points</string>
+   </property>
+  </action>
+  <action name="actionCrop">
+   <property name="text">
+    <string>Crop</string>
+   </property>
+  </action>
+  <action name="actionConvertNormalToDipDir">
+   <property name="text">
+    <string>Dip/Dip direction SFs</string>
+   </property>
+  </action>
+  <action name="actionExportCloudsInfo">
+   <property name="text">
+    <string>Export cloud(s) info</string>
+   </property>
+  </action>
+  <action name="actionInterpolateColors">
+   <property name="text">
+    <string>Interpolate from another entity</string>
+   </property>
+   <property name="toolTip">
+    <string>Interpolate colors from another entity (cloud or mesh) - color is taken from the nearest neighbor</string>
+   </property>
+  </action>
+  <action name="actionDistanceToBestFitQuadric3D">
+   <property name="text">
+    <string>Distance map to best-fit 3D quadric</string>
    </property>
   </action>
  </widget>

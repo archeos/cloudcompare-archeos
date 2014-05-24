@@ -56,15 +56,16 @@ void ChunkedPointCloud::forEach(genericPointAction& anAction)
 	ScalarField* currentOutScalarFieldArray = getCurrentOutScalarField();
 	if (currentOutScalarFieldArray)
 	{
-		for (unsigned i=0;i<n;++i)
+		for (unsigned i=0; i<n; ++i)
 			anAction(*(CCVector3*)m_points->getValue(i),(*currentOutScalarFieldArray)[i]);
 	}
-	else //otherwise we use a fake SF (DGM FIXME: is it really interesting?!)
+	/*else //otherwise we use a fake SF (DGM FIXME: is it really interesting?!) --> NO ;)
 	{
 		ScalarType dummyDist = 0;
-		for (unsigned i=0;i<n;++i)
+		for (unsigned i=0; i<n; ++i)
 			anAction(*(CCVector3*)m_points->getValue(i),dummyDist);
 	}
+	//*/
 }
 
 void ChunkedPointCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
@@ -130,7 +131,7 @@ bool ChunkedPointCloud::reserve(unsigned newNumberOfPoints)
         return false;
 
 	//then the scalarfields
-	for (unsigned i=0;i<m_scalarFields.size();++i)
+	for (size_t i=0; i<m_scalarFields.size(); ++i)
 	{
 		if (!m_scalarFields[i]->reserve(newNumberOfPoints))
 			return false;
@@ -327,8 +328,8 @@ int ChunkedPointCloud::getScalarFieldIndexByName(const char* name) const
     for (size_t i=0; i<sfCount; ++i)
     {
         //we don't accept two SF with the same name!
-        if (strcmp(m_scalarFields[i]->getName(),name)==0)
-            return (int)i;
+        if (strcmp(m_scalarFields[i]->getName(),name) == 0)
+            return static_cast<int>(i);
     }
 
 	return -1;

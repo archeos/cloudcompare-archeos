@@ -26,8 +26,8 @@
 
 //! Triangular mesh
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccMesh : public ccGenericMesh
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccMesh : public ccGenericMesh
 #else
 class ccMesh : public ccGenericMesh
 #endif
@@ -50,10 +50,10 @@ public:
 	virtual ~ccMesh();
 
     //! Returns class ID
-    virtual CC_CLASS_ENUM getClassID() const { return CC_MESH; };
+    virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::MESH; };
 
 	//! Sets the associated vertices cloud (warning)
-	virtual void setAssociatedCloud(ccGenericPointCloud* cloud) { m_associatedCloud = cloud; }
+	virtual void setAssociatedCloud(ccGenericPointCloud* cloud);
 
 	//! Clones this entity
 	/** All the main features of the entity are cloned, except from the octree
@@ -113,9 +113,9 @@ public:
 	virtual void shiftTriangleIndexes(unsigned shift);
 
 	//! Adds a triangle to the mesh
-	/** Warning: bounding box validity is broken after a call to this method.
-        However, for the sake of performance, no call to updateModificationTime
-        is made automatically. Make sure to do so when all modifications are done.
+	/** \warning Bounding-box validity is broken after a call to this method.
+        However, for the sake of performance, no call to notifyGeometryUpdate
+        is made automatically. Make sure to do so when all modifications are done!
         \param i1 first summit index (relatively to the vertex cloud)
 		\param i2 second summit index (relatively to the vertex cloud)
 		\param i3 third summit index (relatively to the vertex cloud)
@@ -287,8 +287,17 @@ public:
 	**/
 	void setTriangleTexCoordIndexes(unsigned triangleIndex, int i1, int i2, int i3);
 
-    //! Computes per-vertex normals
-    virtual bool computeNormals();
+    //! Computes normals
+	/** \param perVertex whether normals should be computed per-vertex or per-triangle
+		\return success
+	**/
+    virtual bool computeNormals(bool perVertex);
+
+	//! Computes per-vertex normals
+    virtual bool computePerVertexNormals();
+
+	//! Computes per-triangle normals
+    virtual bool computePerTriangleNormals();
 
 	//! Laplacian smoothing
 	/** \param nbIteration smoothing iterations
@@ -331,6 +340,12 @@ public:
     **/
 	virtual ccMesh* createNewMeshFromSelection(bool removeSelectedFaces);
 
+	//! Swaps two triangles
+	/** Automatically updates internal structures (i.e. lookup tables for
+		material, normals, etc.).
+	**/
+	void swapTriangles(unsigned index1, unsigned index2);
+
 protected:
 
     //inherited from ccHObject
@@ -338,6 +353,7 @@ protected:
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
     virtual void applyGLTransformation(const ccGLMatrix& trans);
+	virtual void onUpdateOf(ccHObject* obj);
 
 	//! Same as other 'interpolateNormals' method with a set of 3 vertices indexes
 	bool interpolateNormals(unsigned i1, unsigned i2, unsigned i3, const CCVector3& P, CCVector3& N, const int* triNormIndexes = 0);
@@ -346,6 +362,31 @@ protected:
 
 	//! Used internally by 'subdivide'
 	bool pushSubdivide(/*PointCoordinateType maxArea, */unsigned indexA, unsigned indexB, unsigned indexC);
+
+	/*** EXTENDED CALL SCRIPTS (FOR CC_SUB_MESHES) ***/
+	
+	//0 parameter
+	#define ccMesh_extended_call0(baseName,recursiveName) \
+	inline virtual void recursiveName() \
+	{ \
+		baseName(); \
+		for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it) \
+			if ((*it)->isA(CC_TYPES::SUB_MESH)) \
+				static_cast<ccGenericMesh*>(*it)->baseName(); \
+	} \
+
+	//1 parameter
+	#define ccMesh_extended_call1(baseName,param1Type,recursiveName) \
+	inline virtual void recursiveName(param1Type p) \
+	{ \
+		baseName(p); \
+		for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it) \
+			if ((*it)->isA(CC_TYPES::SUB_MESH)) \
+				static_cast<ccGenericMesh*>(*it)->baseName(p); \
+	} \
+
+	//recursive equivalents of some of ccGenericMesh methods (applied to sub-meshes as well)
+	ccMesh_extended_call1(showNormals,bool,showNormals_extended);
 
 	//! associated cloud (vertices)
 	ccGenericPointCloud* m_associatedCloud;

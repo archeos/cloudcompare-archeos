@@ -48,8 +48,8 @@ class ccOctree;
 	- visibility information per point (to hide/display subsets of points)
 **/
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccGenericPointCloud : public ccHObject,  virtual public CCLib::GenericIndexedCloudPersist
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccGenericPointCloud : public ccHObject,  virtual public CCLib::GenericIndexedCloudPersist
 #else
 class ccGenericPointCloud : public ccHObject,  virtual public CCLib::GenericIndexedCloudPersist
 #endif
@@ -73,9 +73,10 @@ public:
 	/** All the main features of the entity are cloned, except from the octree and
 		the points visibility information.
 		\param destCloud destination cloud can be provided here (must be of the exact same type as the cloned cloud!)
+		\param ignoreChildren [optional] whether to ignore the cloud's children or not (in which case they will be cloned as well)
 		\return a copy of this entity
 	**/
-	virtual ccGenericPointCloud* clone(ccGenericPointCloud* destCloud = 0)=0;
+	virtual ccGenericPointCloud* clone(ccGenericPointCloud* destCloud = 0, bool ignoreChildren = false) = 0;
 
 
 	/***************************************************
@@ -118,35 +119,35 @@ public:
         It may even be 0 if the value shouldn't be displayed.
         WARNING: scalar field must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
     **/
-	virtual const colorType* geScalarValueColor(ScalarType d) const=0;
+	virtual const colorType* geScalarValueColor(ScalarType d) const = 0;
 
     //! Returns color corresponding to a given point associated scalar value
     /** The returned value depends on the current scalar field display parameters.
         It may even be 0 if the value shouldn't be displayed.
         WARNING: scalar field must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
     **/
-	virtual const colorType* getPointScalarValueColor(unsigned pointIndex) const=0;
+	virtual const colorType* getPointScalarValueColor(unsigned pointIndex) const = 0;
 
 	//! Returns scalar value associated to a given point
     /** The returned value is taken from the current displayed scalar field
         WARNING: scalar field must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
     **/
-	virtual ScalarType getPointDisplayedDistance(unsigned pointIndex) const=0;
+	virtual ScalarType getPointDisplayedDistance(unsigned pointIndex) const = 0;
 
     //! Returns color corresponding to a given point
     /** WARNING: color array must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
     **/
-	virtual const colorType* getPointColor(unsigned pointIndex) const=0;
+	virtual const colorType* getPointColor(unsigned pointIndex) const = 0;
 
     //! Returns compressed normal corresponding to a given point
     /** WARNING: normals array must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
     **/
-	virtual const normsType& getPointNormalIndex(unsigned pointIndex) const=0;
+	virtual const normsType& getPointNormalIndex(unsigned pointIndex) const = 0;
 
     //! Returns normal corresponding to a given point
     /** WARNING: normals array must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
     **/
-	virtual const PointCoordinateType* getPointNormal(unsigned pointIndex) const=0;
+	virtual const CCVector3& getPointNormal(unsigned pointIndex) const = 0;
 
 
 	/***************************************************
@@ -170,7 +171,7 @@ public:
     //! Resets the associated visiblity array
     /** Warning: allocates the array if it was not done yet!
     **/
-	virtual bool razVisibilityArray();
+	virtual bool resetVisibilityArray();
 
 	//! Erases the points visibility information
 	virtual void unallocateVisibilityArray();
@@ -186,16 +187,16 @@ public:
     virtual ccBBox getMyOwnBB();
 
     //! Forces bounding-box update
-    virtual void refreshBB()=0;
+    virtual void refreshBB() = 0;
 
 	//! Creates a new point cloud with only the 'visible' points (as defined by the visibility array)
 	/** \param removeSelectedPoints if true, exported point are also removed from the current point cloud
         \return new point cloud with selected points
     **/
-	virtual ccGenericPointCloud* createNewCloudFromVisibilitySelection(bool removeSelectedPoints=false)=0;
+	virtual ccGenericPointCloud* createNewCloudFromVisibilitySelection(bool removeSelectedPoints=false) = 0;
 
     //! Applies a rigid transformation (rotation + translation)
-    virtual void applyRigidTransformation(const ccGLMatrix& trans)=0;
+    virtual void applyRigidTransformation(const ccGLMatrix& trans) = 0;
 
 	//! Sets shift applied to original coordinates (information storage only)
 	/** Such a shift can typically be applied at loading time.
@@ -216,10 +217,37 @@ public:
 	//! Sets the scale applied to original coordinates (information storage only)
 	void setGlobalScale(double scale);
 
+	//! Returns whether the cloud is shifted or not
+	inline bool isShifted() const
+	{
+		return (	m_globalShift.x != 0
+				||	m_globalShift.y != 0
+				||	m_globalShift.z != 0
+				||	m_globalScale != 1.0 );
+	}
+
 	//! Returns the scale applied to original coordinates
 	/** See ccGenericPointCloud::setOriginalScale
 	**/
 	double getGlobalScale() const { return m_globalScale; }
+
+	//! Returns the point back-projected into the original coordinates system
+	template<typename T> inline CCVector3d toGlobal3d(const Vector3Tpl<T>& Plocal) const
+	{
+		return CCVector3d::fromArray(Plocal.u) / m_globalScale - m_globalShift;
+	}
+
+	//! Returns the point projected into the local (shifted) coordinates system
+	template<typename T> inline CCVector3d toLocal3d(const Vector3Tpl<T>& Pglobal) const
+	{
+		return CCVector3d::fromArray(Pglobal.u) * m_globalScale + m_globalShift;
+	}
+	//! Returns the point projected into the local (shifted) coordinates system
+	template<typename T> inline CCVector3 toLocal3pc(const Vector3Tpl<T>& Pglobal) const
+	{
+		CCVector3d Plocal = CCVector3d::fromArray(Pglobal.u) * m_globalScale + m_globalShift;
+		return CCVector3::fromArray(Plocal.u);
+	}
 
 	//inherited from ccSerializableObject
 	virtual bool isSerializable() const { return true; }

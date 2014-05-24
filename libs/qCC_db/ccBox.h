@@ -27,8 +27,8 @@
 /** 3D box primitive
 **/
 #ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccBox : public ccGenericPrimitive
+#include "qCC_db.h"
+class QCC_DB_LIB_API ccBox : public ccGenericPrimitive
 #else
 class ccBox : public ccGenericPrimitive
 #endif
@@ -52,7 +52,7 @@ public:
 	ccBox(QString name = QString("Box"));
 
     //! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const { return CC_BOX; }
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::BOX; }
 
 	//inherited from ccGenericPrimitive
 	virtual QString getTypeName() const { return "Box"; }
