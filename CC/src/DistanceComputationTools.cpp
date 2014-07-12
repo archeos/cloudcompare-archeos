@@ -51,7 +51,7 @@ namespace CCLib
 	{
 	public:
 		//! cell code
-		unsigned cellCode;
+		DgmOctree::OctreeCellCodeType cellCode;
 		//! Indexes of all faces inside cell
 		std::vector<unsigned> faceIndexes;
 
@@ -1365,8 +1365,9 @@ int DistanceComputationTools::computePointCloud2MeshDistanceWithOctree(OctreeAnd
 
 #ifdef ENABLE_CLOUD2MESH_DIST_MT
 
-#include <QtCore/QtCore>
-#include <QtGui/QApplication>
+#include <QtCore>
+#include <QApplication>
+#include <QtConcurrentMap>
 
 /*** MULTI THREADING WRAPPER ***/
 

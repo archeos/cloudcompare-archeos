@@ -40,6 +40,7 @@ ccScalarField::ccScalarField(const char* name/*=0*/)
 	, m_alwaysShowZero(false)
 	, m_colorScale(0)
 	, m_colorRampSteps(0)
+	, m_modified(true)
 {
 	setColorRampSteps(ccColorScale::DEFAULT_STEPS);
 	setColorScale(ccColorScalesManager::GetUniqueInstance()->getDefaultScale(ccColorScalesManager::BGYR));
@@ -48,7 +49,7 @@ ccScalarField::ccScalarField(const char* name/*=0*/)
 ScalarType ccScalarField::normalize(ScalarType d) const
 {
 	if (/*!ValidValue(d) || */!m_displayRange.isInRange(d)) //NaN values are also rejected by 'isInRange'!
-		return (ScalarType)-1.0;
+		return static_cast<ScalarType>(-1);
 
 	//most probable path first!
 	if (!m_logScale)
@@ -58,41 +59,41 @@ ScalarType ccScalarField::normalize(ScalarType d) const
 			if (d <= m_saturationRange.start())
 				return 0;
 			else if (d >= m_saturationRange.stop())
-				return (ScalarType)1.0;
+				return static_cast<ScalarType>(1);
 			return (d - m_saturationRange.start()) / m_saturationRange.range();
 		}
 		else //symmetric scale
 		{
 			if (fabs(d) <= m_saturationRange.start())
-				return (ScalarType)0.5;
+				return static_cast<ScalarType>(0.5);
 			
 			if (d >= 0)
 			{
 				if (d >= m_saturationRange.stop())
-					return (ScalarType)1.0;
-				return ((ScalarType)1.0 + (d - m_saturationRange.start()) / m_saturationRange.range()) / (ScalarType)2.0;
+					return static_cast<ScalarType>(1);
+				return (static_cast<ScalarType>(1) + (d - m_saturationRange.start()) / m_saturationRange.range()) / (ScalarType)2.0;
 			}
 			else
 			{
 				if (d <= -m_saturationRange.stop())
-					return (ScalarType)0.0;
-				return ((ScalarType)1.0 + (d + m_saturationRange.start()) / m_saturationRange.range()) / (ScalarType)2.0;
+					return 0;
+				return (static_cast<ScalarType>(1) + (d + m_saturationRange.start()) / m_saturationRange.range()) / (ScalarType)2.0;
 			}
 		}
 	}
 	else //log scale
 	{
-        ScalarType dLog = log10(std::max( (ScalarType) fabs(d),(ScalarType)ZERO_TOLERANCE));
+		ScalarType dLog = log10(std::max(static_cast<ScalarType>(fabs(d)), static_cast<ScalarType>(ZERO_TOLERANCE)));
 		if (dLog <= m_logSaturationRange.start())
 			return 0;
 		else if (dLog >= m_logSaturationRange.stop())
-			return (ScalarType)1.0;
+			return static_cast<ScalarType>(1);
 		return (dLog - m_logSaturationRange.start()) / m_logSaturationRange.range();
 	}
 
 	//can't get here normally!
 	assert(false);
-	return (ScalarType)-1.0;
+	return static_cast<ScalarType>(-1);
 }
 
 void ccScalarField::setColorScale(ccColorScale::Shared scale)
@@ -109,6 +110,8 @@ void ccScalarField::setColorScale(ccColorScale::Shared scale)
 
 		if (isAbsolute || wasAbsolute != isAbsolute)
 			updateSaturationBounds();
+
+		m_modified = true;
 	}
 }
 
@@ -118,6 +121,8 @@ void ccScalarField::setSymmetricalScale(bool state)
 	{
 		m_symmetricalScale = state;
 		updateSaturationBounds();
+
+		m_modified = true;
 	}
 }
 
@@ -130,6 +135,8 @@ void ccScalarField::setLogScale(bool state)
 		{
 			ccLog::Warning("[ccScalarField] Scalar field contains negative values! Log scale will only consider absolute values...");
 		}
+
+		m_modified = true;
 	}
 }
 
@@ -149,7 +156,7 @@ void ccScalarField::computeMinAndMax()
 		else
 		{
 			unsigned count = currentSize();
-			unsigned numberOfClasses = (unsigned)ceil(sqrt((double)count));
+			unsigned numberOfClasses = static_cast<unsigned>( ceil(sqrt(static_cast<double>(count))) );
 			numberOfClasses = std::max<unsigned>(std::min<unsigned>(numberOfClasses,MAX_HISTOGRAM_SIZE),4);
 
 			m_histogram.maxValue = 0;
@@ -171,11 +178,12 @@ void ccScalarField::computeMinAndMax()
 
 				//compute histogram
 				{
+					ScalarType step = static_cast<ScalarType>(numberOfClasses)/m_displayRange.maxRange();
 					for (unsigned i=0; i<count; ++i)
 					{
 						const ScalarType& val = getValue(i);
 
-						unsigned bin = static_cast<unsigned>(floor((val-m_displayRange.min())*(ScalarType)numberOfClasses/m_displayRange.maxRange()));
+						unsigned bin = static_cast<unsigned>(floor((val-m_displayRange.min())*step));
 						++m_histogram[std::min(bin,numberOfClasses-1)];
 					}
 				}
@@ -185,6 +193,8 @@ void ccScalarField::computeMinAndMax()
 			}
 		}
 	}
+
+	m_modified = true;
 
 	updateSaturationBounds();
 }
@@ -232,6 +242,20 @@ void ccScalarField::updateSaturationBounds()
 			m_logSaturationRange.setBounds(minSatLog,maxSatLog);
 		}
 	}
+
+	m_modified = true;
+}
+
+void ccScalarField::setMinDisplayed(ScalarType val)
+{
+	m_displayRange.setStart(val);
+	m_modified = true;
+}
+	
+void ccScalarField::setMaxDisplayed(ScalarType val)
+{
+	m_displayRange.setStop(val);
+	m_modified = true;
 }
 
 void ccScalarField::setSaturationStart(ScalarType val)
@@ -244,6 +268,7 @@ void ccScalarField::setSaturationStart(ScalarType val)
 	{
 		m_saturationRange.setStart(val);
 	}
+	m_modified = true;
 }
 
 void ccScalarField::setSaturationStop(ScalarType val)
@@ -256,6 +281,7 @@ void ccScalarField::setSaturationStop(ScalarType val)
 	{
 		m_saturationRange.setStop(val);
 	}
+	m_modified = true;
 }
 
 void ccScalarField::setColorRampSteps(unsigned steps)
@@ -263,9 +289,11 @@ void ccScalarField::setColorRampSteps(unsigned steps)
 	if (steps > ccColorScale::MAX_STEPS)
 		m_colorRampSteps = ccColorScale::MAX_STEPS;
 	else if (steps < ccColorScale::MIN_STEPS)
-        m_colorRampSteps = ccColorScale::MIN_STEPS;
-    else
-        m_colorRampSteps = steps;
+		m_colorRampSteps = ccColorScale::MIN_STEPS;
+	else
+		m_colorRampSteps = steps;
+
+	m_modified = true;
 }
 
 bool ccScalarField::toFile(QFile& out) const
@@ -339,11 +367,11 @@ bool ccScalarField::fromFile(QFile& in, short dataVersion, int flags)
 {
 	assert(in.isOpen() && (in.openMode() & QIODevice::ReadOnly));
 
-	if (dataVersion<20)
+	if (dataVersion < 20)
 		return CorruptError();
 
 	//name (dataVersion>=20)
-	if (in.read(m_name,256)<0)
+	if (in.read(m_name,256) < 0)
 		return ReadError();
 
 	//'strictly positive' state (20 <= dataVersion < 26)
@@ -377,13 +405,13 @@ bool ccScalarField::fromFile(QFile& in, short dataVersion, int flags)
 	//convert former 'hidden/NaN' values for non strictly positive SFs (dataVersion < 26)
 	if (dataVersion < 26)
 	{
-		const ScalarType FORMER_BIG_VALUE = (ScalarType)(sqrt(3.4e38f)-1.0f);
+		const ScalarType FORMER_BIG_VALUE = static_cast<ScalarType>(sqrt(3.4e38f)-1.0f);
 
 		for (unsigned i=0; i<m_maxCount; ++i)
 		{
 			ScalarType val = getValue(i);
 			//convert former 'HIDDEN_VALUE' and 'BIG_VALUE' to 'NAN_VALUE'
-			if (onlyPositiveValues && val < 0 || !onlyPositiveValues && val >= FORMER_BIG_VALUE)
+			if ((onlyPositiveValues && val < 0) || (!onlyPositiveValues && val >= FORMER_BIG_VALUE))
 				val = NAN_VALUE;
 		}
 	}
@@ -542,5 +570,29 @@ bool ccScalarField::fromFile(QFile& in, short dataVersion, int flags)
 	m_logSaturationRange.setStart((ScalarType)minLogSaturation);
 	m_logSaturationRange.setStop((ScalarType)maxLogSaturation);
 
+	m_modified = true;
+
 	return true;
+}
+
+bool ccScalarField::mayHaveHiddenValues() const
+{
+	bool hiddenPoints = (		!areNaNValuesShownInGrey()
+						&&	(	m_displayRange.stop()	<= m_displayRange.max()
+							||	m_displayRange.start()	>= m_displayRange.min() )
+						);
+
+	return hiddenPoints;
+}
+
+void ccScalarField::showNaNValuesInGrey(bool state)
+{
+	m_showNaNValuesInGrey = state;
+	m_modified = true;
+}
+
+void ccScalarField::alwaysShowZero(bool state)
+{
+	m_alwaysShowZero = state;
+	m_modified = true;
 }

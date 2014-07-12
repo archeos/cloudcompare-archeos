@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>600</width>
+    <width>704</width>
     <height>600</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
@@ -48,6 +48,16 @@
     <widget class="QLabel" name="label">
      <property name="text">
       <string>Here are the first lines of this file. Choose each column attribution (one cloud at a time):</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="headerLabel">
+     <property name="styleSheet">
+      <string notr="true">color: grey;</string>
+     </property>
+     <property name="text">
+      <string>Header:</string>
      </property>
     </widget>
    </item>
@@ -274,6 +284,7 @@
    </item>
   </layout>
  </widget>
+ <resources/>
  <connections>
   <connection>
    <sender>buttonBox</sender>

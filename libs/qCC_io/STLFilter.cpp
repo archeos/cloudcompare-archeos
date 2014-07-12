@@ -39,7 +39,7 @@
 //System
 #include <string.h>
 
-CC_FILE_ERROR STLFilter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR STLFilter::saveToFile(ccHObject* entity, QString filename)
 {
 	if (!entity)
 		return CC_FERR_BAD_ARGUMENT;
@@ -61,7 +61,7 @@ CC_FILE_ERROR STLFilter::saveToFile(ccHObject* entity, const char* filename)
 	msgBox.exec();
 
 	//try to open file for saving
-	FILE* theFile = fopen(filename,"wb");
+	FILE* theFile = fopen(qPrintable(filename),"wb");
 	if (!theFile)
 		return CC_FERR_WRITING;
 
@@ -303,9 +303,9 @@ static bool TagDuplicatedVertices(	const CCLib::DgmOctree::octreeCell& cell,
 	return true;
 }
 
-CC_FILE_ERROR STLFilter::loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR STLFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
 {
-	ccLog::Print("[STL] Loading '%s'",filename);
+	ccLog::Print(QString("[STL] Loading '%1'").arg(filename));
 
 	//try to open the file
 	QFile fp(filename);
@@ -647,15 +647,15 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(QFile& fp,
 			}
 
 			//read vertex
-			double Pd[3];
+			CCVector3d Pd(0,0,0);
 			{
 				bool vertexIsOk=false;
-				Pd[0] = tokens[1].toDouble(&vertexIsOk);
+				Pd.x = tokens[1].toDouble(&vertexIsOk);
 				if (vertexIsOk)
 				{
-					Pd[1] = tokens[2].toDouble(&vertexIsOk);
+					Pd.y = tokens[2].toDouble(&vertexIsOk);
 					if (vertexIsOk)
-						Pd[2] = tokens[3].toDouble(&vertexIsOk);
+						Pd.z = tokens[3].toDouble(&vertexIsOk);
 				}
 				if (!vertexIsOk)
 				{
@@ -665,14 +665,14 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(QFile& fp,
 			}
 
 			//first point: check for 'big' coordinates
-			if (pointCount==0)
+			if (pointCount == 0)
 			{
 				bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
 				if (shiftAlreadyEnabled)
 					Pshift = *coordinatesShift;
-				bool applyAll=false;
+				bool applyAll = false;
 				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 				{
 					vertices->setGlobalShift(Pshift);
 					ccLog::Warning("[STLFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
@@ -686,9 +686,7 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(QFile& fp,
 				}
 			}
 
-			CCVector3 P(static_cast<PointCoordinateType>(Pd[0] + Pshift.x),
-						static_cast<PointCoordinateType>(Pd[1] + Pshift.y),
-						static_cast<PointCoordinateType>(Pd[2] + Pshift.z));
+			CCVector3 P = CCVector3::fromArray((Pd + Pshift).u);
 
 			//look for existing vertices at the same place! (STL format is so dumb...)
 			{
@@ -879,7 +877,7 @@ CC_FILE_ERROR STLFilter::loadBinaryFile(QFile& fp,
 				return CC_FERR_READING;
 
 			//first point: check for 'big' coordinates
-			double Pd[3] = { Pf[0], Pf[1], Pf[2] };
+			CCVector3d Pd( Pf[0], Pf[1], Pf[2] );
 			if (pointCount == 0)
 			{
 				bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
@@ -887,7 +885,7 @@ CC_FILE_ERROR STLFilter::loadBinaryFile(QFile& fp,
 					Pshift = *coordinatesShift;
 				bool applyAll = false;
 				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 				{
 					vertices->setGlobalShift(Pshift);
 					ccLog::Warning("[STLFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
@@ -901,9 +899,7 @@ CC_FILE_ERROR STLFilter::loadBinaryFile(QFile& fp,
 				}
 			}
 
-			CCVector3 P(static_cast<PointCoordinateType>(Pd[0] + Pshift.x),
-						static_cast<PointCoordinateType>(Pd[1] + Pshift.y),
-						static_cast<PointCoordinateType>(Pd[2] + Pshift.z));
+			CCVector3 P = CCVector3::fromArray((Pd + Pshift).u);
 
 			//look for existing vertices at the same place! (STL format is so dumb...)
 			{

@@ -25,6 +25,8 @@
 #include <ccIncludeGL.h>
 #include <ccGenericPointCloud.h>
 #include <ccGBLSensor.h>
+#include <ccColorScalesManager.h>
+#include <ccScalarField.h>
 
 //CCLib
 #include <ScalarField.h>
@@ -36,7 +38,7 @@
 
 //system
 #include <assert.h>
-#include <math.h>
+#include <cmath>
 #include <limits>
 
 void ccRenderingTools::ShowDepthBuffer(ccGBLSensor* sensor, QWidget* parent)
@@ -270,7 +272,7 @@ void ccRenderingTools::DrawColorRamp(const ccScalarField* sf, ccGLWindow* win, i
 					++it;
 				}
 		}
-      }
+		}
 		else
 		{
 			//convert actual display range to log scale
@@ -301,7 +303,7 @@ void ccRenderingTools::DrawColorRamp(const ccScalarField* sf, ccGLWindow* win, i
 	const unsigned char* textColor = displayParams.textDefaultCol;
 
 	//histogram?
-	const::ccScalarField::Histogram histogram = sf->getHistogram();
+	const ccScalarField::Histogram histogram = sf->getHistogram();
 	bool showHistogram = (displayParams.colorScaleShowHistogram && !logScale && histogram.maxValue != 0 && histogram.size() > 1);
 
 	//display area

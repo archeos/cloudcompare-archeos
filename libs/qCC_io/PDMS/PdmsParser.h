@@ -1,3 +1,20 @@
+//##########################################################################
+//#                                                                        #
+//#                            CLOUDCOMPARE                                #
+//#                                                                        #
+//#  This program is free software; you can redistribute it and/or modify  #
+//#  it under the terms of the GNU General Public License as published by  #
+//#  the Free Software Foundation; version 2 of the License.               #
+//#                                                                        #
+//#  This program is distributed in the hope that it will be useful,       #
+//#  but WITHOUT ANY WARRANTY; without even the implied warranty of        #
+//#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
+//#  GNU General Public License for more details.                          #
+//#                                                                        #
+//#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
+//#                                                                        #
+//##########################################################################
+
 #ifndef PDMS_PARSER_HEADER
 #define PDMS_PARSER_HEADER
 
@@ -55,14 +72,13 @@ protected:
 class PdmsFileSession : public PdmsLexer
 {
 protected:
-	static const int s_max_file_name_length = 1024;
-	char filename[s_max_file_name_length];
-	unsigned currentLine;
-	bool eol, eof;
-	FILE *file;
+	std::string m_filename;
+	unsigned m_currentLine;
+	bool m_eol, m_eof;
+	FILE* m_file;
 
 public:
-	PdmsFileSession(const char* fileName);
+	PdmsFileSession(std::string filename);
 	virtual ~PdmsFileSession() {closeSession();}
 	virtual bool initializeSession();
 	virtual void closeSession(bool destroyLoadedObject=false);

@@ -27,10 +27,15 @@
 #include "ccNormalVectors.h"
 #include "ccMaterialSet.h"
 #include "ccSubMesh.h"
+#include "ccScalarField.h"
+#include "ccColorScalesManager.h"
 
 //CCLib
 #include <ManualSegmentationTools.h>
 #include <ReferenceCloud.h>
+
+//qCC_db
+#include <ccScalarField.h>
 
 //Qt
 #include <QGLFormat>
@@ -160,26 +165,26 @@ bool ccMesh::computeNormals(bool perVertex)
 
 bool ccMesh::computePerVertexNormals()
 {
-    if (!m_associatedCloud || !m_associatedCloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
+	if (!m_associatedCloud || !m_associatedCloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
 	{
 		ccLog::Warning("[ccMesh::computePerVertexNormals] Vertex set is not a standard cloud?!");
-        return false;
+		return false;
 	}
-	
+
 	unsigned triCount = size();
 	if (triCount == 0)
 	{
 		ccLog::Warning("[ccMesh::computePerVertexNormals] Empty mesh!");
-        return false;
+		return false;
 	}
 	unsigned vertCount = m_associatedCloud->size();
 	if (vertCount < 3)
 	{
 		ccLog::Warning("[ccMesh::computePerVertexNormals] Not enough vertices! (<3)");
-        return false;
+		return false;
 	}
 
-    ccPointCloud* cloud = static_cast<ccPointCloud*>(m_associatedCloud);
+	ccPointCloud* cloud = static_cast<ccPointCloud*>(m_associatedCloud);
 
 	//we instantiate a temporary structure to store each vertex normal (uncompressed)
 	std::vector<CCVector3> theNorms;
@@ -193,9 +198,9 @@ bool ccMesh::computePerVertexNormals()
 		return false;
 	}
 
-    //allocate compressed normals array on vertices cloud
-    bool normalsWereAllocated = cloud->hasNormals();
-    if (/*!normalsWereAllocated && */!cloud->resizeTheNormsTable()) //we call it whatever the case (just to be sure)
+	//allocate compressed normals array on vertices cloud
+	bool normalsWereAllocated = cloud->hasNormals();
+	if (/*!normalsWereAllocated && */!cloud->resizeTheNormsTable()) //we call it whatever the case (just to be sure)
 	{
 		//warning message should have been already issued!
 		return false;
@@ -236,10 +241,10 @@ bool ccMesh::computePerVertexNormals()
 	}
 
 	//apply it also to sub-meshes!
-    showNormals_extended(true);
+	showNormals_extended(true);
 
 	if (!normalsWereAllocated)
-        cloud->showNormals(true);
+		cloud->showNormals(true);
 
 	return true;
 }
@@ -250,7 +255,7 @@ bool ccMesh::computePerTriangleNormals()
 	if (triCount == 0)
 	{
 		ccLog::Warning("[ccMesh::computePerTriangleNormals] Empty mesh!");
-        return false;
+		return false;
 	}
 
 	//if some normal indexes already exists, we remove them (easier)
@@ -299,7 +304,7 @@ bool ccMesh::computePerTriangleNormals()
 	}
 
 	//apply it also to sub-meshes!
-    showNormals_extended(true);
+	showNormals_extended(true);
 
 	return true;
 }
@@ -312,7 +317,7 @@ bool ccMesh::normalsShown() const
 bool ccMesh::processScalarField(MESH_SCALAR_FIELD_PROCESS process)
 {
 	if (!m_associatedCloud || !m_associatedCloud->isScalarFieldEnabled())
-        return false;
+		return false;
 
 	unsigned nPts = m_associatedCloud->size();
 
@@ -614,10 +619,10 @@ bool ccMesh::laplacianSmooth(	unsigned nbIteration,
 	return true;
 }
 
-ccMesh* ccMesh::clone(	ccGenericPointCloud* vertices/*=0*/,
-						ccMaterialSet* clonedMaterials/*=0*/,
-						NormsIndexesTableType* clonedNormsTable/*=0*/,
-						TextureCoordsContainer* cloneTexCoords/*=0*/)
+ccMesh* ccMesh::cloneMesh(	ccGenericPointCloud* vertices/*=0*/,
+							ccMaterialSet* clonedMaterials/*=0*/,
+							NormsIndexesTableType* clonedNormsTable/*=0*/,
+							TextureCoordsContainer* cloneTexCoords/*=0*/)
 {
 	assert(m_associatedCloud);
 
@@ -1060,12 +1065,14 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 		//L.O.D.
 		bool lodEnabled = (triNum > GET_MAX_LOD_FACES_NUMBER() && context.decimateMeshOnMove && MACRO_LODActivated(context));
-		int decimStep = (lodEnabled ? (int)ceil((float)triNum*3 / (float)GET_MAX_LOD_FACES_NUMBER()) : 1);
+		int decimStep = (lodEnabled ? static_cast<int>(ceil(static_cast<float>(triNum*3) / GET_MAX_LOD_FACES_NUMBER())) : 1);
 
 		//display parameters
 		glDrawParams glParams;
 		getDrawingParameters(glParams);
-		glParams.showNorms &= bool(MACRO_LightIsEnabled(context));
+		//no normals shading without light!
+		if (!MACRO_LightIsEnabled(context))
+			glParams.showNorms = false;
 
 		//vertices visibility
 		const ccGenericPointCloud::VisibilityTableType* verticesVisibility = m_associatedCloud->getTheVisibilityArray();
@@ -1212,9 +1219,8 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 			}
 
 			//we can scan and process each chunk separately in an optimized way
-			unsigned k,chunks = m_triVertIndexes->chunksCount();
-			const colorType* col = 0;
-			for (k=0; k<chunks; ++k)
+			unsigned chunks = m_triVertIndexes->chunksCount();
+			for (unsigned k=0; k<chunks; ++k)
 			{
 				const unsigned chunkSize = m_triVertIndexes->chunkSize(k);
 
@@ -1258,7 +1264,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 #ifdef OPTIM_MEM_CPY
 					for (n=0; n<chunkSize; n+=decimStep, _vertIndexes+=step)
 					{
-						col = currentDisplayedScalarField->getValueColor(*_vertIndexes++);
+						const colorType* col = currentDisplayedScalarField->getValueColor(*_vertIndexes++);
 						*(_rgbColors)++ = *(col)++;
 						*(_rgbColors)++ = *(col)++;
 						*(_rgbColors)++ = *(col)++;
@@ -1276,7 +1282,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 #else
 					for (n=0; n<chunkSize; n+=decimStep, _vertIndexes+=step)
 					{
-						col = currentDisplayedScalarField->getValueColor(_vertIndexes[0]);
+						const colorType* col = currentDisplayedScalarField->getValueColor(_vertIndexes[0]);
 						memcpy(_rgbColors,col,sizeof(colorType)*3);
 						_rgbColors += 3;
 						col = currentDisplayedScalarField->getValueColor(_vertIndexes[1]);
@@ -1296,7 +1302,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 #ifdef OPTIM_MEM_CPY
 					for (n=0; n<chunkSize; n+=decimStep, _vertIndexes+=step)
 					{
-						col = rgbColorsTable->getValue(*_vertIndexes++);
+						const colorType* col = rgbColorsTable->getValue(*_vertIndexes++);
 						*(_rgbColors)++ = *(col)++;
 						*(_rgbColors)++ = *(col)++;
 						*(_rgbColors)++ = *(col)++;
@@ -1443,7 +1449,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 			if (showTextures)
 			{
-				//#define TEST_TEXTURED_BUNDLER_IMPORT
+//#define TEST_TEXTURED_BUNDLER_IMPORT
 #ifdef TEST_TEXTURED_BUNDLER_IMPORT
 				glPushAttrib(GL_COLOR_BUFFER_BIT);
 				glEnable(GL_BLEND);
@@ -1459,7 +1465,7 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 			GLenum triangleDisplayType = lodEnabled ? GL_POINTS : showWired ? GL_LINE_LOOP : GL_TRIANGLES;
 			glBegin(triangleDisplayType);
 
-			for (n=0;n<triNum;++n)
+			for (n=0; n<triNum; ++n)
 			{
 				//current triangle vertices
 				const CCLib::TriangleSummitsIndexes* tsi = (CCLib::TriangleSummitsIndexes*)m_triVertIndexes->getCurrentValue();
@@ -1510,7 +1516,6 @@ void ccMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 						N1 = (idx[0] >= 0 ? ccNormalVectors::GetNormal(m_triNormals->getValue(idx[0])).u : 0);
 						N2 = (idx[0] == idx[1] ? N1 : idx[1] >= 0 ? ccNormalVectors::GetNormal(m_triNormals->getValue(idx[1])).u : 0);
 						N3 = (idx[0] == idx[2] ? N1 : idx[2] >= 0 ? ccNormalVectors::GetNormal(m_triNormals->getValue(idx[2])).u : 0);
-
 					}
 					else
 					{

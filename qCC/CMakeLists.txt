@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 2.8)
 
+# Eliminate a warning when building in Windows that relates
+# to static linking of Qt executables to qtmain.lib.
+# This policy was introduced in CMake version 2.8.11.
+# CMake version 2.8.11.2 warns when the policy is not set
+# and uses OLD behavior.
+if(POLICY CMP0020)
+  cmake_policy(SET CMP0020 OLD)
+endif()
+
 project( CloudCompare )
 
 set( VERSION_MAJOR 2 )
@@ -21,14 +30,15 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/db_tree )
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/ui_templates )
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/../libs/qxt )
+include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/../libs/qcustomplot )
 include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
 
-# TODO: use qxt as a standalone library!
-set( QXT_HEADERS ../libs/qxt/qxtspanslider.h ../libs/qxt/qxtspanslider_p.h )
-set( QXT_SOURCES ../libs/qxt/qxtspanslider.cpp )
+# QCustomPlot
+set( QCUSTOMPLOT_HEADERS ../libs/qcustomplot/qcustomplot.h )
+set( QCUSTOMPLOT_SOURCES ../libs/qcustomplot/qcustomplot.cpp )
 
-file( GLOB header_list *.h db_tree/*.h ${QXT_HEADERS} )
-file( GLOB source_list *.cpp db_tree/*.cpp ${QXT_SOURCES} )
+file( GLOB header_list *.h db_tree/*.h ${QXT_HEADERS} ${QCUSTOMPLOT_HEADERS} )
+file( GLOB source_list *.cpp db_tree/*.cpp ${QXT_SOURCES} ${QCUSTOMPLOT_SOURCES} )
 
 # 3DX support (3dConnexion devices)
 if ( ${OPTION_SUPPORT_3DCONNEXION_DEVICES} )
@@ -43,11 +53,16 @@ file( GLOB qrc_list *.qrc )
 #file( GLOB rc_list *.rc )
 file( GLOB txt_list TODO.txt bin_other/history.txt )
 
-# find Qt mocable files
-find_mocable_files( mocable_list ${header_list} )
-qt4_wrap_cpp( moc_list ${mocable_list} )
-qt4_wrap_ui( generated_ui_list ${ui_list} )
-qt4_add_resources( generated_qrc_list ${qrc_list} )
+if ( USE_QT5 )
+	qt5_wrap_ui( generated_ui_list ${ui_list} )
+	qt5_add_resources( generated_qrc_list ${qrc_list} )
+else()
+	# find Qt mocable files
+	find_mocable_files( mocable_list ${header_list} )
+	qt4_wrap_cpp( moc_list ${mocable_list} )
+	qt4_wrap_ui( generated_ui_list ${ui_list} )
+	qt4_add_resources( generated_qrc_list ${qrc_list} )
+endif()
 
 # App icon with MSVC
 if( MSVC )
@@ -70,6 +85,13 @@ target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_IO_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_GL_LIB )
 target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
+
+if ( USE_QT5 )
+	if (WIN32)
+		target_link_libraries( ${PROJECT_NAME} Qt5::WinMain )
+	endif()
+	qt5_use_modules(${PROJECT_NAME} Core Gui Widgets OpenGL PrintSupport)
+endif()
 
 # contrib. libraries support
 target_link_contrib( ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} )
@@ -97,15 +119,16 @@ if( WIN32 )
 endif()
 
 # install program
-install_ext( TARGETS ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} ${CLOUDCOMPARE_DEST_FOLDER}_debug )
+install_ext( TARGETS ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} )
 
 # Auxiliary files
-set( auxFiles bin_other/history.txt bin_other/license.txt )
+set( auxFiles bin_other/history.txt bin_other/license.txt bin_other/global_shift_list_template.txt )
 
 if( WIN32 )
 	# Export Qt dlls
-	install_Qt_Dlls( ${CLOUDCOMPARE_DEST_FOLDER} ${CLOUDCOMPARE_DEST_FOLDER}_debug )
-	install_Qt_ImageFormats( ${CLOUDCOMPARE_DEST_FOLDER} ${CLOUDCOMPARE_DEST_FOLDER}_debug )
+	install_Qt_Dlls( ${CLOUDCOMPARE_DEST_FOLDER} )
+	install_Qt_ImageFormats( ${CLOUDCOMPARE_DEST_FOLDER} )
+	install_Qt5_plugins( ${CLOUDCOMPARE_DEST_FOLDER} )
 
 	# Additional auxiliary file(s)
 	list( APPEND auxFiles bin_other/start.bat )
@@ -113,7 +136,7 @@ endif()
 
 # Install auxiliary files
 foreach( filename ${auxFiles} )
-	install_ext( FILES ${filename} ${CLOUDCOMPARE_DEST_FOLDER} ${CLOUDCOMPARE_DEST_FOLDER}_debug )
+	install_ext( FILES ${filename} ${CLOUDCOMPARE_DEST_FOLDER} )
 endforeach()
 
 # in order to ensure that everything else is installed first, put the Mac bundling in its own subdirectory
@@ -133,8 +156,12 @@ if( APPLE )
    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders )
    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders )
    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders/ColorRamp )
+   #install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.frag DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders/Rendering )
+   #install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.vert DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders/Rendering )
 else()
-   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag ${CLOUDCOMPARE_DEST_FOLDER}/shaders ${CLOUDCOMPARE_DEST_FOLDER}_debug/shaders )
-   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert ${CLOUDCOMPARE_DEST_FOLDER}/shaders ${CLOUDCOMPARE_DEST_FOLDER}_debug/shaders )
-   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CLOUDCOMPARE_DEST_FOLDER}/shaders/ColorRamp ${CLOUDCOMPARE_DEST_FOLDER}_debug/shaders/ColorRamp )
+   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders )
+   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert ${CLOUDCOMPARE_DEST_FOLDER} /shaders )
+   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders/ColorRamp )
+   #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
+   #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.vert ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
 endif()

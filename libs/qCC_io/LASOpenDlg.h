@@ -77,7 +77,7 @@ const char LAS_FIELD_NAMES[][28] = {"X",
 class LASOpenDlg : public QDialog, public Ui::OpenLASFileDialog
 {
 public:
-    
+
 	//! Default constructor
 	LASOpenDlg(QWidget* parent = 0);
 
@@ -89,6 +89,9 @@ public:
 
 	//! Auto-skip mode (to use the same parameters for ALL files afterwards)
 	bool autoSkipMode() const;
+
+	//! Whether 8-bit RGB mode is forced or not
+	bool forced8bitRgbMode() const;
 
 };
 

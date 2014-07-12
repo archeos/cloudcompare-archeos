@@ -15,9 +15,6 @@
 //#                                                                        #
 //##########################################################################
 
-//Qt
-#include <QtGui>
-
 #include "qPCV.h"
 #include "ccPcvDlg.h"
 
@@ -31,6 +28,12 @@
 #include <ccPointCloud.h>
 #include <ccGenericMesh.h>
 #include <ccProgressDialog.h>
+#include <ccScalarField.h>
+#include <ccColorScalesManager.h>
+
+//Qt (last so as to be sure that glew.h is included before gl.h
+#include <QtGui>
+#include <QMainWindow>
 
 #ifndef CC_PCV_FIELD_LABEL_NAME
 #define CC_PCV_FIELD_LABEL_NAME "Illuminance (PCV)"
@@ -44,7 +47,7 @@ qPCV::qPCV(QObject* parent/*=0*/)
 
 void qPCV::onNewSelection(const ccHObject::Container& selectedEntities)
 {
-    if (m_action)
+	if (m_action)
 		m_action->setEnabled(selectedEntities.size()==1);
 }
 
@@ -78,37 +81,37 @@ void qPCV::doAction()
 
 	const ccHObject::Container& selectedEntities = m_app->getSelectedEntities();
 	size_t selNum = selectedEntities.size();
-    if (selNum != 1)
+	if (selNum != 1)
 	{
 		m_app->dispToConsole("Select only one cloud or one mesh!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
-        return;
+		return;
 	}
 
-    ccHObject* ent = selectedEntities[0];
+	ccHObject* ent = selectedEntities[0];
 
-    ccGenericPointCloud* cloud = NULL;
-    ccGenericMesh* mesh = NULL;
-    if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
-    {
-        cloud = ccHObjectCaster::ToGenericPointCloud(ent);
-    }
-    else if (ent->isKindOf(CC_TYPES::MESH))
-    {
-        mesh = static_cast<ccGenericMesh*>(ent);
-        cloud = mesh->getAssociatedCloud();
-    }
-    else
-    {
+	ccGenericPointCloud* cloud = NULL;
+	ccGenericMesh* mesh = NULL;
+	if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
+	{
+		cloud = ccHObjectCaster::ToGenericPointCloud(ent);
+	}
+	else if (ent->isKindOf(CC_TYPES::MESH))
+	{
+		mesh = static_cast<ccGenericMesh*>(ent);
+		cloud = mesh->getAssociatedCloud();
+	}
+	else
+	{
 		m_app->dispToConsole("Select a point cloud or a mesh!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return;
 	}
 
-    if (!cloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
+	if (!cloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
 	{
 		m_app->dispToConsole("Select a real point cloud (or a mesh associated to a real point cloud)!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
-        return;
+		return;
 	}
-    ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+	ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
 
 	ccPcvDlg dlg(m_app->getMainWindow());
 
@@ -120,11 +123,11 @@ void qPCV::doAction()
 		dlg.resSpinBox->setValue(s_resSpinBoxValue);
 		dlg.closedMeshCheckBox->setChecked(s_closedMeshCheckBoxState);
 	}
-    
+
 	//for meshes only
 	if (!mesh)
-        dlg.closedMeshCheckBox->setEnabled(false);
-	
+		dlg.closedMeshCheckBox->setEnabled(false);
+
 	//for using clouds normals as rays
 	std::vector<ccGenericPointCloud*> cloudsWithNormals;
 	ccHObject* root = m_app->dbRootObject();
@@ -151,7 +154,7 @@ void qPCV::doAction()
 		dlg.useCloudRadioButton->setEnabled(false);
 
 	if (!dlg.exec())
-        return;
+		return;
 
 	//save dialog state
 	{
@@ -161,24 +164,24 @@ void qPCV::doAction()
 		s_resSpinBoxValue			= dlg.resSpinBox->value();
 		s_closedMeshCheckBoxState	= dlg.closedMeshCheckBox->isChecked();
 	}
-    
-    //we get the PCV field if it already exists
-    int sfIdx = pc->getScalarFieldIndexByName(CC_PCV_FIELD_LABEL_NAME);
+
+	//we get the PCV field if it already exists
+	int sfIdx = pc->getScalarFieldIndexByName(CC_PCV_FIELD_LABEL_NAME);
 	//otherwise we create it
-    if (sfIdx < 0)
-        sfIdx = pc->addScalarField(CC_PCV_FIELD_LABEL_NAME);
-    if (sfIdx < 0)
+	if (sfIdx < 0)
+		sfIdx = pc->addScalarField(CC_PCV_FIELD_LABEL_NAME);
+	if (sfIdx < 0)
 	{
 		m_app->dispToConsole("Couldn't allocate a new scalar field for computing PCV field ! Try to free some memory ...",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
-        return;
+		return;
 	}
 
 	pc->setCurrentScalarField(sfIdx);
 
 	unsigned raysNumber = dlg.raysSpinBox->value();
 	unsigned res = dlg.resSpinBox->value();
-    bool meshIsClosed = (mesh ? dlg.closedMeshCheckBox->checkState()==Qt::Checked : false);
-    bool mode360 = !dlg.mode180CheckBox->isChecked();
+	bool meshIsClosed = (mesh ? dlg.closedMeshCheckBox->checkState()==Qt::Checked : false);
+	bool mode360 = !dlg.mode180CheckBox->isChecked();
 
 	//progress dialog
 	ccProgressDialog progressCb(true,m_app->getMainWindow());
@@ -203,34 +206,36 @@ void qPCV::doAction()
 		//Version with rays sampled on a sphere
 		success = (PCV::Launch(raysNumber,cloud,mesh,meshIsClosed,mode360,res,res,&progressCb) > 0);
 	}
-    
-	if (!success)
-    {
-        pc->deleteScalarField(sfIdx);
-		m_app->dispToConsole("En error occurred during the PCV field computation!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
-        return;
-    }
-    else
-    {
-        pc->getCurrentInScalarField()->computeMinAndMax();
-        pc->setCurrentDisplayedScalarField(sfIdx);
-        ccScalarField* sf = static_cast<ccScalarField*>(pc->getScalarField(sfIdx));
-        if (sf)
-			sf->setColorScale(ccColorScalesManager::GetDefaultScale(ccColorScalesManager::GREY));
-        ent->showSF(true);
-        ent->showNormals(false);
-        ent->prepareDisplayForRefresh_recursive();
-    }
 
-    //currently selected entities parameters may have changed!
+	if (!success)
+	{
+		pc->deleteScalarField(sfIdx);
+		m_app->dispToConsole("En error occurred during the PCV field computation!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		return;
+	}
+	else
+	{
+		pc->getCurrentInScalarField()->computeMinAndMax();
+		pc->setCurrentDisplayedScalarField(sfIdx);
+		ccScalarField* sf = static_cast<ccScalarField*>(pc->getScalarField(sfIdx));
+		if (sf)
+			sf->setColorScale(ccColorScalesManager::GetDefaultScale(ccColorScalesManager::GREY));
+		ent->showSF(true);
+		ent->showNormals(false);
+		ent->prepareDisplayForRefresh_recursive();
+	}
+
+	//currently selected entities parameters may have changed!
 	m_app->updateUI();
-    //currently selected entities appearance may have changed!
+	//currently selected entities appearance may have changed!
 	m_app->refreshAll();
 }
 
 QIcon qPCV::getIcon() const
 {
-    return QIcon(QString::fromUtf8(":/CC/plugin/qPCV/cc_ShadeVisIcon.png"));
+	return QIcon(QString::fromUtf8(":/CC/plugin/qPCV/cc_ShadeVisIcon.png"));
 }
 
+#ifndef CC_QT5
 Q_EXPORT_PLUGIN2(qPCV,qPCV);
+#endif

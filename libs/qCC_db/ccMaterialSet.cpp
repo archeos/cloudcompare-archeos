@@ -75,11 +75,6 @@ bool ccMaterialSet::addMaterial(const ccMaterial& mat)
 	return true;
 }
 
-#define MTL_LOADER_WHITESPACE " \t\n\r"
-
-//! Max number of characters per line in an ASCII file
-const int MAX_ASCII_FILE_LINE_LENGTH	=	4096;
-
 //MTL PARSER INSPIRED FROM KIXOR.NET "objloader" (http://www.kixor.net/dev/objloader/)
 bool ccMaterialSet::ParseMTL(QString path, const QString& filename, ccMaterialSet &materials, QStringList& errors)
 {
@@ -112,7 +107,7 @@ bool ccMaterialSet::ParseMTL(QString path, const QString& filename, ccMaterialSe
 		//start material
 		if (tokens.front() == "newmtl")
 		{
-			//push the precedent material
+			//push the previous material
 			if (currentMatIndex >= 0)
 				materials.addMaterial(currentMaterial);
 
@@ -202,7 +197,9 @@ bool ccMaterialSet::ParseMTL(QString path, const QString& filename, ccMaterialSe
 					|| tokens.front() == "map_Kd"
 					|| tokens.front() == "map_Ks")
 			{
-				QString texture_filename = currentLine.mid(7).trimmed();
+				//DGM: in case there's hidden or space characters at the beginning of the line...
+				int shift = currentLine.indexOf("map_K",0);
+				QString texture_filename = (shift + 7 < currentLine.size() ? currentLine.mid(shift+7).trimmed() : QString());
 				QString fullTexName = path+QString('/')+texture_filename;
 				QImage image;
 				if (!image.load(fullTexName))

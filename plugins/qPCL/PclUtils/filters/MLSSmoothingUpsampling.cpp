@@ -28,14 +28,17 @@
 //qCC_plugins
 #include <ccMainAppInterface.h>
 
+//qCC_db
+#include <ccScalarField.h>
+
 //Qt
 #include <QMainWindow>
 
 MLSSmoothingUpsampling::MLSSmoothingUpsampling()
-    : BaseFilter(FilterDescription("MLS smoothing",
-                                   "Smooth using MLS, optionally upsample",
-                                   "Smooth the cloud using Moving Least Sqares algorithm, estimate normals and optionally upsample",
-                                   ":/toolbar/PclUtils/icons/mls_smoothing.png"))
+	: BaseFilter(FilterDescription(	"MLS smoothing",
+									"Smooth using MLS, optionally upsample",
+									"Smooth the cloud using Moving Least Sqares algorithm, estimate normals and optionally upsample",
+									":/toolbar/PclUtils/icons/mls_smoothing.png"))
 	, m_dialog(0)
 	, m_parameters(new MLSParameters)
 {
@@ -99,7 +102,7 @@ int MLSSmoothingUpsampling::compute()
 	PCLCloud::Ptr sm_normals (new PCLCloud);
 	TO_PCL_CLOUD(*normals, *sm_normals);
 
-	ccPointCloud* new_cloud = sm2ccConverter(sm_normals).getCCloud();
+	ccPointCloud* new_cloud = sm2ccConverter(sm_normals).getCloud();
 	if (!new_cloud)
 	{
 		//conversion failed (not enough memory?)
@@ -116,8 +119,8 @@ int MLSSmoothingUpsampling::compute()
 	copyRGBColors(cloud, new_cloud, mapping_indices, true);
 #endif
 
-    //disable original cloud
-    cloud->setEnabled(false);
+	//disable original cloud
+	cloud->setEnabled(false);
 	if (cloud->getParent())
 		cloud->getParent()->addChild(new_cloud);
 

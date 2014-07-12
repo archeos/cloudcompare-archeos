@@ -33,16 +33,16 @@
 //System
 #include <string.h>
 
-CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, QString filename)
 {
-	if (!entity || !filename)
-        return CC_FERR_BAD_ARGUMENT;
+	if (!entity || filename.isEmpty())
+		return CC_FERR_BAD_ARGUMENT;
 
 	//look for either a cloud or a mesh
 	ccHObject::Container clouds,meshes;
 	if (entity->isA(CC_TYPES::POINT_CLOUD))
-        clouds.push_back(entity);
-    else if (entity->isKindOf(CC_TYPES::MESH))
+		clouds.push_back(entity);
+	else if (entity->isKindOf(CC_TYPES::MESH))
 		meshes.push_back(entity);
 	else //group?
 	{
@@ -56,20 +56,20 @@ CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, const char* filename)
 		}
 	}
 
-    if (clouds.empty() && meshes.empty())
-    {
-        ccLog::Error("No point cloud nor mesh in input selection!");
-        return CC_FERR_BAD_ENTITY_TYPE;
-    }
-    else if (clouds.size()+meshes.size()>1)
-    {
-        ccLog::Error("Can't save more than one entity per VTK file!");
-        return CC_FERR_BAD_ENTITY_TYPE;
-    }
+	if (clouds.empty() && meshes.empty())
+	{
+		ccLog::Error("No point cloud nor mesh in input selection!");
+		return CC_FERR_BAD_ENTITY_TYPE;
+	}
+	else if (clouds.size()+meshes.size()>1)
+	{
+		ccLog::Error("Can't save more than one entity per VTK file!");
+		return CC_FERR_BAD_ENTITY_TYPE;
+	}
 
 	//the cloud to save
-    ccGenericPointCloud* vertices = 0;
-    ccMesh* mesh = 0;
+	ccGenericPointCloud* vertices = 0;
+	ccMesh* mesh = 0;
 	unsigned triCount = 0;
 	if (!clouds.empty()) //1 cloud, no mesh
 	{
@@ -95,7 +95,7 @@ CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, const char* filename)
 		return CC_FERR_NO_SAVE;
 	}
 
-    //open ASCII file for writing
+	//open ASCII file for writing
 	QFile file(filename);
 	if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
 		return CC_FERR_WRITING;
@@ -112,7 +112,7 @@ CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, const char* filename)
 	//data type
 	QString floatType = (sizeof(PointCoordinateType) == 4 ? "float" : "double");
 
-    /*** what shall we save now? ***/
+	/*** what shall we save now? ***/
 
 	// write the points
 	{
@@ -222,9 +222,9 @@ static bool GetNextNonEmptyLine(QTextStream& stream, QString& line)
 	return true;
 }
 
-CC_FILE_ERROR VTKFilter::loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR VTKFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
 {
-    //open ASCII file for reading
+	//open ASCII file for reading
 	QFile file(filename);
 	if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
 		return CC_FERR_READING;
@@ -336,10 +336,10 @@ CC_FILE_ERROR VTKFilter::loadFile(const char* filename, ccHObject& container, bo
 					break;
 				}
 
-				double Pd[3] = {0,0,0};
+				CCVector3d Pd(0,0,0);
 				for (unsigned char j=0; j<3; ++j)
 				{
-					Pd[j] = parts[j].toDouble(&ok);
+					Pd.u[j] = parts[j].toDouble(&ok);
 					if (!ok)
 					{
 						ccLog::Warning("[VTK] Element #%1 of POINTS data is corrupted!",i);
@@ -356,7 +356,7 @@ CC_FILE_ERROR VTKFilter::loadFile(const char* filename, ccHObject& container, bo
 						Pshift = *coordinatesShift;
 					bool applyAll = false;
 					if (	sizeof(PointCoordinateType) < 8
-						&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+						&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 					{
 						vertices->setGlobalShift(Pshift);
 						ccLog::Warning("[VTKFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
@@ -370,9 +370,8 @@ CC_FILE_ERROR VTKFilter::loadFile(const char* filename, ccHObject& container, bo
 					}
 				}
 
-				vertices->addPoint(CCVector3(	static_cast<PointCoordinateType>(Pd[0] + Pshift.x),
-												static_cast<PointCoordinateType>(Pd[1] + Pshift.y),
-												static_cast<PointCoordinateType>(Pd[2] + Pshift.z)) );
+				CCVector3 P = CCVector3::fromArray((Pd + Pshift).u);
+				vertices->addPoint(P);
 			}
 		//end POINTS
 		}
@@ -744,15 +743,17 @@ CC_FILE_ERROR VTKFilter::loadFile(const char* filename, ccHObject& container, bo
 
 		mesh->addChild(vertices);
 		vertices->setVisible(false);
-        vertices->setEnabled(false);
-        vertices->setName("Vertices");
+		vertices->setEnabled(false);
+		vertices->setName("Vertices");
 		vertices->setLocked(true); //DGM: no need to lock it as it is only used by one mesh!
 
 		//DGM: normals can be per-vertex or per-triangle so it's better to let the user do it himself later
 		//Moreover it's not always good idea if the user doesn't want normals (especially in ccViewer!)
-		//if (!mesh->hasNormals())
-		//	mesh->computeNormals();
-		ccLog::Warning("[VTK] Mesh has no normal! You can manually compute them (select it then call \"Edit > Normals > Compute\")");
+		if (!mesh->hasNormals())
+		{
+			//	mesh->computeNormals();
+			ccLog::Warning("[VTK] Mesh has no normal! You can manually compute them (select it then call \"Edit > Normals > Compute\")");
+		}
 		mesh->showNormals(mesh->hasNormals());
 		if (vertices->hasScalarFields())
 		{

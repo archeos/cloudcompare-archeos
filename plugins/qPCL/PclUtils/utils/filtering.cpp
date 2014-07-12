@@ -21,6 +21,9 @@
 //PCL
 #include <pcl/filters/statistical_outlier_removal.h>
 
+//qCC_db
+#include <ccScalarField.h>
+
 int	removeOutliersStatistical(const PCLCloud::ConstPtr incloud, const int &k, const float &nStds, PCLCloud::Ptr outcloud)
 {
 	pcl::StatisticalOutlierRemoval<PCLCloud> remover;
@@ -95,6 +98,10 @@ void copyScalarFields(const ccPointCloud *inCloud, ccPointCloud *outCloud, pcl::
 
 void copyRGBColors(const ccPointCloud *inCloud, ccPointCloud *outCloud, pcl::PointIndicesPtr &in2outMapping, bool overwrite)
 {
+	// if inCloud has no color there is nothing to do
+	if (!inCloud->hasColors())
+		return;
+
 	if (in2outMapping->indices.empty())
 		return;
 	assert(in2outMapping->indices.size() == outCloud->size());

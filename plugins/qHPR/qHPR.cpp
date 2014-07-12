@@ -21,6 +21,7 @@
 //Qt
 #include <QtGui>
 #include <QElapsedTimer>
+#include <QMainWindow>
 
 //qCC_db
 #include <ccPointCloud.h>
@@ -71,7 +72,7 @@ void qHPR::onNewSelection(const ccHObject::Container& selectedEntities)
 		m_action->setEnabled(selectedEntities.size()==1);
 }
 
-CCLib::ReferenceCloud* qHPR::removeHiddenPoints(CCLib::GenericIndexedCloudPersist* theCloud, const CCVector3& viewPoint, float fParam)
+CCLib::ReferenceCloud* qHPR::removeHiddenPoints(CCLib::GenericIndexedCloudPersist* theCloud, const CCVector3d& viewPoint, double fParam)
 {
 	assert(theCloud);
 
@@ -92,7 +93,7 @@ CCLib::ReferenceCloud* qHPR::removeHiddenPoints(CCLib::GenericIndexedCloudPersis
 		return visiblePoints;
 	}
 
-	PointCoordinateType maxRadius = 0;
+	double maxRadius = 0;
 
 	//convert point cloud to an array of double triplets (for qHull)
 	coordT* pt_array = new coordT[(nbPoints+1)*3];
@@ -101,13 +102,13 @@ CCLib::ReferenceCloud* qHPR::removeHiddenPoints(CCLib::GenericIndexedCloudPersis
 
 		for (unsigned i=0; i<nbPoints; ++i)
 		{
-			CCVector3 P = *theCloud->getPoint(i) - viewPoint;
+			CCVector3d P = CCVector3d::fromArray(theCloud->getPoint(i)->u) - viewPoint;
 			*_pt_array++ = (coordT)P.x;
 			*_pt_array++ = (coordT)P.y;
 			*_pt_array++ = (coordT)P.z;
 
 			//we keep track of the highest 'radius'
-			PointCoordinateType r2 = P.norm2();
+			double r2 = P.norm2();
 			if (maxRadius < r2)
 				maxRadius = r2;
 		}
@@ -122,14 +123,14 @@ CCLib::ReferenceCloud* qHPR::removeHiddenPoints(CCLib::GenericIndexedCloudPersis
 
 	//apply spherical flipping
 	{
-		maxRadius *= 2.0f*pow(10.0f,fParam);
+		maxRadius *= pow(10.0,fParam) * 2;
 	
 		coordT* _pt_array = pt_array;
 		for (unsigned i=0; i<nbPoints; ++i)
 		{
-			CCVector3 P = *theCloud->getPoint(i) - viewPoint;
+			CCVector3d P = CCVector3d::fromArray(theCloud->getPoint(i)->u) - viewPoint;
 
-			double r = (double)(maxRadius/P.norm()) - 1.0;
+			double r = (maxRadius/P.norm()) - 1.0;
 			*_pt_array++ *= r;
 			*_pt_array++ *= r;
 			*_pt_array++ *= r;
@@ -216,22 +217,22 @@ void qHPR::doAction()
 
 	const ccHObject::Container& selectedEntities = m_app->getSelectedEntities();
 	size_t selNum = selectedEntities.size();
-    if (selNum!=1)
+	if (selNum!=1)
 	{
 		m_app->dispToConsole("Select only one cloud!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return;
 	}
 
-    ccHObject* ent = selectedEntities[0];
-    if (!ent->isA(CC_TYPES::POINT_CLOUD))
+	ccHObject* ent = selectedEntities[0];
+	if (!ent->isA(CC_TYPES::POINT_CLOUD))
 	{
 		m_app->dispToConsole("Select a point cloud!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return;
 	}
-    ccPointCloud* cloud = static_cast<ccPointCloud*>(ent);
+	ccPointCloud* cloud = static_cast<ccPointCloud*>(ent);
 
 	ccGLWindow* win = m_app->getActiveGLWindow();
-    if (!win)
+	if (!win)
 	{
 		m_app->dispToConsole("No active window!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return;
@@ -242,12 +243,12 @@ void qHPR::doAction()
 	if (!params.perspectiveView)
 	{
 		m_app->dispToConsole("Perspective mode only!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
-        return;
+		return;
 	}
 
 	ccHprDlg dlg(m_app->getMainWindow());
-    if (!dlg.exec())
-        return;
+	if (!dlg.exec())
+		return;
 
 	//progress dialog
 	ccProgressDialog progressCb(false,m_app->getMainWindow());
@@ -257,25 +258,25 @@ void qHPR::doAction()
 	assert(octreeLevel>=0 && octreeLevel<=255);
 
 	//compute octree if cloud hasn't any
-    ccOctree* theOctree = cloud->getOctree();
-    if (!theOctree)
-        theOctree = cloud->computeOctree(&progressCb);
+	ccOctree* theOctree = cloud->getOctree();
+	if (!theOctree)
+		theOctree = cloud->computeOctree(&progressCb);
 
 	if (!theOctree)
 	{
 		m_app->dispToConsole("Couldn't compute octree!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
-        return;
+		return;
 	}
 
-	CCVector3 viewPoint = params.cameraCenter;
+	CCVector3d viewPoint = params.cameraCenter;
 	if (params.objectCenteredView)
 	{
-		CCVector3 PC = params.cameraCenter - params.pivotPoint;
+		CCVector3d PC = params.cameraCenter - params.pivotPoint;
 		params.viewMat.inverse().apply(PC);
 		viewPoint = params.pivotPoint + PC;
 	}
 
-    //HPR
+	//HPR
 	CCLib::ReferenceCloud* visibleCells = 0;
 	{
 		QElapsedTimer eTimer;
@@ -299,8 +300,8 @@ void qHPR::doAction()
 		theCellCenters = 0;
 	}
 
-    if (visibleCells)
-    {
+	if (visibleCells)
+	{
 		//DGM: we generate a new cloud now, instead of playing with the points visiblity! (too confusing for the user)
 		/*if (!cloud->isVisibilityTableInstantiated() && !cloud->resetVisibilityArray())
 		{
@@ -326,19 +327,19 @@ void qHPR::doAction()
 			return;
 		}
 
-        for (unsigned i=0; i<visibleCellsCount; ++i)
-        {
+		for (unsigned i=0; i<visibleCellsCount; ++i)
+		{
 			//cell index
-            unsigned index = visibleCells->getPointGlobalIndex(i);
-            
+			unsigned index = visibleCells->getPointGlobalIndex(i);
+
 			//points in this cell...
 			CCLib::ReferenceCloud Yk(theOctree->associatedCloud());
 			theOctree->getPointsInCellByCellIndex(&Yk,cellIndexes[index],static_cast<uchar>(octreeLevel));
 			//...are all visible
 			/*unsigned count = Yk.size();
-            for (unsigned j=0;j<count;++j)
-                pointsVisibility->setValue(Yk.getPointGlobalIndex(j),POINT_VISIBLE);
-            visiblePointCount += count;
+			for (unsigned j=0;j<count;++j)
+				pointsVisibility->setValue(Yk.getPointGlobalIndex(j),POINT_VISIBLE);
+			visiblePointCount += count;
 			//*/
 			if (!visiblePoints.add(Yk))
 			{
@@ -346,9 +347,9 @@ void qHPR::doAction()
 				delete visibleCells;
 				return;
 			}
-        }
+		}
 
-        delete visibleCells;
+		delete visibleCells;
 		visibleCells = 0;
 
 		m_app->dispToConsole(QString("[HPR] Visible points: %1").arg(visiblePointCount));
@@ -381,15 +382,17 @@ void qHPR::doAction()
 				m_app->dispToConsole("Not enough memory!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 			}
 		}
-    }
+	}
 
-    //currently selected entities appearance may have changed!
+	//currently selected entities appearance may have changed!
 	m_app->refreshAll();
 }
 
 QIcon qHPR::getIcon() const
 {
-    return QIcon(QString::fromUtf8(":/CC/plugin/qHPR/cc_hpr.png"));
+	return QIcon(QString::fromUtf8(":/CC/plugin/qHPR/cc_hpr.png"));
 }
 
+#ifndef CC_QT5
 Q_EXPORT_PLUGIN2(qHPR,qHPR);
+#endif

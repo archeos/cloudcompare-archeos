@@ -33,7 +33,7 @@
 #include <assert.h>
 
 ccSubMesh::ccSubMesh(ccMesh* parentMesh)
-    : ccGenericMesh("Sub-mesh")
+	: ccGenericMesh("Sub-mesh")
 	, m_associatedMesh(parentMesh)
 	, m_triIndexes(new ReferencesContainer())
 	, m_globalIterator(0)
@@ -43,6 +43,15 @@ ccSubMesh::ccSubMesh(ccMesh* parentMesh)
 	showColors(parentMesh ? parentMesh->colorsShown() : true);
 	showNormals(parentMesh ? parentMesh->normalsShown() : true);
 	showSF(parentMesh ? parentMesh->sfShown() : true);
+}
+
+ccSubMesh::~ccSubMesh()
+{
+	if (m_triIndexes)
+	{
+		m_triIndexes->release();
+		m_triIndexes = 0;
+	}
 }
 
 void ccSubMesh::setAssociatedMesh(ccMesh* mesh)
@@ -164,9 +173,9 @@ CCLib::TriangleSummitsIndexes* ccSubMesh::getTriangleIndexes(unsigned triIndex)
 void ccSubMesh::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
 {
 	getMyOwnBB(); //forces BB refresh if necessary
-    
+
 	memcpy(bbMin, m_bBox.minCorner().u, 3*sizeof(PointCoordinateType));
-    memcpy(bbMax, m_bBox.maxCorner().u, 3*sizeof(PointCoordinateType));
+	memcpy(bbMax, m_bBox.maxCorner().u, 3*sizeof(PointCoordinateType));
 }
 
 ccSubMesh* ccSubMesh::createNewSubMeshFromSelection(bool removeSelectedFaces, IndexMap* indexMap/*=0*/)
@@ -396,7 +405,7 @@ bool ccSubMesh::addTriangleIndex(unsigned firstIndex, unsigned lastIndex)
 	}
 
 	unsigned range = lastIndex-firstIndex; //lastIndex is excluded
-    unsigned pos = size();
+	unsigned pos = size();
 
 	if (size()<pos+range && !m_triIndexes->resize(pos+range))
 		return false;

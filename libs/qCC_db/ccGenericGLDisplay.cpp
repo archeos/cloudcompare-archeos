@@ -61,9 +61,9 @@ bool ccViewportParameters::toFile(QFile& out) const
 	//other parameters (dataVersion>=20)
 	QDataStream outStream(&out);
 	outStream << pixelSize;
-    outStream << zoom;
-    outStream << defaultPointSize;
-    outStream << defaultLineWidth;
+	outStream << zoom;
+	outStream << defaultPointSize;
+	outStream << defaultLineWidth;
 	outStream << perspectiveView;
 	outStream << objectCenteredView;
 	outStream << pivotPoint.x;
@@ -83,8 +83,19 @@ bool ccViewportParameters::toFile(QFile& out) const
 bool ccViewportParameters::fromFile(QFile& in, short dataVersion, int flags)
 {
 	//base modelview matrix (dataVersion>=20)
-	if (!viewMat.fromFile(in, dataVersion, flags))
-		return false;
+	if (dataVersion >= 36) //we now save the camera matrix in double precision
+	{
+		if (!viewMat.fromFile(in, dataVersion, flags))
+			return false;
+	}
+	else
+	{
+		//camera matrix was saved in standard (float) precision
+		ccGLMatrix _viewMat;
+		if (!_viewMat.fromFile(in, dataVersion, flags))
+			return false;
+		viewMat = ccGLMatrixd(_viewMat.data());
+	}
 
 	//other parameters (dataVersion>=20)
 	QDataStream inStream(&in);
@@ -92,20 +103,36 @@ bool ccViewportParameters::fromFile(QFile& in, short dataVersion, int flags)
 	//before version 25, we were saving the inverse of 'pixelSize' ('globalZoom')
 	if (dataVersion < 25)
 		pixelSize = (pixelSize> ZERO_TOLERANCE ? 1.0f/pixelSize : 1.0f);
-    inStream >> zoom;
-    inStream >> defaultPointSize;
-    inStream >> defaultLineWidth;
+	inStream >> zoom;
+	inStream >> defaultPointSize;
+	inStream >> defaultLineWidth;
 	inStream >> perspectiveView;
 	inStream >> objectCenteredView;
-	ccSerializationHelper::CoordsFromDataStream(inStream,flags,pivotPoint.u,3);
-	if (dataVersion >= 25) //we now save the camera center as a separate point!
+	if (dataVersion >= 36) //we now save the camera center and pivot point in double precision
 	{
-		ccSerializationHelper::CoordsFromDataStream(inStream,flags,cameraCenter.u,3);
+		inStream >> pivotPoint.x;
+		inStream >> pivotPoint.y;
+		inStream >> pivotPoint.z;
+		inStream >> cameraCenter.x;
+		inStream >> cameraCenter.y;
+		inStream >> cameraCenter.z;
 	}
 	else
 	{
-		//FIXME: doesn't work in object-centered perspective!
-		cameraCenter = pivotPoint;
+		CCVector3 _pivotPoint;
+		ccSerializationHelper::CoordsFromDataStream(inStream,flags,_pivotPoint.u,3);
+		pivotPoint = CCVector3d::fromArray(_pivotPoint.u);
+		if (dataVersion >= 25) //after version 25 the camera center is saved as a separate point!
+		{
+			CCVector3 _cameraCenter;
+			ccSerializationHelper::CoordsFromDataStream(inStream,flags,_cameraCenter.u,3);
+			cameraCenter = CCVector3d::fromArray(_cameraCenter.u);
+		}
+		else
+		{
+			//FIXME: doesn't work in object-centered perspective!
+			cameraCenter = pivotPoint;
+		}
 	}
 	inStream >> fov;
 	inStream >> perspectiveAspectRatio;
@@ -117,8 +144,8 @@ bool ccViewportParameters::fromFile(QFile& in, short dataVersion, int flags)
 
 		if (objectCenteredView)
 		{
-			cameraCenter.x += static_cast<PointCoordinateType>(screenPan[0]);
-			cameraCenter.y += static_cast<PointCoordinateType>(screenPan[1]);
+			cameraCenter.x += static_cast<double>(screenPan[0]);
+			cameraCenter.y += static_cast<double>(screenPan[1]);
 		}
 	}
 

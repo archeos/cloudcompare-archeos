@@ -78,12 +78,12 @@ ccClippingBoxTool::ccClippingBoxTool(QWidget* parent)
 	connect(plusZShiftToolButton,	SIGNAL(clicked()), this, SLOT(shiftZPlus()));
 
 	viewButtonsFrame->setEnabled(true);
-    connect(viewUpToolButton,		SIGNAL(clicked()),	this,	SLOT(setTopView()));
-    connect(viewDownToolButton,		SIGNAL(clicked()),	this,	SLOT(setBottomView()));
-    connect(viewFrontToolButton,	SIGNAL(clicked()),	this,	SLOT(setFrontView()));
-    connect(viewBackToolButton,		SIGNAL(clicked()),	this,	SLOT(setBackView()));
-    connect(viewLeftToolButton,		SIGNAL(clicked()),	this,	SLOT(setLeftView()));
-    connect(viewRightToolButton,	SIGNAL(clicked()),	this,	SLOT(setRightView()));
+	connect(viewUpToolButton,		SIGNAL(clicked()),	this,	SLOT(setTopView()));
+	connect(viewDownToolButton,		SIGNAL(clicked()),	this,	SLOT(setBottomView()));
+	connect(viewFrontToolButton,	SIGNAL(clicked()),	this,	SLOT(setFrontView()));
+	connect(viewBackToolButton,		SIGNAL(clicked()),	this,	SLOT(setBackView()));
+	connect(viewLeftToolButton,		SIGNAL(clicked()),	this,	SLOT(setLeftView()));
+	connect(viewRightToolButton,	SIGNAL(clicked()),	this,	SLOT(setRightView()));
 
 	s_maxEdgeLength = -1.0;
 	//s_lastContourUniqueIDs.clear();
@@ -178,7 +178,7 @@ bool ccClippingBoxTool::linkWith(ccGLWindow* win)
 {
 	if (m_associatedWin && m_clipBox)
 	{
-		//remove clipping box from precedent window
+		//remove clipping box from previous window
 		m_associatedWin->removeFromOwnDB(m_clipBox);
 		m_clipBox->disconnect(this);
 		delete m_clipBox;
@@ -849,61 +849,51 @@ void ccClippingBoxTool::closeDialog()
 
 void ccClippingBoxTool::setTopView()
 {
-    setView(CC_TOP_VIEW);
+	setView(CC_TOP_VIEW);
 }
 
 void ccClippingBoxTool::setBottomView()
 {
-    setView(CC_BOTTOM_VIEW);
+	setView(CC_BOTTOM_VIEW);
 }
 
 void ccClippingBoxTool::setFrontView()
 {
-    setView(CC_FRONT_VIEW);
+	setView(CC_FRONT_VIEW);
 }
 
 void ccClippingBoxTool::setBackView()
 {
-    setView(CC_BACK_VIEW);
+	setView(CC_BACK_VIEW);
 }
 
 void ccClippingBoxTool::setLeftView()
 {
-    setView(CC_LEFT_VIEW);
+	setView(CC_LEFT_VIEW);
 }
 
 void ccClippingBoxTool::setRightView()
 {
-    setView(CC_RIGHT_VIEW);
+	setView(CC_RIGHT_VIEW);
 }
 
 void ccClippingBoxTool::setView(CC_VIEW_ORIENTATION orientation)
 {
-    if (!m_associatedWin)
-        return;
+	if (!m_associatedWin)
+		return;
 
-    //m_associatedWin->blockSignals(true);
-    m_associatedWin->setView(orientation,false);
+	//m_associatedWin->blockSignals(true);
+	m_associatedWin->setView(orientation,false);
 	if (m_clipBox && m_clipBox->isGLTransEnabled())
 	{
 		ccViewportParameters params = m_associatedWin->getViewportParameters();
 		const ccGLMatrix& glMat = m_clipBox->getGLTransformation();
 
-		ccGLMatrix rotMat = glMat; rotMat.setTranslation(CCVector3(0.0,0.0,0.0));
-
-		//CCVector3 T = CCVector3(glMat.getTranslation()) - params.pivotPoint;
-		//rotMat.inverse().apply(T);
-		//T += params.pivotPoint;
-		//params.viewMat.apply(T);
-		//params.cameraCenter -= T;
+		ccGLMatrixd rotMat(glMat.data()); rotMat.clearTranslation();
 
 		params.viewMat = params.viewMat * rotMat.inverse();
 		m_associatedWin->setViewportParameters(params);
-
-		//ccLog::Print(QString("X(%1,%2,%3)").arg(glMat.getColumn(0)[0]).arg(glMat.getColumn(0)[1]).arg(glMat.getColumn(0)[2]));
-		//ccLog::Print(QString("Y(%1,%2,%3)").arg(glMat.getColumn(1)[0]).arg(glMat.getColumn(1)[1]).arg(glMat.getColumn(1)[2]));
-		//ccLog::Print(QString("Z(%1,%2,%3)").arg(glMat.getColumn(2)[0]).arg(glMat.getColumn(2)[1]).arg(glMat.getColumn(2)[2]));
 	}
-    //m_associatedWin->blockSignals(false);
-    m_associatedWin->redraw();
+	//m_associatedWin->blockSignals(false);
+	m_associatedWin->redraw();
 }

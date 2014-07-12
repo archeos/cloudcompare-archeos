@@ -37,6 +37,7 @@
 #include <ccImage.h>
 #include <ccCalibratedImage.h>
 #include <ccColorScalesManager.h>
+#include <ccScalarField.h>
 
 //Qt
 #include <QApplication>
@@ -356,7 +357,7 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	// No point grouping scheme (unstructured cloud)
 
 	// Make a prototype of datatypes that will be stored in points record.
-    /// This prototype will be used in creating the points CompressedVector.
+	/// This prototype will be used in creating the points CompressedVector.
 	e57::StructureNode proto = e57::StructureNode(imf);
 
 	//prepare temporary structures
@@ -463,13 +464,13 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	//"isTimeStampInvalid"
 
 	// Make empty codecs vector for use in creating points CompressedVector.
-    /// If this vector is empty, it is assumed that all fields will use the BitPack codec.
+	/// If this vector is empty, it is assumed that all fields will use the BitPack codec.
 	e57::VectorNode codecs = e57::VectorNode(imf, true);
 
 	// Create CompressedVector for storing points.
-    /// We use the prototype and empty codecs tree from above.
+	/// We use the prototype and empty codecs tree from above.
 	e57::CompressedVectorNode points = e57::CompressedVectorNode(imf, proto, codecs);
-    scanNode.set("points", points);
+	scanNode.set("points", points);
 	data3D.append(scanNode);
 
 	e57::CompressedVectorWriter writer = points.writer(dbufs);
@@ -634,7 +635,7 @@ void SaveImage(ccImage* image, const QString& scanGUID, e57::ImageFile& imf, e57
 
 }
 
-CC_FILE_ERROR E57Filter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR E57Filter::saveToFile(ccHObject* entity, QString filename)
 {
 	//we assume the input entity is either a cloud or a group of clouds (=multiple scans)
 	std::vector<ccPointCloud*> scans;
@@ -654,7 +655,7 @@ CC_FILE_ERROR E57Filter::saveToFile(ccHObject* entity, const char* filename)
 		return CC_FERR_NO_SAVE;
 
 	//Write file to disk
-	e57::ImageFile imf(filename, "w");
+	e57::ImageFile imf(filename.toStdString(), "w");
 	if (!imf.isOpen())
 		return CC_FERR_WRITING;
 
@@ -791,59 +792,59 @@ bool NodeStructureToTree(ccHObject* currentTreeNode, e57::Node currentE57Node)
 
 	switch(currentE57Node.type())
 	{
-        case e57::E57_STRUCTURE:
+	case e57::E57_STRUCTURE:
 		{
 			infoStr += QString(" [STRUCTURE]");
 			e57::StructureNode s = static_cast<e57::StructureNode>(currentE57Node);
 			for (boost::int64_t i=0;i<s.childCount();++i)
 				NodeStructureToTree(obj,s.get(i));
-        }
-        break;
-        case e57::E57_VECTOR:
+		}
+		break;
+	case e57::E57_VECTOR:
 		{
 			infoStr += QString(" [VECTOR]");
-            e57::VectorNode v = static_cast<e57::VectorNode>(currentE57Node);
+			e57::VectorNode v = static_cast<e57::VectorNode>(currentE57Node);
 			for (boost::int64_t i=0;i<v.childCount();++i)
 				NodeStructureToTree(obj,v.get(i));
-        }
-        break;
-        case e57::E57_COMPRESSED_VECTOR:
+		}
+		break;
+	case e57::E57_COMPRESSED_VECTOR:
 		{
-            e57::CompressedVectorNode cv = static_cast<e57::CompressedVectorNode>(currentE57Node);
+			e57::CompressedVectorNode cv = static_cast<e57::CompressedVectorNode>(currentE57Node);
 			infoStr += QString(" [COMPRESSED VECTOR (%1 elements)]").arg(cv.childCount());
-        }
-        break;
-        case e57::E57_INTEGER:
+		}
+		break;
+	case e57::E57_INTEGER:
 		{
-            e57::IntegerNode i = static_cast<e57::IntegerNode>(currentE57Node);
+			e57::IntegerNode i = static_cast<e57::IntegerNode>(currentE57Node);
 			infoStr += QString(" [INTEGER: %1]").arg(i.value());
-        }
-        break;
-        case e57::E57_SCALED_INTEGER:
+		}
+		break;
+	case e57::E57_SCALED_INTEGER:
 		{
-            e57::ScaledIntegerNode si = static_cast<e57::ScaledIntegerNode>(currentE57Node);
+			e57::ScaledIntegerNode si = static_cast<e57::ScaledIntegerNode>(currentE57Node);
 			infoStr += QString(" [SCALED INTEGER: %1]").arg(si.scaledValue());
-        }
-        break;
-        case e57::E57_FLOAT:
+		}
+		break;
+	case e57::E57_FLOAT:
 		{
-            e57::FloatNode f = static_cast<e57::FloatNode>(currentE57Node);
+			e57::FloatNode f = static_cast<e57::FloatNode>(currentE57Node);
 			infoStr += QString(" [FLOAT: %1]").arg(f.value());
-        }
-        break;
-        case e57::E57_STRING:
+		}
+		break;
+	case e57::E57_STRING:
 		{
-            e57::StringNode s = static_cast<e57::StringNode>(currentE57Node);
+			e57::StringNode s = static_cast<e57::StringNode>(currentE57Node);
 			infoStr += QString(" [STRING: %1]").arg(s.value().c_str());
-        }
-        break;
-        case e57::E57_BLOB:
+		}
+		break;
+	case e57::E57_BLOB:
 		{
-            e57::BlobNode b = static_cast<e57::BlobNode>(currentE57Node);
+			e57::BlobNode b = static_cast<e57::BlobNode>(currentE57Node);
 			infoStr += QString(" [BLOB (%1 bytes)]").arg(b.byteCount());
-        }
-        break;
-		default:
+		}
+		break;
+	default:
 		{
 			infoStr += QString( "[INVALID]");
 			obj->setName(infoStr);
@@ -861,55 +862,55 @@ void NodeToConsole(e57::Node node)
 	QString infoStr = QString("[E57] '%1' - ").arg(node.elementName().c_str());
 	switch(node.type())
 	{
-        case e57::E57_STRUCTURE:
+	case e57::E57_STRUCTURE:
 		{
 			e57::StructureNode s = static_cast<e57::StructureNode>(node);
 			infoStr += QString("STRUCTURE, %1 child(ren)").arg(s.childCount());
-        }
-        break;
-        case e57::E57_VECTOR:
+		}
+		break;
+	case e57::E57_VECTOR:
 		{
-            e57::VectorNode v = static_cast<e57::VectorNode>(node);
+			e57::VectorNode v = static_cast<e57::VectorNode>(node);
 			infoStr += QString("VECTOR, %1 child(ren)").arg(v.childCount());
-        }
-        break;
-        case e57::E57_COMPRESSED_VECTOR:
+		}
+		break;
+	case e57::E57_COMPRESSED_VECTOR:
 		{
-            e57::CompressedVectorNode cv = static_cast<e57::CompressedVectorNode>(node);
+			e57::CompressedVectorNode cv = static_cast<e57::CompressedVectorNode>(node);
 			infoStr += QString("COMPRESSED VECTOR, %1 elements").arg(cv.childCount());
-        }
-        break;
-        case e57::E57_INTEGER:
+		}
+		break;
+	case e57::E57_INTEGER:
 		{
-            e57::IntegerNode i = static_cast<e57::IntegerNode>(node);
+			e57::IntegerNode i = static_cast<e57::IntegerNode>(node);
 			infoStr += QString("%1 (INTEGER)").arg(i.value());
-        }
-        break;
-        case e57::E57_SCALED_INTEGER:
+		}
+		break;
+	case e57::E57_SCALED_INTEGER:
 		{
-            e57::ScaledIntegerNode si = static_cast<e57::ScaledIntegerNode>(node);
+			e57::ScaledIntegerNode si = static_cast<e57::ScaledIntegerNode>(node);
 			infoStr += QString("%1 (SCALED INTEGER)").arg(si.scaledValue());
-        }
-        break;
-        case e57::E57_FLOAT:
+		}
+		break;
+	case e57::E57_FLOAT:
 		{
-            e57::FloatNode f = static_cast<e57::FloatNode>(node);
+			e57::FloatNode f = static_cast<e57::FloatNode>(node);
 			infoStr += QString("%1 (FLOAT)").arg(f.value());
-        }
-        break;
-        case e57::E57_STRING:
+		}
+		break;
+	case e57::E57_STRING:
 		{
-            e57::StringNode s = static_cast<e57::StringNode>(node);
+			e57::StringNode s = static_cast<e57::StringNode>(node);
 			infoStr += QString(s.value().c_str());
-        }
-        break;
-        case e57::E57_BLOB:
+		}
+		break;
+	case e57::E57_BLOB:
 		{
-            e57::BlobNode b = static_cast<e57::BlobNode>(node);
+			e57::BlobNode b = static_cast<e57::BlobNode>(node);
 			infoStr += QString("BLOB, size=%1").arg(b.byteCount());
-        }
-        break;
-		default:
+		}
+		break;
+	default:
 		{
 			infoStr += QString("INVALID");
 		}
@@ -1634,7 +1635,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 			if(arrays.isInvalidData && arrays.isInvalidData[i] != 0)
 				continue;
 
-			double Pd[3]={0,0,0};
+			CCVector3d Pd(0,0,0);
 			if (sphericalMode)
 			{
 				double r = (arrays.xData ? arrays.xData[i] : 0);
@@ -1642,9 +1643,9 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 				double phi = (arrays.zData ? arrays.zData[i] : 0);		//Elevation
 
 				double cos_phi = cos(phi);
-				Pd[0] = r * cos_phi * cos(theta);
-				Pd[1] = r * cos_phi * sin(theta);
-				Pd[2] = r * sin(phi);
+				Pd.x = r * cos_phi * cos(theta);
+				Pd.y = r * cos_phi * sin(theta);
+				Pd.z = r * sin(phi);
 			}
 			//DGM TODO: not handled yet (-->what are the standard cylindrical field names?)
 			/*else if (cylindricalMode)
@@ -1652,28 +1653,28 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 				//from cylindrical coordinates
 				assert(arrays.xData);
 				double theta = (arrays.yData ? arrays.yData[i] : 0);
-				Pd[0] = arrays.xData[i] * cos(theta);
-				Pd[1] = arrays.xData[i] * sin(theta);
+				Pd.x = arrays.xData[i] * cos(theta);
+				Pd.y = arrays.xData[i] * sin(theta);
 				if (arrays.zData)
-					Pd[2] = arrays.zData[i];
+					Pd.z = arrays.zData[i];
 			}
 			//*/
 			else //cartesian
 			{
 				if (arrays.xData)
-					Pd[0] = arrays.xData[i];
+					Pd.x = arrays.xData[i];
 				if (arrays.yData)
-					Pd[1] = arrays.yData[i];
+					Pd.y = arrays.yData[i];
 				if (arrays.zData)
-					Pd[2] = arrays.zData[i];
+					Pd.z = arrays.zData[i];
 			}
 
 			//first point: check for 'big' coordinates
 			if (realCount == 0)
 			{
-				bool applyAll=false;
+				bool applyAll = false;
 				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(Pd,0,s_alwaysDisplayLoadDialog,s_coordinatesShiftEnabled,s_coordinatesShift,0,applyAll))
+					&&	ccCoordinatesShiftManager::Handle(Pd,0,s_alwaysDisplayLoadDialog,s_coordinatesShiftEnabled,s_coordinatesShift,0,&applyAll))
 				{
 					cloud->setGlobalShift(s_coordinatesShift);
 					ccLog::Warning("[E57Filter::loadFile] Cloud %s has been recentered! Translation: (%.2f,%.2f,%.2f)",qPrintable(guidStr),s_coordinatesShift.x,s_coordinatesShift.y,s_coordinatesShift.z);
@@ -1682,9 +1683,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 				}
 			}
 
-			CCVector3 P(static_cast<PointCoordinateType>(Pd[0] + s_coordinatesShift.x),
-						static_cast<PointCoordinateType>(Pd[1] + s_coordinatesShift.y),
-						static_cast<PointCoordinateType>(Pd[2] + s_coordinatesShift.z));
+			CCVector3 P = CCVector3::fromArray((Pd + s_coordinatesShift).u);
 			cloud->addPoint(P);
 
 			if (hasNormals)
@@ -2039,12 +2038,12 @@ ccHObject* LoadImage(e57::Node& node, QString& associatedData3DGuid)
 	return imageObj;
 }
 
-CC_FILE_ERROR E57Filter::loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR E57Filter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
 {
 	s_alwaysDisplayLoadDialog = alwaysDisplayLoadDialog;
 
 	//Read file from disk
-	e57::ImageFile imf(filename, "r");
+	e57::ImageFile imf(filename.toStdString(), "r");
 	if (!imf.isOpen())
 		return CC_FERR_READING;
 

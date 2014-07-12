@@ -19,30 +19,27 @@
 #define CC_CLIP_BOX_HEADER
 
 //Local
+#include "qCC_db.h"
 #include "ccBBox.h"
 #include "ccHObject.h"
 #include "ccInteractor.h"
+#include "ccGLMatrix.h"
 
 //Qt
 #include <QObject>
 
 //! Clipping box
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db.h"
 class QCC_DB_LIB_API ccClipBox : public QObject, public ccHObject, public ccInteractor
-#else
-class ccClipBox : public QObject, public ccHObject, public ccInteractor
-#endif
 {
 	Q_OBJECT
 
 public:
 
-    //! Default constructor
-    ccClipBox(ccHObject* associatedEntity = 0, QString name = QString("Clipping box"));
-    
+	//! Default constructor
+	ccClipBox(ccHObject* associatedEntity = 0, QString name = QString("Clipping box"));
+
 	//! Destructor
-    virtual ~ccClipBox();
+	virtual ~ccClipBox();
 
 	//! Sets associated entity
 	/** Warning: resets the current clipping box
@@ -51,14 +48,14 @@ public:
 
 	//inherited from ccHObject
 	virtual ccBBox getMyOwnBB();
-    virtual ccBBox getDisplayBB();
+	virtual ccBBox getDisplayBB();
 
 	//inherited from ccInteractor
 	virtual bool move2D(int x, int y, int dx, int dy, int screenWidth, int screenHeight);
-	virtual bool move3D(const CCVector3& u);
+	virtual bool move3D(const CCVector3d& u);
 
 	//! Sets last clicked point (on screen)
-	void setClickedPoint(int x, int y, int screenWidth, int screenHeight, const ccGLMatrix& viewMatrix);
+	void setClickedPoint(int x, int y, int screenWidth, int screenHeight, const ccGLMatrixd& viewMatrix);
 
 	//! Components
 	enum Components {	NONE			= 0,
@@ -84,7 +81,7 @@ public:
 	void setActiveComponent(int id);
 
 	//inherited from ccHObject
-    virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::CLIPPING_BOX; }
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::CLIPPING_BOX; }
 	//virtual bool isSerializable() const { return false; }
 
 	//! Returns current box
@@ -114,8 +111,8 @@ signals:
 
 protected:
 
-    //inherited from ccHObject
-    virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
+	//inherited from ccHObject
+	virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
 
 	//! Computes arrows display scale
 	PointCoordinateType computeArrowsScale() const;
@@ -130,10 +127,10 @@ protected:
 	Components m_activeComponent;
 
 	//! Last "orientation" vector (corresponding to last clicked point)
-	CCVector3 m_lastOrientation;
+	CCVector3d m_lastOrientation;
 
 	//! View matrix
-	ccGLMatrix m_viewMatrix;
+	ccGLMatrixd m_viewMatrix;
 };
 
 #endif //CC_CLIP_BOX_HEADER

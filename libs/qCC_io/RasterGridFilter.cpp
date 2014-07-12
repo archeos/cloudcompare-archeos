@@ -36,22 +36,22 @@
 //System
 #include <string.h> //for memset
 
-CC_FILE_ERROR RasterGridFilter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR RasterGridFilter::saveToFile(ccHObject* entity, QString filename)
 {
 
 	return CC_FERR_NO_ERROR;
 }
 
-CC_FILE_ERROR RasterGridFilter::loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR RasterGridFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
 {
 	GDALAllRegister();
 	ccLog::PrintDebug("(GDAL drivers: %i)", GetGDALDriverManager()->GetDriverCount());
 
-	GDALDataset* poDataset = static_cast<GDALDataset*>(GDALOpen( filename, GA_ReadOnly ));
-    
+	GDALDataset* poDataset = static_cast<GDALDataset*>(GDALOpen( qPrintable(filename), GA_ReadOnly ));
+
 	if( poDataset != NULL )
-    {
-		ccLog::Print("Raster file: '%s'", filename);
+	{
+		ccLog::Print(QString("Raster file: '%1'").arg(filename));
 		ccLog::Print( "Driver: %s/%s",
 			poDataset->GetDriver()->GetDescription(), 
 			poDataset->GetDriver()->GetMetadataItem( GDAL_DMD_LONGNAME ) );
@@ -91,7 +91,7 @@ CC_FILE_ERROR RasterGridFilter::loadFile(const char* filename, ccHObject& contai
 			adfGeoTransform[1] = adfGeoTransform[5] = 1;
 		}
 
-		double origin[3] = { adfGeoTransform[0], adfGeoTransform[3], 0.0 };
+		CCVector3d origin( adfGeoTransform[0], adfGeoTransform[3], 0.0 );
 		CCVector3d Pshift(0,0,0);
 		//check for 'big' coordinates
 		{
@@ -100,7 +100,7 @@ CC_FILE_ERROR RasterGridFilter::loadFile(const char* filename, ccHObject& contai
 				Pshift = *coordinatesShift;
 			bool applyAll = false;
 			if (	sizeof(PointCoordinateType) < 8
-				&&	ccCoordinatesShiftManager::Handle(origin,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+				&&	ccCoordinatesShiftManager::Handle(origin,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 			{
 				pc->setGlobalShift(Pshift);
 				ccLog::Warning("[RasterFilter::loadFile] Raster has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
@@ -427,7 +427,7 @@ CC_FILE_ERROR RasterGridFilter::loadFile(const char* filename, ccHObject& contai
 		}
 
 		GDALClose(poDataset);
-    }
+	}
 	else
 	{
 		return CC_FERR_UNKNOWN_FILE;

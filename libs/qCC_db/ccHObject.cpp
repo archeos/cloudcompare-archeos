@@ -47,6 +47,7 @@
 #include "ccQuadric.h"
 #include "ccIndexedTransformationBuffer.h"
 #include "ccCustomObject.h"
+#include "ccExternalFactory.h"
 
 //CCLib
 #include <CCShareable.h>
@@ -195,9 +196,29 @@ ccHObject* ccHObject::New(CC_CLASS_ENUM objectType, const char* name/*=0*/)
 	return 0;
 }
 
+ccHObject* ccHObject::New(QString pluginId, QString classId, const char* name)
+{
+	ccExternalFactory::Container::Shared externalFactories = ccExternalFactory::Container::GetUniqueInstance();
+	if (!externalFactories)
+		return 0;
+
+	ccExternalFactory* factory = externalFactories->getFactoryByName(pluginId);
+	if (!factory)
+		return 0;
+
+	ccHObject* obj = factory->buildObject(classId);
+
+	if (!obj)
+		return 0;
+
+	if (name)
+		obj->setName(name);
+	return obj;
+}
+
 QIcon ccHObject::getIcon() const
 {
-    return QIcon();
+	return QIcon();
 }
 
 void ccHObject::addDependency(ccHObject* otherObject, int flags, bool additive/*=true*/)
@@ -441,12 +462,12 @@ ccBBox ccHObject::getBB(bool relative/*=true*/, bool withGLfeatures/*=false*/, c
 	ccBBox box;
 
 	//if (!isEnabled())
-	//    return box;
+	//	return box;
 
 	if (!display || m_currentDisplay==display)
 		box = (withGLfeatures ? getDisplayBB() : getMyOwnBB());
 
-	for (Container::iterator it = m_children.begin(); it!=m_children.end(); ++it)
+	for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it)
 	{
 		if ((*it)->isEnabled())
 			box += (*it)->getBB(false, withGLfeatures, display);
@@ -454,8 +475,8 @@ ccBBox ccHObject::getBB(bool relative/*=true*/, bool withGLfeatures/*=false*/, c
 
 	//apply GL transformation afterwards!
 	if (!display || m_currentDisplay == display)
-		if (box.isValid() && !relative && m_glTransEnabled)
-			box *= m_glTrans;
+		if (!relative && m_glTransEnabled && box.isValid())
+			box = box*m_glTrans;
 
 	return box;
 }
@@ -484,7 +505,7 @@ void ccHObject::drawNameIn3D(CC_DRAW_CONTEXT& context)
 		return;
 
 	//we display it in the 2D layer in fact!
-    ccBBox bBox = getBB(true,false,m_currentDisplay);
+	ccBBox bBox = getBB(true,false,m_currentDisplay);
 	if (bBox.isValid())
 	{
 		const double* MM = context._win->getModelViewMatd(); //viewMat
@@ -535,8 +556,8 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 	bool drawInThisContext = ((m_visible || m_selected) && m_currentDisplay == context._win);
 
 	//no need to display anything but clouds and meshes in "element picking mode"
-	drawInThisContext &= (( !MACRO_DrawPointNames(context) || isKindOf(CC_TYPES::POINT_CLOUD) ) || 
-		                  ( !MACRO_DrawTriangleNames(context) || isKindOf(CC_TYPES::MESH) ));
+	drawInThisContext &= (	( !MACRO_DrawPointNames(context)	|| isKindOf(CC_TYPES::POINT_CLOUD) ) || 
+							( !MACRO_DrawTriangleNames(context)	|| isKindOf(CC_TYPES::MESH) ));
 
 	//apply 3D 'temporary' transformation (for display only)
 	if (draw3D && m_glTransEnabled)
@@ -736,9 +757,6 @@ bool ccHObject::isSerializable() const
 
 bool ccHObject::toFile(QFile& out) const
 {
-	if (isKindOf(CC_TYPES::CUSTOM_LEAF_OBJECT))
-		return true;
-
 	assert(out.isOpen() && (out.openMode() & QIODevice::WriteOnly));
 
 	//write 'ccObject' header
@@ -774,7 +792,7 @@ bool ccHObject::toFile(QFile& out) const
 	return true;
 }
 
-bool ccHObject::fromFile(QFile& in, short dataVersion, int flags)
+bool ccHObject::fromFile(QFile& in, short dataVersion, int flags, bool omitChildren)
 {
 	assert(in.isOpen() && (in.openMode() & QIODevice::ReadOnly));
 
@@ -786,13 +804,16 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags)
 	if (!fromFile_MeOnly(in, dataVersion, flags))
 		return false;
 
+	if (omitChildren)
+		return true;
+
 	//(serializable) child count (dataVersion>=20)
 	uint32_t serializableCount = 0;
-	if (in.read((char*)&serializableCount,4)<0)
+	if (in.read((char*)&serializableCount,4) < 0)
 		return ReadError();
 
 	//read serializable children (if any)
-	for (uint32_t i=0;i<serializableCount;++i)
+	for (uint32_t i=0; i<serializableCount; ++i)
 	{
 		//read children class ID
 		CC_CLASS_ENUM classID = ReadClassIDFromFile(in, dataVersion);
@@ -801,6 +822,37 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags)
 
 		//create corresponding child object
 		ccHObject* child = New(classID);
+
+		//specifc case of custom objects (defined by plugins)
+		if (classID == CC_TYPES::CUSTOM_H_OBJECT)
+		{
+			//store current position
+			size_t originalFilePos = in.pos();
+			//we need to load the custom object as plain ccCustomHobject
+			child->fromFile(in, dataVersion, flags, true);
+			//go back to original position
+			in.seek(originalFilePos);
+			//get custom object name and plugin name
+			QString childName = child->getName();
+			QString classId = child->getMetaData(ccCustomHObject::DefautMetaDataClassName()).toString();
+			QString pluginId = child->getMetaData(ccCustomHObject::DefautMetaDataPluginName()).toString();
+			//dont' need this instance anymore
+			delete child;
+			child = 0;
+
+			// try to get a new object from external factories
+			ccHObject* newChild = ccHObject::New(pluginId, classId);
+			if (newChild) // found a plugin that can deserialize it
+			{
+				child = newChild;
+			}
+			else
+			{
+				ccLog::Warning(QString("[ccHObject::fromFile] Couldn't found any plugin able to deserialize custom object '%1' (class_ID = %2 / plugin_ID = %3").arg(childName).arg(classID).arg(pluginId));
+				return false; // FIXME: for now simply return false. We may want to skip it but I'm not sure if there is a simple way of doing that
+			}
+		}
+
 		assert(child && child->isSerializable());
 		if (child)
 		{
@@ -823,9 +875,9 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags)
 	}
 
 	//write current selection behavior (dataVersion>=23)
-	if (dataVersion>=23)
+	if (dataVersion >= 23)
 	{
-		if (in.read((char*)&m_selectionBehavior,sizeof(SelectionBehavior))<0)
+		if (in.read((char*)&m_selectionBehavior,sizeof(SelectionBehavior)) < 0)
 			return ReadError();
 	}
 	else
