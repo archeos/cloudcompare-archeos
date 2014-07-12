@@ -1,9 +1,16 @@
-cloudcompare (2.5.4.1-0archeos1) theodoric; urgency=low
+cloudcompare (2.5.5-0archeos1) theodoric; urgency=low
+
+  * New upstream version 2.5.5
+    upstream changes are in the history.txt file.
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 10 JUL 2014 18:52:23 +0100
+
+cloudcompare (2.5.4.1-0archeos1) UNRELEASED; urgency=low
 
   * New upstream version 2.5.4.1
     upstream changes are in the history.txt file.
 
- -- Romain Janvier <romain.janvier@hotmail.fr>  Sun, 24 May 2013 19:00:00 +0100
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sun, 24 May 2014 19:00:00 +0100
 
 cloudcompare (2.5.3-0archeos1) theodoric; urgency=low
 
