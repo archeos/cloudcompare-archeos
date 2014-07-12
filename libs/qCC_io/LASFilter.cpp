@@ -25,8 +25,11 @@
 
 //qCC_db
 #include <ccLog.h>
+#include <ccPlatform.h>
 #include <ccPointCloud.h>
 #include <ccProgressDialog.h>
+#include <ccScalarField.h>
+#include "ccColorScalesManager.h"
 
 //Liblas
 #include <liblas/point.hpp>
@@ -60,9 +63,9 @@ struct LasField
 	inline const char* getName() { return (type < LAS_INVALID ? LAS_FIELD_NAMES[type] : 0); }
 };
 
-CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 {
-	if (!entity || !filename)
+	if (!entity || filename.isEmpty())
 		return CC_FERR_BAD_ARGUMENT;
 
 	ccHObject::Container clouds;
@@ -162,7 +165,11 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, const char* filename)
 
 	//open binary file for writing
 	std::ofstream ofs;
-	ofs.open(filename, std::ios::out | std::ios::binary);
+#if defined(CC_MAC_OS) || _MSC_VER <= 1500
+	ofs.open(qPrintable(filename), std::ios::out | std::ios::binary);
+#else
+	ofs.open(filename.toStdString(), std::ios::out | std::ios::binary);
+#endif
 
 	if (ofs.fail())
 		return CC_FERR_WRITING;
@@ -338,44 +345,59 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, const char* filename)
 
 QSharedPointer<LASOpenDlg> s_lasOpenDlg(0);
 
-CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
 {
 	//opening file
 	std::ifstream ifs;
-	ifs.open(filename, std::ios::in | std::ios::binary);
+#if defined(CC_MAC_OS) || _MSC_VER <= 1500
+	ifs.open(qPrintable(filename), std::ios::in | std::ios::binary);
+#else
+	ifs.open(filename.toStdString(), std::ios::in | std::ios::binary);
+#endif
 
 	if (ifs.fail())
 		return CC_FERR_READING;
 
-	liblas::Reader* reader = 0;
+	liblas::Reader reader(liblas::ReaderFactory().CreateWithStream(ifs));
 	unsigned nbOfPoints = 0;
 	std::vector<std::string> dimensions;
 
 	try
 	{
-		reader = new liblas::Reader(liblas::ReaderFactory().CreateWithStream(ifs));	//using factory for automatic and transparent
 		//handling of compressed/uncompressed files
-		liblas::Header const& header = reader->GetHeader();
+		liblas::Header const& header = reader.GetHeader();
 
-		ccLog::PrintDebug(QString("[LAS FILE] %1 - signature: %2").arg(filename).arg(header.GetFileSignature().c_str()));
+		ccLog::Print(QString("[LAS] %1 - signature: %2").arg(filename).arg(header.GetFileSignature().c_str()));
+
+		const liblas::Schema& schema = header.GetSchema();
 
 		//get fields present in file
-		dimensions = header.GetSchema().GetDimensionNames();
+		//DGM: strangely, on the 32 bits windows version, calling GetDimensionNames makes CC crash?!
+		//DGM: so we call the same code as the function does... and it works?! (DIRTY)
+		//dimensions = schema.GetDimensionNames();
+		{
+			liblas::IndexMap const& map = schema.GetDimensions();
+			liblas::index_by_position const& position_index = map.get<liblas::position>();
+			liblas::index_by_position::const_iterator it = position_index.begin();
+			while (it != position_index.end())
+			{
+				dimensions.push_back(it->GetName());
+				it++;
+			}
+		}
 
 		//and of course the number of points
 		nbOfPoints = header.GetPointRecordsCount();
 	}
 	catch (...)
 	{
-		delete reader;
 		ifs.close();
 		return CC_FERR_READING;
 	}
 
-	if (nbOfPoints==0)
+	if (nbOfPoints == 0)
 	{
 		//strange file ;)
-		delete reader;
 		ifs.close();
 		return CC_FERR_NO_LOAD;
 	}
@@ -386,7 +408,6 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 	s_lasOpenDlg->setDimensions(dimensions);
 	if (alwaysDisplayLoadDialog && !s_lasOpenDlg->autoSkipMode() && !s_lasOpenDlg->exec())
 	{
-		delete reader;
 		ifs.close();
 		return CC_FERR_CANCELED_BY_USER;
 	}
@@ -413,8 +434,10 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 	unsigned pointsRead = 0;
 	CCVector3d Pshift(0,0,0);
 
-	//by default we read color as 8 bits integers and we will change this to 16 bits if it's not (16 bits is the standard!)
-	unsigned char colorCompBitDec = 0;
+	//by default we read colors as triplets of 8 bits integers but we might dynamically change this
+	//if we encounter values using 16 bits (16 bits is the standard!)
+	unsigned char colorCompBitShift = 0;
+	bool forced8bitRgbMode = s_lasOpenDlg->forced8bitRgbMode();
 	colorType rgb[3] = {0,0,0};
 
 	ccPointCloud* loadedCloud = 0;
@@ -427,7 +450,7 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 	while (true)
 	{
 		//if we reach the end of the file, or the max. cloud size limit (in which case we cerate a new chunk)
-		bool newPointAvailable = (nprogress.oneStep() && reader->ReadNextPoint());
+		bool newPointAvailable = (nprogress.oneStep() && reader.ReadNextPoint());
 
 		if (!newPointAvailable || pointsRead == fileChunkPos+fileChunkSize)
 		{
@@ -514,7 +537,6 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 			{
 				ccLog::Warning("[LASFilter::loadFile] Not enough memory!");
 				delete loadedCloud;
-				delete reader;
 				ifs.close();
 				return CC_FERR_NOT_ENOUGH_MEMORY;
 			}
@@ -522,7 +544,7 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 
 			//DGM: from now on, we only enable scalar fields when we detect a valid value!
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIFICATION))
-					fieldsToLoad.push_back(LasField(LAS_CLASSIFICATION,0,0,255)); //unsigned char: between 0 and 255
+				fieldsToLoad.push_back(LasField(LAS_CLASSIFICATION,0,0,255)); //unsigned char: between 0 and 255
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIF_VALUE))
 				fieldsToLoad.push_back(LasField(LAS_CLASSIF_VALUE,0,0,31)); //5 bits: between 0 and 31
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIF_SYNTHETIC))
@@ -552,7 +574,7 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 		}
 
 		assert(newPointAvailable);
-		const liblas::Point& p = reader->GetPoint();
+		const liblas::Point& p = reader.GetPoint();
 
 		//first point: check for 'big' coordinates
 		if (pointsRead == 0)
@@ -563,7 +585,7 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 				Pshift = *coordinatesShift;
 			bool applyAll = false;
 			if (	sizeof(PointCoordinateType) < 8
-				&&	ccCoordinatesShiftManager::Handle(P.u,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+				&&	ccCoordinatesShiftManager::Handle(P,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 			{
 				loadedCloud->setGlobalShift(Pshift);
 				ccLog::Warning("[LASFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
@@ -600,8 +622,8 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 				{
 					if (loadedCloud->reserveTheRGBTable())
 					{
-						//we must set the color (black) of all the precedently skipped points
-						for (unsigned i=0;i<loadedCloud->size()-1;++i)
+						//we must set the color (black) of all the previously skipped points
+						for (unsigned i=0; i<loadedCloud->size()-1; ++i)
 							loadedCloud->addRGBColor(ccColor::black);
 					}
 					else
@@ -621,7 +643,7 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 			if (pushColor)
 			{
 				//we test if the color components are on 16 bits (standard) or only on 8 bits (it happens ;)
-				if (colorCompBitDec==0)
+				if (!forced8bitRgbMode && colorCompBitShift == 0)
 				{
 					if (	(col[0] & 0xFF00)
 						||  (col[1] & 0xFF00)
@@ -629,16 +651,16 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 					{
 						//the color components are on 16 bits!
 						ccLog::Print("[LAS FILE] Color components are coded on 16 bits");
-						colorCompBitDec = 8;
-						//we fix all the precedently read colors
-						for (unsigned i=0;i<loadedCloud->size()-1;++i)
+						colorCompBitShift = 8;
+						//we fix all the previously read colors
+						for (unsigned i=0; i<loadedCloud->size()-1; ++i)
 							loadedCloud->setPointColor(i,ccColor::black); //255 >> 8 = 0!
 					}
 				}
 
-				rgb[0]=(colorType)(col[0]>>colorCompBitDec);
-				rgb[1]=(colorType)(col[1]>>colorCompBitDec);
-				rgb[2]=(colorType)(col[2]>>colorCompBitDec);
+				rgb[0] = static_cast<colorType>(col[0] >> colorCompBitShift);
+				rgb[1] = static_cast<colorType>(col[1] >> colorCompBitShift);
+				rgb[2] = static_cast<colorType>(col[2] >> colorCompBitShift);
 
 				loadedCloud->addRGBColor(rgb);
 			}
@@ -727,7 +749,7 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 					if (it->sf->reserve(fileChunkSize))
 					{
 						it->sf->link();
-						//we must set the value (firstClassifValue) of all the precedently skipped points
+						//we must set the value (firstClassifValue) of all the previously skipped points
 						ScalarType firstS = static_cast<ScalarType>(it->firstValue);
 						for (unsigned i=0; i<loadedCloud->size()-1; ++i)
 							it->sf->addElement(firstS);
@@ -748,9 +770,6 @@ CC_FILE_ERROR LASFilter::loadFile(const char* filename, ccHObject& container, bo
 		++pointsRead;
 	}
 
-	if (reader)
-		delete reader;
-	reader=0;
 	ifs.close();
 
 	return CC_FERR_NO_ERROR;

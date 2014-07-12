@@ -32,22 +32,24 @@ class AsciiFilter : public FileIOFilter
 {
 public:
 
-    //inherited from FileIOFilter
-    virtual CC_FILE_ERROR loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
-	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, const char* filename);
+	//inherited from FileIOFilter
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
+	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
 
-	CC_FILE_ERROR loadCloudFromFormatedAsciiFile(const char* filename,
-                                                    ccHObject& container,
+	CC_FILE_ERROR loadCloudFromFormatedAsciiFile(	const QString& filename,
+													ccHObject& container,
 													const AsciiOpenDlg::Sequence& openSequence,
-                                                    char separator,
-                                                    unsigned approximateNumberOfLines,
-                                                    qint64 fileSize,
+													char separator,
+													unsigned approximateNumberOfLines,
+													qint64 fileSize,
 													unsigned maxCloudSize,
-                                                    unsigned skipLines=0,
+													unsigned skipLines=0,
 													bool alwaysDisplayLoadDialog=true,
 													bool* coordinatesShiftEnabled=0,
 													CCVector3d* coordinatesShift=0);
 
+	//! Returns associated dialog (creates it if necessary)
+	static QSharedPointer<AsciiOpenDlg> GetOpenDialog();
 	//! Returns associated dialog (creates it if necessary)
 	static QSharedPointer<AsciiSaveDlg> GetSaveDialog();
 
@@ -58,7 +60,8 @@ protected:
 
 	//! Associated (export) dialog
 	static QSharedPointer<AsciiSaveDlg> s_saveDialog;
-
+	//! Associated (import) dialog
+	static QSharedPointer<AsciiOpenDlg> s_openDialog;
 };
 
 #endif

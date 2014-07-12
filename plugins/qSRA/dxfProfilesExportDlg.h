@@ -15,8 +15,8 @@
 //#                                                                        #
 //##########################################################################
 
-#ifndef QSRA_PROFILE_IMPORT_DLG_HEADER
-#define QSRA_PROFILE_IMPORT_DLG_HEADER
+#ifndef QSRA_DXF_PROFILE_IMPORT_DLG_HEADER
+#define QSRA_DXF_PROFILE_IMPORT_DLG_HEADER
 
 #include "ui_dxfProfilesExportDlg.h"
 
@@ -28,7 +28,7 @@ class DxfProfilesExportDlg : public QDialog, public Ui::DxfProfilesExportDlg
 public:
 
 	//! Default constructor
-    DxfProfilesExportDlg(QWidget* parent = 0);
+	DxfProfilesExportDlg(QWidget* parent = 0);
 
 	//! Returns vert. profiles output filename (on completion)
 	QString getVertFilename() const;

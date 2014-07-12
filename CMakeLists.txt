@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 2.8)
 
+# Eliminate a warning when building in Windows that relates
+# to static linking of Qt executables to qtmain.lib.
+# This policy was introduced in CMake version 2.8.11.
+# CMake version 2.8.11.2 warns when the policy is not set
+# and uses OLD behavior.
+if(POLICY CMP0020)
+  cmake_policy(SET CMP0020 OLD)
+endif()
+
 project( CloudCompareProjects )
 
 # One shouldn't generate the BUILD project directly in the SOURCES folder!
@@ -12,7 +21,9 @@ endif()
 
 
 # Default debug suffix for libraries
-set( CMAKE_DEBUG_POSTFIX d )
+if(MSVC)
+  set( CMAKE_DEBUG_POSTFIX d )
+endif()
 
 if( UNIX )
         set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")

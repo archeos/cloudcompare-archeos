@@ -29,6 +29,7 @@
 #include <ccLog.h>
 #include <ccGenericPointCloud.h>
 #include <ccPointCloud.h>
+#include <ccScalarField.h>
 
 //Qt
 #include <QImage>
@@ -118,8 +119,8 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 
 	assert(proj_dimension<3);
 	const unsigned char Z = proj_dimension;
-	const unsigned char X  = (Z==2 ? 0 : Z+1);
-	const unsigned char Y  = (X==2 ? 0 : X+1);
+	const unsigned char X = (Z==2 ? 0 : Z+1);
+	const unsigned char Y = (X==2 ? 0 : X+1);
 
 	ccBBox box = (customBox.isValid() ? customBox : cloud->getMyOwnBB());
 	CCVector3d boxDiag(	static_cast<double>(box.maxCorner().x) - static_cast<double>(box.minCorner().x),
@@ -226,7 +227,7 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 			--j;
 
 		//we skip points outside the box!
-		if (i<0 || i>=static_cast<int>(grid_size_X) || j<0 || j>=static_cast<int>(grid_size_Y))
+		if (i < 0 || i >= static_cast<int>(grid_size_X) || j < 0 || j >= static_cast<int>(grid_size_Y))
 			continue;
 
 		assert(i >= 0 && j >= 0);
@@ -362,7 +363,7 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 			{
 				HeightGridCell* cell = grid[j];
 				for (unsigned i=0; i<grid_size_X; ++i,++cell)
-					if (cell->nbPoints>1)
+					if (cell->nbPoints > 1)
 						cell->height /= static_cast<PointCoordinateType>(cell->nbPoints);
 			}
 		}
@@ -1064,11 +1065,13 @@ ccPointCloud* ccHeightGridGeneration::Compute(	ccGenericPointCloud* cloud,
 
 						if (heightSF)
 						{
+							heightSF->setCurrentSize(n);
 							heightSF->computeMinAndMax();
 							cloudGrid->setCurrentDisplayedScalarField(heightSFIdx);
 						}
 						if (countSF)
 						{
+							countSF->setCurrentSize(n);
 							countSF->computeMinAndMax();
 							if (!heightSF)
 								cloudGrid->setCurrentDisplayedScalarField(countSFIdx);

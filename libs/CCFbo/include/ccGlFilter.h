@@ -21,23 +21,22 @@
 //local
 #include "ccGlew.h"
 
-//system
-#include <string.h>
+//Qt
+#include <QString>
 
 //! Default GL filter interface
 /** A GL filter is a combination of shaders applied to
-    textures (typically the rendered scene), typically
-    through intensive use of Frame Buffer Objects.
+	textures (typically the rendered scene), typically
+	through intensive use of Frame Buffer Objects.
 **/
 class ccGlFilter
 {
 public:
 
-    //! Default constructor
-    ccGlFilter(const char* description)
-    {
-        strcpy(m_description,description);
-    }
+	//! Default constructor
+	ccGlFilter(QString description)
+		: m_description(description)
+	{}
 
 	//! Default destructor
 	virtual ~ccGlFilter() {}
@@ -45,33 +44,34 @@ public:
 	//! Cloning mechanism
 	virtual ccGlFilter* clone() const = 0;
 
-    //! Initializes GL filter
-    /** Must support reinit!
-        \param width texture/screen width
-        \param height texture/screen height
-        \param shadersPath path where shader files are stored
-        \return success
-    **/
+	//! Initializes GL filter
+	/** Must support reinit!
+		\param width texture/screen width
+		\param height texture/screen height
+		\param shadersPath path where shader files are stored
+		\param error error string (if an error occurred)
+		\return success
+		**/
 	virtual bool init(	int width,
-                        int height,
-                        const char* shadersPath) = 0;
+						int height,
+						QString shadersPath,
+						QString& error) = 0;
 
-    //! Applies filter to texture (depth + color)
+	//! Applies filter to texture (depth + color)
 	virtual void shade(	GLuint texDepth,
 						GLuint texColor,
 						float zoom = 1.0f) = 0;
 
-    //! Returns resulting texture
+	//! Returns resulting texture
 	virtual GLuint getTexture() = 0;
 
-    //! Returns filter name
-	inline virtual const char* getDescription() const { return m_description; }
+	//! Returns filter name
+	inline virtual QString getDescription() const { return m_description; }
 
 protected:
 
-    //! Filter description
-    char m_description[256];
-
+	//! Filter description
+	QString m_description;
 };
 
 #endif

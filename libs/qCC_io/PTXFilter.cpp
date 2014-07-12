@@ -39,19 +39,19 @@
 
 const char CC_PTX_INTENSITY_FIELD_NAME[] = "Intensity";
 
-CC_FILE_ERROR PTXFilter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR PTXFilter::saveToFile(ccHObject* entity, QString filename)
 {
 	//not supported
 	return CC_FERR_WRONG_FILE_TYPE;
 }
 
-CC_FILE_ERROR PTXFilter::loadFile(	const char* filename,
+CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 									ccHObject& container,
 									bool alwaysDisplayLoadDialog/*=true*/,
 									bool* coordinatesShiftEnabled/*=0*/,
 									CCVector3d* coordinatesShift/*=0*/)
 {
-    //open ASCII file for reading
+	//open ASCII file for reading
 	QFile file(filename);
 	if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
 		return CC_FERR_READING;
@@ -234,7 +234,7 @@ CC_FILE_ERROR PTXFilter::loadFile(	const char* filename,
 								Pshift = *coordinatesShift;
 							bool applyAll = false;
 							if (	sizeof(PointCoordinateType) < 8
-								&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+								&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 							{
 								cloud->setGlobalShift(Pshift);
 								ccLog::Warning("[PTXFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);

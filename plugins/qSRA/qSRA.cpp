@@ -29,6 +29,7 @@
 #include <QFile>
 #include <QMessageBox>
 #include <QTextStream>
+#include <QMainWindow>
 
 //qCC_db
 #include <ccHObjectCaster.h>
@@ -36,6 +37,7 @@
 #include <ccProgressDialog.h>
 #include <ccMesh.h>
 #include <ccPolyline.h>
+#include <ccScalarField.h>
 
 //System
 #include <string.h>
@@ -92,8 +94,8 @@ void qSRA::onNewSelection(const ccHObject::Container& selectedEntities)
 	}
 
 	bool cloudAndPolylineSelected = (	selectedEntities.size() == 2
-										&& (   (selectedEntities[0]->isA(CC_TYPES::POLY_LINE) && selectedEntities[1]->isA(CC_TYPES::POINT_CLOUD))
-											|| (selectedEntities[1]->isA(CC_TYPES::POLY_LINE) && selectedEntities[0]->isA(CC_TYPES::POINT_CLOUD))) );
+										&& (	(selectedEntities[0]->isA(CC_TYPES::POLY_LINE) && selectedEntities[1]->isA(CC_TYPES::POINT_CLOUD))
+											||	(selectedEntities[1]->isA(CC_TYPES::POLY_LINE) && selectedEntities[0]->isA(CC_TYPES::POINT_CLOUD))) );
 	
 	if (m_doCompareCloudToProfile)
 	{
@@ -316,7 +318,9 @@ void qSRA::doProjectCloudDistsInGrid(ccPointCloud* cloud, ccPolyline* polyline)
 
 QIcon qSRA::getIcon() const
 {
-    return QIcon(QString::fromUtf8(":/CC/plugin/qSRA/qSRA.png"));
+	return QIcon(QString::fromUtf8(":/CC/plugin/qSRA/qSRA.png"));
 }
 
+#ifndef CC_QT5
 Q_EXPORT_PLUGIN2(qSRA,qSRA);
+#endif

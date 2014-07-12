@@ -59,7 +59,7 @@ ccFacet::ccFacet(	PointCoordinateType maxEdgeLength/*=0*/,
 	m_planeEquation[3] = 0;
 
 	setVisible(true);
-    lockVisibility(false);
+	lockVisibility(false);
 }
 
 ccFacet::~ccFacet()
@@ -97,7 +97,7 @@ ccFacet* ccFacet::clone() const
 	//clone mesh
 	if (m_polygonMesh)
 	{
-		facet->m_polygonMesh = m_polygonMesh->clone(facet->m_contourVertices);
+		facet->m_polygonMesh = m_polygonMesh->cloneMesh(facet->m_contourVertices);
 		if (!facet->m_polygonMesh)
 		{
 			//not enough memory?!

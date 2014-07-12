@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 #include <set>
 
 //DGM: tests in progress
@@ -765,7 +766,7 @@ unsigned DgmOctree::getCellIndex(OctreeCellCodeType truncatedCellCode, uchar bit
         }
         else
         {
-            //if the precedent point doesn't correspond, then we have just found the first good one!
+            //if the previous point doesn't correspond, then we have just found the first good one!
             if ((m_thePointsAndTheirCellCodes[middle-1].theCode >> bitDec) != truncatedCellCode)
                 return middle;
             end = middle;
@@ -1862,6 +1863,9 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhood(CylindricalNeighbourhood& 
 	//constant value for cell/sphere inclusion test
 	double maxDiagFactor = squareRadius + (0.75*cs + SQRT_3*params.radius)*cs;
 	PointCoordinateType maxLengthFactor = params.maxHalfLength + static_cast<PointCoordinateType>(cs*SQRT_3/2);
+	PointCoordinateType minLengthFactor = params.onlyPositiveDir ? 0 : -maxLengthFactor;
+	
+	PointCoordinateType minHalfLength = params.onlyPositiveDir ? 0 : -params.maxHalfLength;
 
 	//we are going to test all the cells that may intersect this cylinder
 	//dumb bounding-box estimation: place two spheres at the ends of the cylinder
@@ -1869,7 +1873,7 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhood(CylindricalNeighbourhood& 
 	CCVector3 maxCorner;
 	{
 		CCVector3 C1 = params.center + params.dir * params.maxHalfLength;
-		CCVector3 C2 = params.center - params.dir * params.maxHalfLength;
+		CCVector3 C2 = params.center + params.dir * minHalfLength;
 		CCVector3 corner1 = C1 - CCVector3(params.radius,params.radius,params.radius);
 		CCVector3 corner2 = C1 + CCVector3(params.radius,params.radius,params.radius);
 		CCVector3 corner3 = C2 - CCVector3(params.radius,params.radius,params.radius);
@@ -1925,7 +1929,7 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhood(CylindricalNeighbourhood& 
 				CCVector3 OC = (cellCenter - params.center);
 				PointCoordinateType dot = OC.dot(params.dir);
 				double d2 = (OC - params.dir * dot).norm2d();
-				if (d2 <= maxDiagFactor && fabs(dot) <= maxLengthFactor) //otherwise cell is totally outside
+				if (d2 <= maxDiagFactor && dot <= maxLengthFactor && dot >= minLengthFactor) //otherwise cell is totally outside
 				{
 					//2nd test: does this cell exists?
 					OctreeCellCodeType truncatedCellCode = generateTruncatedCellCode(cellPos,params.level);
@@ -1947,7 +1951,7 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhood(CylindricalNeighbourhood& 
 							CCVector3 OP = (*P - params.center);
 							dot = OP.dot(params.dir);
 							d2 = (OP - params.dir * dot).norm2d();
-							if (d2 <= squareRadius && fabs(dot) <= params.maxHalfLength)
+							if (d2 <= squareRadius && dot >= minHalfLength && dot <= params.maxHalfLength)
 							{
 								params.neighbours.push_back(PointDescriptor(P,p->theIndex,dot)); //we save the distance relatively to the center projected on the axis!
 							}
@@ -1984,21 +1988,24 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhoodProgressive(ProgressiveCyli
 	//constant value for cell/sphere inclusion test
 	double maxDiagFactor = squareRadius + (0.75*cs + SQRT_3*params.radius)*cs;
 	PointCoordinateType maxLengthFactor = params.maxHalfLength + static_cast<PointCoordinateType>(cs*SQRT_3/2);
+	PointCoordinateType minLengthFactor = params.onlyPositiveDir ? 0 : -maxLengthFactor;
 
 	//increase the search cylinder's height
 	params.currentHalfLength += params.radius;
-
 	//no need to chop the max cylinder if the parts are too small!
 	//(takes also into account any 'overflow' above maxHalfLength ;)
 	if (params.maxHalfLength-params.currentHalfLength < params.radius/2)
 		params.currentHalfLength = params.maxHalfLength;
+
+	PointCoordinateType currentHalfLengthMinus = params.onlyPositiveDir ? 0 : -params.currentHalfLength;
 
 	//first process potential candidates from the previous pass
 	{
 		for (size_t k=0; k<params.potentialCandidates.size(); /*++k*/)
 		{
 			//potentialCandidates[k].squareDist = 'dot'!
-			if (fabs(params.potentialCandidates[k].squareDistd) <= params.currentHalfLength)
+			if (	params.potentialCandidates[k].squareDistd >= currentHalfLengthMinus
+				&&	params.potentialCandidates[k].squareDistd <= params.currentHalfLength)
 			{
 				params.neighbours.push_back(params.potentialCandidates[k]);
 				//and remove it from the potential list
@@ -2018,7 +2025,7 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhoodProgressive(ProgressiveCyli
 	CCVector3 maxCorner;
 	{
 		CCVector3 C1 = params.center + params.dir * params.currentHalfLength;
-		CCVector3 C2 = params.center - params.dir * params.currentHalfLength;
+		CCVector3 C2 = params.center + params.dir * currentHalfLengthMinus;
 		CCVector3 corner1 = C1 - CCVector3(params.radius,params.radius,params.radius);
 		CCVector3 corner2 = C1 + CCVector3(params.radius,params.radius,params.radius);
 		CCVector3 corner3 = C2 - CCVector3(params.radius,params.radius,params.radius);
@@ -2080,7 +2087,7 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhoodProgressive(ProgressiveCyli
 					CCVector3 OC = (cellCenter - params.center);
 					PointCoordinateType dot = OC.dot(params.dir);
 					double d2 = (OC - params.dir * dot).norm2d();
-					if (d2 <= maxDiagFactor && fabs(dot) <= maxLengthFactor) //otherwise cell is totally outside
+					if (d2 <= maxDiagFactor && dot <= maxLengthFactor && dot >= minLengthFactor) //otherwise cell is totally outside
 					{
 						//2nd test: does this cell exists?
 						OctreeCellCodeType truncatedCellCode = generateTruncatedCellCode(cellPos.u,params.level);
@@ -2105,7 +2112,7 @@ size_t DgmOctree::getPointsInCylindricalNeighbourhoodProgressive(ProgressiveCyli
 								if (d2 <= squareRadius)
 								{
 									//potential candidate?
-									if (fabs(dot) <= params.currentHalfLength)
+									if (dot >= currentHalfLengthMinus && dot <= params.currentHalfLength)
 									{
 										params.neighbours.push_back(PointDescriptor(P,p->theIndex,dot)); //we save the distance relatively to the center projected on the axis!
 									}
@@ -3352,7 +3359,7 @@ int DgmOctree::extractCCs(const cellCodesContainer& cellCodes, uchar level, bool
 							{
 								int label = neighboursMin[n];
 								assert(label<static_cast<int>(numberOfCells)+2);
-								//we don't process it if it's the same label as the precedent neighbor
+								//we don't process it if it's the same label as the previous neighbor
 								if (label != lastLabel)
 								{
 									equivalentLabels[label] = smallestLabel;
@@ -3577,7 +3584,7 @@ unsigned DgmOctree::executeFunctionForAllCellsAtLevel(uchar level,
         OctreeCellCodeType nextCode = (p->theCode >> bitDec);
         if (nextCode != cell.truncatedCode)
         {
-            //if not, we call the user function on the precedent cell
+            //if not, we call the user function on the previous cell
             result = (*func)(cell,additionalParameters,nprogress);
 
 			if (!result)
@@ -3745,7 +3752,7 @@ unsigned DgmOctree::executeFunctionForAllCellsAtStartingLevel(uchar startingLeve
 						//not the same cell anymore?
 						if (cell.truncatedCode != (p->theCode >> currentBitDec))
 						{
-							//we must re-check all the precedently inserted points at this new level
+							//we must re-check all the previous inserted points at this new level
 							//to determine the end of this new cell
 							p = startingElement;
 							elements=1;
@@ -3802,7 +3809,7 @@ unsigned DgmOctree::executeFunctionForAllCellsAtStartingLevel(uchar startingLeve
 						//we can simply proceed with its parent cell
 						if (firstSubCell && elements < minNumberOfPointsPerCell)
 						{
-							//precedent level
+							//previous level
 							--cell.level;
 							currentBitDec+=3;
 							cell.truncatedCode>>=3;
@@ -3891,8 +3898,9 @@ unsigned DgmOctree::executeFunctionForAllCellsAtStartingLevel(uchar startingLeve
 
 #ifdef ENABLE_MT_OCTREE
 
-#include <QtCore/QtCore>
-#include <QtGui/QApplication>
+#include <QtCore>
+#include <QApplication>
+#include <QtConcurrentMap>
 
 /*** MULTI THREADING WRAPPER ***/
 
@@ -4158,7 +4166,7 @@ unsigned DgmOctree::executeFunctionForAllCellsAtStartingLevel_MT(uchar startingL
 						//not the same cell anymore?
 						if (cellDesc.truncatedCode != (p->theCode >> currentBitDec))
 						{
-							//we must re-check all the precedently inserted points at this new level
+							//we must re-check all the previously inserted points at this new level
 							//to determine the end of this new cell
 							p = startingElement;
 							elements=1;
@@ -4215,7 +4223,7 @@ unsigned DgmOctree::executeFunctionForAllCellsAtStartingLevel_MT(uchar startingL
 						//we can simply proceed with its parent cell
 						if (firstSubCell && elements < minNumberOfPointsPerCell)
 						{
-							//precedent level
+							//previous level
 							--cellDesc.level;
 							currentBitDec+=3;
 							cellDesc.truncatedCode>>=3;

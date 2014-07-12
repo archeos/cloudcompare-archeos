@@ -32,7 +32,7 @@
 #include <PointProjectionTools.h>
 #include <GeometricalAnalysisTools.h>
 #include <SimpleCloud.h>
-#include <RegistrationTools.h>  //Aurelien BEY
+#include <RegistrationTools.h> //Aurelien BEY
 
 //qCC_db
 #include <ccHObjectCaster.h>
@@ -54,6 +54,11 @@
 #include <ccColorScalesManager.h>
 #include <ccFacet.h>
 #include <ccQuadric.h>
+#include <ccExternalFactory.h>
+
+//qCC_io
+#include <ccCoordinatesShiftManager.h>
+#include <ccShiftAndScaleCloudDlg.h>
 
 //qCC includes
 #include "ccHeightGridGeneration.h"
@@ -103,21 +108,20 @@
 #include "ccPointListPickingDlg.h"
 #include "ccNormalComputationDlg.h"
 #include "ccCameraParamEditDlg.h"
-#include "ccScalarFieldArithmeticDlg.h"
+#include "ccScalarFieldArithmeticsDlg.h"
 #include "ccScalarFieldFromColorDlg.h"
 #include "ccSensorComputeDistancesDlg.h"
 #include "ccSensorComputeScatteringAnglesDlg.h"
 #include "ccCurvatureDlg.h"
 #include "ccApplyTransformationDlg.h"
-#include "ccCoordinatesShiftManager.h"
 #include "ccPointPairRegistrationDlg.h"
 #include "ccExportCoordToSFDlg.h"
 #include "ccPrimitiveFactoryDlg.h"
-#include "ccMouse3DContextMenu.h"
 #include "ccColorScaleEditorDlg.h"
 #include "ccComputeOctreeDlg.h"
 #include "ccAdjustZoomDlg.h"
 #include "ccBoundingBoxEditorDlg.h"
+#include "ccColorLevelsDlg.h"
 #include <ui_aboutDlg.h>
 
 //other
@@ -142,6 +146,7 @@
 #include <QElapsedTimer>
 #include <QInputDialog>
 #include <QTextStream>
+#include <QColorDialog>
 
 //System
 #include <string.h>
@@ -153,10 +158,26 @@
 //global static pointer (as there should only be one instance of MainWindow!)
 static MainWindow* s_instance = 0;
 
+//persistent settings key (to be used with QSettings)
+static const QString s_psLoadFile				("LoadFile");
+static const QString s_psSaveFile				("SaveFile");
+static const QString s_psMainWinGeom			("mainWindowGeometry");
+static const QString s_psMainWinState			("mainWindowState");
+static const QString s_psCurrentPath			("currentPath");
+static const QString s_psSelectedFilter			("selectedFilter");
+static const QString s_psSelectedFilterCloud	("selectedFilterCloud");
+static const QString s_psSelectedFilterMesh		("selectedFilterMesh");
+static const QString s_psDuplicatePointsGroup	("duplicatePoints");
+static const QString s_psDuplicatePointsMinDist	("minDist");
+
 //standard message in case of locked vertices
-void DisplayLockedVerticesWarning()
+void DisplayLockedVerticesWarning(QString meshName, bool displayAsError)
 {
-	ccConsole::Error("Mesh vertices are 'locked' (they may be shared by multiple meshes for instance).\nYou should call this method directly on the vertices cloud (but all meshes will be impacted!).");
+	QString message = QString("Vertices of mesh '%1' are locked (they may be shared by multiple entities for instance).\nYou should call this method directly on the vertices cloud.\n(warning: all entities depending on this cloud will be impacted!)").arg(meshName);
+	if (displayAsError)
+		ccConsole::Error(message);
+	else
+		ccConsole::Warning(message);
 }
 
 MainWindow::MainWindow()
@@ -165,21 +186,21 @@ MainWindow::MainWindow()
 	, m_3dMouseInput(0)
 	, m_viewModePopupButton(0)
 	, m_pivotVisibilityPopupButton(0)
-    , m_cpeDlg(0)
-    , m_gsTool(0)
-    , m_transTool(0)
+	, m_cpeDlg(0)
+	, m_gsTool(0)
+	, m_transTool(0)
 	, m_clipTool(0)
-    , m_compDlg(0)
-    , m_ppDlg(0)
-    , m_plpDlg(0)
+	, m_compDlg(0)
+	, m_ppDlg(0)
+	, m_plpDlg(0)
 	, m_pprDlg(0)
 	, m_pfDlg(0)
 	, m_glFilterActions(this)
 {
-    //Dialog "auto-construction"
-    setupUi(this);
-    QSettings settings;
-    restoreGeometry(settings.value("mainWindowGeometry").toByteArray());
+	//Dialog "auto-construction"
+	setupUi(this);
+	QSettings settings;
+	restoreGeometry(settings.value(s_psMainWinGeom).toByteArray());
 
 	setWindowTitle(QString("CloudCompare v")+ccCommon::GetCCVersion(false));
 
@@ -218,24 +239,24 @@ MainWindow::MainWindow()
 		}
 	}
 
-    //tabifyDockWidget(DockableDBTree,DockableProperties);
+	//tabifyDockWidget(DockableDBTree,DockableProperties);
 
-    //Console
-    ccConsole::Init(consoleWidget,this,this);
+	//Console
+	ccConsole::Init(consoleWidget,this,this);
 
-    //db-tree link
-    m_ccRoot = new ccDBRoot(dbTreeView, propertiesTreeView, this);
-    connect(m_ccRoot, SIGNAL(selectionChanged()), this, SLOT(updateUIWithSelection()));
+	//db-tree link
+	m_ccRoot = new ccDBRoot(dbTreeView, propertiesTreeView, this);
+	connect(m_ccRoot, SIGNAL(selectionChanged()), this, SLOT(updateUIWithSelection()));
 
-    //MDI Area
-    m_mdiArea = new QMdiArea(this);
-    setCentralWidget(m_mdiArea);
-    connect(m_mdiArea, SIGNAL(subWindowActivated(QMdiSubWindow*)), this, SLOT(updateMenus()));
-    connect(m_mdiArea, SIGNAL(subWindowActivated(QMdiSubWindow*)), this, SLOT(on3DViewActivated(QMdiSubWindow*)));
+	//MDI Area
+	m_mdiArea = new QMdiArea(this);
+	setCentralWidget(m_mdiArea);
+	connect(m_mdiArea, SIGNAL(subWindowActivated(QMdiSubWindow*)), this, SLOT(updateMenus()));
+	connect(m_mdiArea, SIGNAL(subWindowActivated(QMdiSubWindow*)), this, SLOT(on3DViewActivated(QMdiSubWindow*)));
 
-    //Window Mapper
-    m_windowMapper = new QSignalMapper(this);
-    connect(m_windowMapper, SIGNAL(mapped(QWidget*)), this, SLOT(setActiveSubWindow(QWidget*)));
+	//Window Mapper
+	m_windowMapper = new QSignalMapper(this);
+	connect(m_windowMapper, SIGNAL(mapped(QWidget*)), this, SLOT(setActiveSubWindow(QWidget*)));
 
 	//Keyboard shortcuts
 	connect(actionToggleVisibility,	SIGNAL(triggered()), this, SLOT(toggleSelectedEntitiesVisibility()));	//'V': toggles selected items visibility
@@ -245,9 +266,9 @@ MainWindow::MainWindow()
 	connect(actionToggleShowName,	SIGNAL(triggered()), this, SLOT(toggleSelectedEntities3DName()));		//'D': toggles selected items '3D name' visibility
 	connect(actionToggleMaterials,	SIGNAL(triggered()), this, SLOT(toggleSelectedEntitiesMaterials()));	//'M': toggles selected items materials/textures visibility
 
-    connectActions();
+	connectActions();
 
-    loadPlugins();
+	loadPlugins();
 
 #ifdef CC_3DXWARE_SUPPORT
 	enable3DMouse(true,true);
@@ -255,19 +276,19 @@ MainWindow::MainWindow()
 	actionEnable3DMouse->setEnabled(false);
 #endif
 
-    new3DView();
+	new3DView();
 
-    freezeUI(false);
+	freezeUI(false);
 
-    //updateMenus(); //the calls to 'new3DView' and 'freezeUI' already did that
-    updateUIWithSelection();
+	//updateMenus(); //the calls to 'new3DView' and 'freezeUI' already did that
+	updateUIWithSelection();
 
-    showMaximized();
+	showMaximized();
 
-    QMainWindow::statusBar()->showMessage(QString("Ready"));
-    ccConsole::Print("CloudCompare started!");
+	QMainWindow::statusBar()->showMessage(QString("Ready"));
+	ccConsole::Print("CloudCompare started!");
 
-    restoreState(settings.value("mainWindowState").toByteArray());
+	restoreState(settings.value(s_psMainWinState).toByteArray());
 }
 
 MainWindow::~MainWindow()
@@ -275,9 +296,9 @@ MainWindow::~MainWindow()
 	release3DMouse();
 
 	assert(m_ccRoot && m_mdiArea && m_windowMapper);
-    m_ccRoot->disconnect();
-    m_mdiArea->disconnect();
-    m_windowMapper->disconnect();
+	m_ccRoot->disconnect();
+	m_mdiArea->disconnect();
+	m_windowMapper->disconnect();
 
 	//we don't want any other dialog/function to use the following structures
 	ccDBRoot* ccRoot = m_ccRoot;
@@ -287,14 +308,14 @@ MainWindow::~MainWindow()
 		QList<QMdiSubWindow*> subWindowList = m_mdiArea->subWindowList();
 		for (int i=0;i<subWindowList.size();++i)
 			static_cast<ccGLWindow*>(subWindowList[i]->widget())->setSceneDB(0);
-    }
-    m_cpeDlg = 0;
-    m_gsTool = 0;
-    m_transTool = 0;
+	}
+	m_cpeDlg = 0;
+	m_gsTool = 0;
+	m_transTool = 0;
 	m_clipTool = 0;
-    m_compDlg=0;
-    m_ppDlg = 0;
-    m_plpDlg = 0;
+	m_compDlg=0;
+	m_ppDlg = 0;
+	m_plpDlg = 0;
 	m_pprDlg = 0;
 	m_pfDlg = 0;
 
@@ -307,8 +328,8 @@ MainWindow::~MainWindow()
 		delete m_mdiDialogs.back().dialog;
 		m_mdiDialogs.pop_back();
 	}
-    //m_mdiDialogs.clear();
-    m_mdiArea->closeAllSubWindows();
+	//m_mdiDialogs.clear();
+	m_mdiArea->closeAllSubWindows();
 
 	if (ccRoot)
 		delete ccRoot;
@@ -330,7 +351,7 @@ ccPluginInterface* MainWindow::getValidPlugin(QObject* plugin)
 			return static_cast<ccPluginInterface*>(ccGLPlugin);
 	}
 
-    return 0;
+	return 0;
 }
 
 void MainWindow::loadPlugins()
@@ -341,67 +362,83 @@ void MainWindow::loadPlugins()
 	toolBarGLFilters->setVisible(false);
 
 	//"static" plugins
-    foreach (QObject *plugin, QPluginLoader::staticInstances())
+	foreach (QObject *plugin, QPluginLoader::staticInstances())
 		dispatchPlugin(plugin);
 
-    ccConsole::Print(QString("Application path: ")+QCoreApplication::applicationDirPath());
+	ccConsole::Print(QString("Application path: ")+QCoreApplication::applicationDirPath());
 
 #if defined(Q_OS_MAC)
-    // plugins are in the bundle
-    QString  path = QCoreApplication::applicationDirPath();
-    path.remove( "MacOS" );
-    m_pluginsPath = path + "Plugins/ccPlugins";
+	// plugins are in the bundle
+	QString path = QCoreApplication::applicationDirPath();
+	path.remove( "MacOS" );
+	m_pluginsPath = path + "Plugins/ccPlugins";
 #else
-    //plugins are in bin/plugins
-    m_pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
+	//plugins are in bin/plugins
+	m_pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
 #endif
 
-    ccConsole::Print(QString("Plugins lookup dir.: %1").arg(m_pluginsPath));
+	ccConsole::Print(QString("Plugins lookup dir.: %1").arg(m_pluginsPath));
 
-    QStringList filters;
+	QStringList filters;
 #if defined(Q_OS_WIN)
-    filters << "*.dll";
+	filters << "*.dll";
 #elif defined(Q_OS_LINUX)
-    filters << "*.so";
+	filters << "*.so";
 #elif defined(Q_OS_MAC)
-    filters << "*.dylib";
+	filters << "*.dylib";
 #endif
-    QDir pluginsDir(m_pluginsPath);
-    pluginsDir.setNameFilters(filters);
-    foreach (QString filename, pluginsDir.entryList(filters))
-    {
-        QPluginLoader loader(pluginsDir.absoluteFilePath(filename));
-        QObject* plugin = loader.instance();
-        if (plugin)
-        {
-            ccConsole::Print(QString("Found new plugin! ('%1')").arg(filename));
-            if (dispatchPlugin(plugin))
-            {
-                m_pluginFileNames += filename;
-            }
-            else
-            {
-                ccConsole::Warning("Unsupported or invalid plugin type");
-            }
-        }
-        else
-        {
-            ccConsole::Warning(QString("[Plugin] %1")/*.arg(pluginsDir.absoluteFilePath(filename))*/.arg(loader.errorString()));
-        }
-    }
+	QDir pluginsDir(m_pluginsPath);
+	pluginsDir.setNameFilters(filters);
+	foreach (QString filename, pluginsDir.entryList(filters))
+	{
+		QPluginLoader loader(pluginsDir.absoluteFilePath(filename));
+		QObject* plugin = loader.instance();
+		if (plugin)
+		{
+			ccConsole::Print(QString("Found new plugin! ('%1')").arg(filename));
+			if (dispatchPlugin(plugin))
+			{
+				m_pluginFileNames += filename;
+			}
+			else
+			{
+				ccConsole::Warning("Unsupported or invalid plugin type");
+			}
+		}
+		else
+		{
+			ccConsole::Warning(QString("[Plugin] %1")/*.arg(pluginsDir.absoluteFilePath(filename))*/.arg(loader.errorString()));
+		}
+	}
 
 	if (toolBarPluginTools->isEnabled())
 	{
 		actionDisplayPluginTools->setEnabled(true);
 		actionDisplayPluginTools->setChecked(true);
-    }
+	}
+	else
+	{
+		//DGM: doesn't work :(
+		//actionDisplayPluginTools->setChecked(false);
+	}
+
+	if (toolBarGLFilters->isEnabled())
+	{
+		actionDisplayGLFiltersTools->setEnabled(true);
+		actionDisplayGLFiltersTools->setChecked(true);
+	}
+	else
+	{
+		//DGM: doesn't work :(
+		//actionDisplayGLFiltersTools->setChecked(false);
+	}
 }
 
 bool MainWindow::dispatchPlugin(QObject *plugin)
 {
-    ccPluginInterface* ccPlugin = getValidPlugin(plugin);
-    if (!ccPlugin)
-        return false;
+	ccPluginInterface* ccPlugin = getValidPlugin(plugin);
+	if (!ccPlugin)
+		return false;
 	plugin->setParent(this);
 
 	QString pluginName = ccPlugin->getName();
@@ -410,7 +447,7 @@ bool MainWindow::dispatchPlugin(QObject *plugin)
 		ccLog::Warning("Plugin has an invalid (empty) name!");
 		return false;
 	}
-    ccConsole::Print("Plugin name: [%s]",qPrintable(pluginName));
+	ccConsole::Print("Plugin name: [%s]",qPrintable(pluginName));
 
 	switch(ccPlugin->getType())
 	{
@@ -432,10 +469,10 @@ bool MainWindow::dispatchPlugin(QObject *plugin)
 					destMenu->setIcon(stdPlugin->getIcon());
 				destToolBar = addToolBar(pluginName+QString(" toolbar"));
 
-                //not sure why but it seems that we must specifically set the object name.
-                //if not the QSettings thing will complain about a not-setted name
-                //when saving settings of qCC mainwindow
-                destToolBar->setObjectName(pluginName);
+				//not sure why but it seems that we must specifically set the object name.
+				//if not the QSettings thing will complain about a not-setted name
+				//when saving settings of qCC mainwindow
+				destToolBar->setObjectName(pluginName);
 			}
 			else //default destination
 			{
@@ -463,10 +500,18 @@ bool MainWindow::dispatchPlugin(QObject *plugin)
 
 			//add to std. plugins list
 			m_stdPlugins.push_back(stdPlugin);
+
+			// see if this plugin can give back an additional factory for objects
+			ccExternalFactory* factory = stdPlugin->getCustomObjectsFactory();
+			if (factory) // if it is valid add to the plugin_factories
+			{
+				assert(ccExternalFactory::Container::GetUniqueInstance());
+				ccExternalFactory::Container::GetUniqueInstance()->addFactory(factory);
+			}
 		}
 		break;
 
-	case CC_GL_FILTER_PLUGIN:  //GL filter
+	case CC_GL_FILTER_PLUGIN: //GL filter
 		{
 			//(auto)create action
 			QAction* action = new QAction(pluginName,plugin);
@@ -493,13 +538,13 @@ bool MainWindow::dispatchPlugin(QObject *plugin)
 		return false;
 	}
 
-    return true;
+	return true;
 }
 
 void MainWindow::aboutPlugins()
 {
-    ccPluginDlg ccpDlg(m_pluginsPath, m_pluginFileNames, this);
-    ccpDlg.exec();
+	ccPluginDlg ccpDlg(m_pluginsPath, m_pluginFileNames, this);
+	ccpDlg.exec();
 }
 
 void MainWindow::doEnableGLFilter()
@@ -511,12 +556,12 @@ void MainWindow::doEnableGLFilter()
 		return;
 	}
 
-    QAction *action = qobject_cast<QAction*>(sender());
-    ccPluginInterface *ccPlugin = getValidPlugin(action ? action->parent() : 0);
-    if (!ccPlugin)
-        return;
+	QAction *action = qobject_cast<QAction*>(sender());
+	ccPluginInterface *ccPlugin = getValidPlugin(action ? action->parent() : 0);
+	if (!ccPlugin)
+		return;
 
-    if (ccPlugin->getType() != CC_GL_FILTER_PLUGIN)
+	if (ccPlugin->getType() != CC_GL_FILTER_PLUGIN)
 		return;
 
 	ccGlFilter* filter = static_cast<ccGLFilterPluginInterface*>(ccPlugin)->getFilter();
@@ -541,9 +586,11 @@ void MainWindow::release3DMouse()
 #ifdef CC_3DXWARE_SUPPORT
 	if (m_3dMouseInput)
 	{
-		disconnect(m_3dMouseInput);
+		m_3dMouseInput->disconnect(); //disconnect from the driver
+		disconnect(m_3dMouseInput); //disconnect from Qt ;)
+		
 		delete m_3dMouseInput;
-		m_3dMouseInput=0;
+		m_3dMouseInput = 0;
 	}
 #endif
 }
@@ -561,18 +608,22 @@ void MainWindow::enable3DMouse(bool state, bool silent)
 
 	if (state)
 	{
-		if (Mouse3DInput::DeviceAvailable())
+		m_3dMouseInput = new Mouse3DInput(this);
+		if (m_3dMouseInput->connect(this,"CloudCompare"))
 		{
-			ccLog::Warning("[3D Mouse] Device has been detected!");
-			m_3dMouseInput = new Mouse3DInput(this);
-			QObject::connect(m_3dMouseInput, SIGNAL(sigMove3d(std::vector<float>&)), this, SLOT(on3DMouseMove(std::vector<float>&)));
-			QObject::connect(m_3dMouseInput, SIGNAL(sigOn3dmouseKeyDown(int)), this, SLOT(on3DMouseKeyDown(int)));
-			QObject::connect(m_3dMouseInput, SIGNAL(sigOn3dmouseKeyUp(int)), this, SLOT(on3DMouseKeyUp(int)));
+			//ccLog::Warning("[3D Mouse] Device has been detected!");
+			QObject::connect(m_3dMouseInput, SIGNAL(sigMove3d(std::vector<float>&)),	this,	SLOT(on3DMouseMove(std::vector<float>&)));
+			QObject::connect(m_3dMouseInput, SIGNAL(sigReleased()),						this,	SLOT(on3DMouseReleased()));
+			QObject::connect(m_3dMouseInput, SIGNAL(sigOn3dmouseKeyDown(int)),			this,	SLOT(on3DMouseKeyDown(int)));
+			QObject::connect(m_3dMouseInput, SIGNAL(sigOn3dmouseKeyUp(int)),			this,	SLOT(on3DMouseKeyUp(int)));
 		}
 		else
 		{
+			delete m_3dMouseInput;
+			m_3dMouseInput = 0;
+			
 			if (silent)
-				ccLog::Print("[3D Mouse] No device found");
+				ccLog::Warning("[3D Mouse] No device found");
 			else
 				ccLog::Error("[3D Mouse] No device found");
 			state = false;
@@ -596,41 +647,15 @@ void MainWindow::on3DMouseKeyUp(int)
 	//nothing right now
 }
 
-#ifdef CC_3DXWARE_SUPPORT
-static bool s_3dMouseContextMenuAlreadyShown = false; //DGM: to prevent multiple instances at once
-#endif
 // ANY CHANGE/BUG FIX SHOULD BE REFLECTED TO THE EQUIVALENT METHODS IN QCC "MainWindow.cpp" FILE!
 void MainWindow::on3DMouseKeyDown(int key)
 {
-	if (!m_3dMouseInput)
-		return;
-
 #ifdef CC_3DXWARE_SUPPORT
 
 	switch(key)
 	{
 	case Mouse3DInput::V3DK_MENU:
-		if (!s_3dMouseContextMenuAlreadyShown)
-		{
-				s_3dMouseContextMenuAlreadyShown = true;
-
-				//is there a currently active window?
-				ccGLWindow* activeWin = getActiveGLWindow();
-				if (activeWin)
-				{
-					ccMouse3DContextMenu(&m_3dMouseInput->getMouseParams(),activeWin,this).exec(QCursor::pos());
-					//in case of...
-					updateViewModePopUpMenu(activeWin);
-					updatePivotVisibilityPopUpMenu(activeWin);
-				}
-				else
-				{
-					ccLog::Error("No active 3D view! Select a 3D view first...");
-					return;
-				}
-
-				s_3dMouseContextMenuAlreadyShown = false;
-		}
+		//should be handled by the driver now!
 		break;
 	case Mouse3DInput::V3DK_FIT:
 		{
@@ -659,10 +684,10 @@ void MainWindow::on3DMouseKeyDown(int key)
 		setBackView();
 		break;
 	case Mouse3DInput::V3DK_ROTATE:
-		m_3dMouseInput->getMouseParams().enableRotation(!m_3dMouseInput->getMouseParams().rotationEnabled());
+		//should be handled by the driver now!
 		break;
 	case Mouse3DInput::V3DK_PANZOOM:
-		m_3dMouseInput->getMouseParams().enablePanZoom(!m_3dMouseInput->getMouseParams().panZoomEnabled());
+		//should be handled by the driver now!
 		break;
 	case Mouse3DInput::V3DK_ISO1:
 		setIsoView1();
@@ -671,13 +696,13 @@ void MainWindow::on3DMouseKeyDown(int key)
 		setIsoView2();
 		break;
 	case Mouse3DInput::V3DK_PLUS:
-		m_3dMouseInput->getMouseParams().accelerate();
+		//should be handled by the driver now!
 		break;
 	case Mouse3DInput::V3DK_MINUS:
-		m_3dMouseInput->getMouseParams().slowDown();
+		//should be handled by the driver now!
 		break;
 	case Mouse3DInput::V3DK_DOMINANT:
-		m_3dMouseInput->getMouseParams().toggleDominantMode();
+		//should be handled by the driver now!
 		break;
 	case Mouse3DInput::V3DK_CW:
 	case Mouse3DInput::V3DK_CCW:
@@ -685,10 +710,10 @@ void MainWindow::on3DMouseKeyDown(int key)
 			ccGLWindow* activeWin = getActiveGLWindow();
 			if (activeWin)
 			{
-				CCVector3 axis(0,0,-PC_ONE);
-				CCVector3 trans(0,0,0);
-				ccGLMatrix mat;
-				PointCoordinateType angle = static_cast<PointCoordinateType>(M_PI/2.0);
+				CCVector3d axis(0,0,-1);
+				CCVector3d trans(0,0,0);
+				ccGLMatrixd mat;
+				double angle = M_PI/2;
 				if (key == Mouse3DInput::V3DK_CCW)
 					angle = -angle;
 				mat.initFromParameters(angle,axis,trans);
@@ -710,336 +735,253 @@ void MainWindow::on3DMouseKeyDown(int key)
 #endif
 }
 
-// ANY CHANGE/BUG FIX SHOULD BE REFLECTED TO THE EQUIVALENT METHODS IN QCC "MainWindow.cpp" FILE!
 void MainWindow::on3DMouseMove(std::vector<float>& vec)
 {
-	//ccLog::PrintDebug(QString("[3D mouse] %1 %2 %3 %4 %5 %6").arg(vec[0]).arg(vec[1]).arg(vec[2]).arg(vec[3]).arg(vec[4]).arg(vec[5]));
-
 #ifdef CC_3DXWARE_SUPPORT
 
-	//no active device?
-	if (!m_3dMouseInput)
-		return;
+	ccGLWindow* win = getActiveGLWindow();
 
-    ccGLWindow* win = getActiveGLWindow();
-	//no active window?
-	if (!win)
-		return;
-
-	//mouse parameters
-	const Mouse3DParameters& params = m_3dMouseInput->getMouseParams();
-	bool panZoom = params.panZoomEnabled();
-	bool rotate = params.rotationEnabled();
-	if (!panZoom && !rotate)
-		return;
-
-	//view parameters
-	bool objectMode = true;
-	bool perspectiveView = win->getPerspectiveState(objectMode);
-
-	//Viewer based perspective IS 'camera mode'
-	{
-		//Mouse3DParameters::NavigationMode navigationMode = objectMode ? Mouse3DParameters::ObjectMode : Mouse3DParameters::CameraMode;
-		//if (params.navigationMode() != navigationMode)
-		//{
-		//	m_3dMouseInput->getMouseParams().setNavigationMode(navigationMode);
-		//	ccLog::Warning("[3D mouse] Navigation mode has been changed to fit current viewing mode");
-		//}
-	}
-
-	//dominant mode: dominant mode is intended to limit movement to a single direction
-	if (params.dominantModeEnabled())
-	{
-		unsigned dominantDim = 0;
-		for (unsigned i=1; i<6; ++i)
-			if (fabs(vec[i]) > fabs(vec[dominantDim]))
-				dominantDim = i;
-		for (unsigned i=0; i<6; ++i)
-			if (i != dominantDim)
-				vec[i] = 0.0;
-	}
-	if (panZoom)
-	{
-		//Zoom: object moves closer/away (only for ortho. mode)
-		if (!perspectiveView && fabs(vec[1])>ZERO_TOLERANCE)
-		{
-			win->updateZoom(1.0f + vec[1]);
-			vec[1] = 0.0f;
-		}
-
-		//Zoom & Panning: camera moves right/left + up/down + backward/forward (only for perspective mode)
-		if (fabs(vec[0])>ZERO_TOLERANCE || fabs(vec[1])>ZERO_TOLERANCE || fabs(vec[2])>ZERO_TOLERANCE)
-		{
-			const ccViewportParameters& viewParams = win->getViewportParameters();
-
-			float scale = static_cast<float>(std::min(win->width(),win->height()) * viewParams.pixelSize);
-			if (perspectiveView)
-			{
-				float tanFOV = tan(viewParams.fov*static_cast<float>(CC_DEG_TO_RAD)/*/2*/);
-				vec[0] *= tanFOV;
-				vec[2] *= tanFOV;
-				scale /= win->computePerspectiveZoom();
-			}
-			else
-			{
-				scale /= win->getViewportParameters().zoom;
-			}
-
-			if (objectMode)
-				scale = -scale;
-			win->moveCamera(vec[0]*scale,-vec[2]*scale,vec[1]*scale);
-		}
-	}
-
-	if (rotate)
-	{
-		if (fabs(vec[3])>ZERO_TOLERANCE
-			|| fabs(vec[4])>ZERO_TOLERANCE
-			|| fabs(vec[5])>ZERO_TOLERANCE)
-		{
-			//get corresponding quaternion
-			float q[4];
-			Mouse3DInput::GetQuaternion(vec,q);
-			ccGLMatrix rotMat = ccGLMatrix::FromQuaternion(q);
-
-			//horizon locked?
-			if (params.horizonLocked())
-			{
-				rotMat = rotMat.yRotation();
-			}
-
-			win->rotateBaseViewMat(objectMode ? rotMat : rotMat.inverse());
-			win->showPivotSymbol(true);
-		}
-		else
-		{
-			win->showPivotSymbol(false);
-		}
-	}
-
-	win->redraw();
+	//active window?
+	if (win)
+		Mouse3DInput::Apply(vec,win);
 
 #endif
 }
 
+void MainWindow::on3DMouseReleased()
+{
+	//active window?
+	ccGLWindow* win = getActiveGLWindow();
+	if (win && win->getPivotVisibility() == ccGLWindow::PIVOT_SHOW_ON_MOVE)
+	{
+		//we have to hide the pivot symbol!
+		win->showPivotSymbol(false);
+		win->redraw();
+	}
+}
+
 void MainWindow::connectActions()
 {
-    assert(m_ccRoot);
-    assert(m_mdiArea);
+	assert(m_ccRoot);
+	assert(m_mdiArea);
 
 	//TODO... but not ready yet ;)
 	actionLoadShader->setVisible(false);
 	actionKMeans->setVisible(false);
 	actionFrontPropagation->setVisible(false);
 
-    /*** MAIN MENU ***/
+	/*** MAIN MENU ***/
 
-    //"File" menu
-    connect(actionOpen,                         SIGNAL(triggered()),    this,       SLOT(loadFile()));
-    connect(actionSave,                         SIGNAL(triggered()),    this,       SLOT(saveFile()));
-	connect(actionPrimitiveFactory,				SIGNAL(triggered()),    this,       SLOT(doShowPrimitiveFactory()));
+	//"File" menu
+	connect(actionOpen,							SIGNAL(triggered()),	this,		SLOT(loadFile()));
+	connect(actionSave,							SIGNAL(triggered()),	this,		SLOT(saveFile()));
+	connect(actionPrimitiveFactory,				SIGNAL(triggered()),	this,		SLOT(doShowPrimitiveFactory()));
 	connect(actionEnable3DMouse,				SIGNAL(toggled(bool)),	this,		SLOT(setup3DMouse(bool)));
-	connect(actionCloseAll,						SIGNAL(triggered()),    this,       SLOT(closeAll()));
-    connect(actionQuit,                         SIGNAL(triggered()),    this,       SLOT(close()));
+	connect(actionCloseAll,						SIGNAL(triggered()),	this,		SLOT(closeAll()));
+	connect(actionQuit,							SIGNAL(triggered()),	this,		SLOT(close()));
 
-    //"Edit > Colors" menu
-    connect(actionSetUniqueColor,               SIGNAL(triggered()),    this,       SLOT(doActionSetUniqueColor()));
-    connect(actionSetColorGradient,             SIGNAL(triggered()),    this,       SLOT(doActionSetColorGradient()));
-    connect(actionColorize,                     SIGNAL(triggered()),    this,       SLOT(doActionColorize()));
-    connect(actionClearColor,                   SIGNAL(triggered()),    this,       SLOT(doActionClearColor()));
-	connect(actionInterpolateColors,			SIGNAL(triggered()),    this,       SLOT(doActionInterpolateColors()));
+	//"Edit > Colors" menu
+	connect(actionSetUniqueColor,				SIGNAL(triggered()),	this,		SLOT(doActionSetUniqueColor()));
+	connect(actionSetColorGradient,				SIGNAL(triggered()),	this,		SLOT(doActionSetColorGradient()));
+	connect(actionChangeColorLevels,			SIGNAL(triggered()),	this,		SLOT(doActionChangeColorLevels()));
+	connect(actionColorize,						SIGNAL(triggered()),	this,		SLOT(doActionColorize()));
+	connect(actionClearColor,					SIGNAL(triggered()),	this,		SLOT(doActionClearColor()));
+	connect(actionInterpolateColors,			SIGNAL(triggered()),	this,		SLOT(doActionInterpolateColors()));
 
-    //"Edit > Normals" menu
-    connect(actionComputeNormals,               SIGNAL(triggered()),    this,       SLOT(doActionComputeNormals()));
-    connect(actionInvertNormals,                SIGNAL(triggered()),    this,       SLOT(doActionInvertNormals()));
-	connect(actionConvertNormalToHSV,			SIGNAL(triggered()),    this,       SLOT(doActionConvertNormalsToHSV()));
-	connect(actionConvertNormalToDipDir,		SIGNAL(triggered()),    this,       SLOT(doActionConvertNormalsToDipDir()));
-    connect(actionOrientNormalsMST,				SIGNAL(triggered()),    this,       SLOT(doActionOrientNormalsMST()));
-    connect(actionOrientNormalsFM,				SIGNAL(triggered()),    this,       SLOT(doActionOrientNormalsFM()));
-    connect(actionClearNormals,                 SIGNAL(triggered()),    this,       SLOT(doActionClearNormals()));
-    //"Edit > Octree" menu
-    connect(actionComputeOctree,                SIGNAL(triggered()),    this,       SLOT(doActionComputeOctree()));
-    connect(actionResampleWithOctree,           SIGNAL(triggered()),    this,       SLOT(doActionResampleWithOctree()));
-    //"Edit > Mesh" menu
-    connect(actionComputeMeshAA,                SIGNAL(triggered()),    this,       SLOT(doActionComputeMeshAA()));
-    connect(actionComputeMeshLS,                SIGNAL(triggered()),    this,       SLOT(doActionComputeMeshLS()));
-	connect(actionConvertTextureToColor,		SIGNAL(triggered()),    this,       SLOT(doActionConvertTextureToColor()));
-    connect(actionSamplePoints,                 SIGNAL(triggered()),    this,       SLOT(doActionSamplePoints()));
-    connect(actionSmoothMeshLaplacian,			SIGNAL(triggered()),    this,       SLOT(doActionSmoothMeshLaplacian()));
-	connect(actionSubdivideMesh,				SIGNAL(triggered()),    this,       SLOT(doActionSubdivideMesh()));
-    connect(actionMeasureMeshSurface,           SIGNAL(triggered()),    this,       SLOT(doActionMeasureMeshSurface()));
-    //"Edit > Mesh > Scalar Field" menu
-    connect(actionSmoothMeshSF,                 SIGNAL(triggered()),    this,       SLOT(doActionSmoothMeshSF()));
-    connect(actionEnhanceMeshSF,                SIGNAL(triggered()),    this,       SLOT(doActionEnhanceMeshSF()));
-    //"Edit > Sensor > Ground-Based lidar" menu
-    connect(actionShowDepthBuffer,              SIGNAL(triggered()),    this,       SLOT(doActionShowDepthBuffer()));
-    connect(actionExportDepthBuffer,            SIGNAL(triggered()),    this,       SLOT(doActionExportDepthBuffer()));
-    //"Edit > Sensor" menu
-    connect(actionCreateGBLSensor,              SIGNAL(triggered()),    this,       SLOT(doActionCreateGBLSensor()));
-    connect(actionCreateCameraSensor,			SIGNAL(triggered()),    this,       SLOT(doActionCreateCameraSensor()));
-    connect(actionModifySensor,                 SIGNAL(triggered()),    this,       SLOT(doActionModifySensor()));
-    connect(actionProjectUncertainty,			SIGNAL(triggered()),    this,       SLOT(doActionProjectUncertainty()));
-    connect(actionCheckPointsInsideFrustrum,	SIGNAL(triggered()),    this,       SLOT(doActionCheckPointsInsideFrustrum()));
-    connect(actionComputeDistancesFromSensor,   SIGNAL(triggered()),    this,       SLOT(doActionComputeDistancesFromSensor()));
-    connect(actionComputeScatteringAngles,      SIGNAL(triggered()),    this,       SLOT(doActionComputeScatteringAngles()));
-	connect(actionViewFromSensor,				SIGNAL(triggered()),    this,       SLOT(doActionSetViewFromSensor()));
-    //"Edit > Scalar fields" menu
-    connect(actionShowHistogram,                SIGNAL(triggered()),    this,       SLOT(showSelectedEntitiesHistogram()));
-    connect(actionSFGradient,                   SIGNAL(triggered()),    this,       SLOT(doActionSFGradient()));
-    connect(actionGaussianFilter,               SIGNAL(triggered()),    this,       SLOT(doActionSFGaussianFilter()));
-    connect(actionBilateralFilter,              SIGNAL(triggered()),    this,       SLOT(doActionSFBilateralFilter()));
-    connect(actionFilterByValue,                SIGNAL(triggered()),    this,       SLOT(doActionFilterByValue()));
-	connect(actionAddConstantSF,				SIGNAL(triggered()),    this,       SLOT(doActionAddConstantSF()));
-    connect(actionScalarFieldArithmetic,        SIGNAL(triggered()),    this,       SLOT(doActionScalarFieldArithmetic()));
-    connect(actionScalarFieldFromColor,         SIGNAL(triggered()),    this,       SLOT(doActionScalarFieldFromColor()));
-    connect(actionConvertToRGB,                 SIGNAL(triggered()),    this,       SLOT(doActionSFConvertToRGB()));
-	connect(actionRenameSF,						SIGNAL(triggered()),    this,       SLOT(doActionRenameSF()));
-	connect(actionOpenColorScalesManager,		SIGNAL(triggered()),    this,       SLOT(doActionOpenColorScalesManager()));
-    connect(actionAddIdField,                   SIGNAL(triggered()),    this,       SLOT(doActionAddIdField()));
-	connect(actionSetSFAsCoord,					SIGNAL(triggered()),    this,       SLOT(doActionSetSFAsCoord()));
-    connect(actionDeleteScalarField,            SIGNAL(triggered()),    this,       SLOT(doActionDeleteScalarField()));
-    connect(actionDeleteAllSF,                  SIGNAL(triggered()),    this,       SLOT(doActionDeleteAllSF()));
-    //"Edit" menu
-    connect(actionClone,                        SIGNAL(triggered()),    this,       SLOT(doActionClone()));
-    connect(actionMerge,                        SIGNAL(triggered()),    this,       SLOT(doActionMerge()));
-    connect(actionApplyTransformation,			SIGNAL(triggered()),    this,       SLOT(doActionApplyTransformation()));
-    connect(actionApplyScale,					SIGNAL(triggered()),    this,       SLOT(doActionApplyScale()));
-    connect(actionTranslateRotate,              SIGNAL(triggered()),    this,       SLOT(activateTranslateRotateMode()));
-    connect(actionSegment,                      SIGNAL(triggered()),    this,       SLOT(activateSegmentationMode()));
-    connect(actionCrop,							SIGNAL(triggered()),    this,       SLOT(doActionCrop()));
-    connect(actionEditGlobalShift,				SIGNAL(triggered()),    this,       SLOT(doActionEditGlobalShift()));
-    connect(actionEditGlobalScale,				SIGNAL(triggered()),    this,       SLOT(doActionEditGlobalScale()));
-    connect(actionSubsample,                    SIGNAL(triggered()),    this,       SLOT(doActionSubsample()));
-	connect(actionMatchBBCenters,				SIGNAL(triggered()),    this,       SLOT(doActionMatchBBCenters()));
-    connect(actionDelete,                       SIGNAL(triggered()),    m_ccRoot,	SLOT(deleteSelectedEntities()));
+	//"Edit > Normals" menu
+	connect(actionComputeNormals,				SIGNAL(triggered()),	this,		SLOT(doActionComputeNormals()));
+	connect(actionInvertNormals,				SIGNAL(triggered()),	this,		SLOT(doActionInvertNormals()));
+	connect(actionConvertNormalToHSV,			SIGNAL(triggered()),	this,		SLOT(doActionConvertNormalsToHSV()));
+	connect(actionConvertNormalToDipDir,		SIGNAL(triggered()),	this,		SLOT(doActionConvertNormalsToDipDir()));
+	connect(actionOrientNormalsMST,				SIGNAL(triggered()),	this,		SLOT(doActionOrientNormalsMST()));
+	connect(actionOrientNormalsFM,				SIGNAL(triggered()),	this,		SLOT(doActionOrientNormalsFM()));
+	connect(actionClearNormals,					SIGNAL(triggered()),	this,		SLOT(doActionClearNormals()));
+	//"Edit > Octree" menu
+	connect(actionComputeOctree,				SIGNAL(triggered()),	this,		SLOT(doActionComputeOctree()));
+	connect(actionResampleWithOctree,			SIGNAL(triggered()),	this,		SLOT(doActionResampleWithOctree()));
+	//"Edit > Mesh" menu
+	connect(actionComputeMeshAA,				SIGNAL(triggered()),	this,		SLOT(doActionComputeMeshAA()));
+	connect(actionComputeMeshLS,				SIGNAL(triggered()),	this,		SLOT(doActionComputeMeshLS()));
+	connect(actionConvertTextureToColor,		SIGNAL(triggered()),	this,		SLOT(doActionConvertTextureToColor()));
+	connect(actionSamplePoints,					SIGNAL(triggered()),	this,		SLOT(doActionSamplePoints()));
+	connect(actionSmoothMeshLaplacian,			SIGNAL(triggered()),	this,		SLOT(doActionSmoothMeshLaplacian()));
+	connect(actionSubdivideMesh,				SIGNAL(triggered()),	this,		SLOT(doActionSubdivideMesh()));
+	connect(actionMeasureMeshSurface,			SIGNAL(triggered()),	this,		SLOT(doActionMeasureMeshSurface()));
+	//"Edit > Mesh > Scalar Field" menu
+	connect(actionSmoothMeshSF,					SIGNAL(triggered()),	this,		SLOT(doActionSmoothMeshSF()));
+	connect(actionEnhanceMeshSF,				SIGNAL(triggered()),	this,		SLOT(doActionEnhanceMeshSF()));
+	//"Edit > Sensor > Ground-Based lidar" menu
+	connect(actionShowDepthBuffer,				SIGNAL(triggered()),	this,		SLOT(doActionShowDepthBuffer()));
+	connect(actionExportDepthBuffer,			SIGNAL(triggered()),	this,		SLOT(doActionExportDepthBuffer()));
+	//"Edit > Sensor" menu
+	connect(actionCreateGBLSensor,				SIGNAL(triggered()),	this,		SLOT(doActionCreateGBLSensor()));
+	connect(actionCreateCameraSensor,			SIGNAL(triggered()),	this,		SLOT(doActionCreateCameraSensor()));
+	connect(actionModifySensor,					SIGNAL(triggered()),	this,		SLOT(doActionModifySensor()));
+	connect(actionProjectUncertainty,			SIGNAL(triggered()),	this,		SLOT(doActionProjectUncertainty()));
+	connect(actionCheckPointsInsideFrustrum,	SIGNAL(triggered()),	this,		SLOT(doActionCheckPointsInsideFrustrum()));
+	connect(actionComputeDistancesFromSensor,	SIGNAL(triggered()),	this,		SLOT(doActionComputeDistancesFromSensor()));
+	connect(actionComputeScatteringAngles,		SIGNAL(triggered()),	this,		SLOT(doActionComputeScatteringAngles()));
+	connect(actionViewFromSensor,				SIGNAL(triggered()),	this,		SLOT(doActionSetViewFromSensor()));
+	//"Edit > Scalar fields" menu
+	connect(actionShowHistogram,				SIGNAL(triggered()),	this,		SLOT(showSelectedEntitiesHistogram()));
+	connect(actionSFGradient,					SIGNAL(triggered()),	this,		SLOT(doActionSFGradient()));
+	connect(actionGaussianFilter,				SIGNAL(triggered()),	this,		SLOT(doActionSFGaussianFilter()));
+	connect(actionBilateralFilter,				SIGNAL(triggered()),	this,		SLOT(doActionSFBilateralFilter()));
+	connect(actionFilterByValue,				SIGNAL(triggered()),	this,		SLOT(doActionFilterByValue()));
+	connect(actionAddConstantSF,				SIGNAL(triggered()),	this,		SLOT(doActionAddConstantSF()));
+	connect(actionScalarFieldArithmetic,		SIGNAL(triggered()),	this,		SLOT(doActionScalarFieldArithmetic()));
+	connect(actionScalarFieldFromColor,			SIGNAL(triggered()),	this,		SLOT(doActionScalarFieldFromColor()));
+	connect(actionConvertToRGB,					SIGNAL(triggered()),	this,		SLOT(doActionSFConvertToRGB()));
+	connect(actionConvertToRandomRGB,			SIGNAL(triggered()),	this,		SLOT(doActionSFConvertToRandomRGB()));
+	connect(actionRenameSF,						SIGNAL(triggered()),	this,		SLOT(doActionRenameSF()));
+	connect(actionOpenColorScalesManager,		SIGNAL(triggered()),	this,		SLOT(doActionOpenColorScalesManager()));
+	connect(actionAddIdField,					SIGNAL(triggered()),	this,		SLOT(doActionAddIdField()));
+	connect(actionSetSFAsCoord,					SIGNAL(triggered()),	this,		SLOT(doActionSetSFAsCoord()));
+	connect(actionDeleteScalarField,			SIGNAL(triggered()),	this,		SLOT(doActionDeleteScalarField()));
+	connect(actionDeleteAllSF,					SIGNAL(triggered()),	this,		SLOT(doActionDeleteAllSF()));
+	//"Edit" menu
+	connect(actionClone,						SIGNAL(triggered()),	this,		SLOT(doActionClone()));
+	connect(actionMerge,						SIGNAL(triggered()),	this,		SLOT(doActionMerge()));
+	connect(actionApplyTransformation,			SIGNAL(triggered()),	this,		SLOT(doActionApplyTransformation()));
+	connect(actionApplyScale,					SIGNAL(triggered()),	this,		SLOT(doActionApplyScale()));
+	connect(actionTranslateRotate,				SIGNAL(triggered()),	this,		SLOT(activateTranslateRotateMode()));
+	connect(actionSegment,						SIGNAL(triggered()),	this,		SLOT(activateSegmentationMode()));
+	connect(actionCrop,							SIGNAL(triggered()),	this,		SLOT(doActionCrop()));
+	connect(actionEditGlobalShiftAndScale,		SIGNAL(triggered()),	this,		SLOT(doActionEditGlobalShiftAndScale()));
+	connect(actionSubsample,					SIGNAL(triggered()),	this,		SLOT(doActionSubsample()));
+	connect(actionMatchBBCenters,				SIGNAL(triggered()),	this,		SLOT(doActionMatchBBCenters()));
+	connect(actionDelete,						SIGNAL(triggered()),	m_ccRoot,	SLOT(deleteSelectedEntities()));
 
-    //"Tools > Projection" menu
-    connect(actionUnroll,                       SIGNAL(triggered()),    this,       SLOT(doActionUnroll()));
-    connect(actionHeightGridGeneration,         SIGNAL(triggered()),    this,       SLOT(doActionHeightGridGeneration()));
-	connect(actionExportCoordToSF,				SIGNAL(triggered()),    this,       SLOT(doActionExportCoordToSF()));
-    //"Tools > Registration" menu
-    connect(actionRegister,                     SIGNAL(triggered()),    this,       SLOT(doActionRegister()));
-    connect(actionPointPairsAlign,				SIGNAL(triggered()),    this,       SLOT(activateRegisterPointPairTool()));
-    //"Tools > Distances" menu
-    connect(actionCloudCloudDist,               SIGNAL(triggered()),    this,       SLOT(doActionCloudCloudDist()));
-    connect(actionCloudMeshDist,                SIGNAL(triggered()),    this,       SLOT(doActionCloudMeshDist()));
-    connect(actionCPS,                          SIGNAL(triggered()),    this,       SLOT(doActionComputeCPS()));
-    //"Tools > Statistics" menu
-    connect(actionComputeStatParams,            SIGNAL(triggered()),    this,       SLOT(doActionComputeStatParams()));
-    connect(actionStatisticalTest,              SIGNAL(triggered()),    this,       SLOT(doActionStatisticalTest()));
-    //"Tools > Segmentation" menu
-    connect(actionLabelConnectedComponents,     SIGNAL(triggered()),    this,       SLOT(doActionLabelConnectedComponents()));
-    connect(actionKMeans,                       SIGNAL(triggered()),    this,       SLOT(doActionKMeans()));
-    connect(actionFrontPropagation,             SIGNAL(triggered()),    this,       SLOT(doActionFrontPropagation()));
+	//"Tools > Projection" menu
+	connect(actionUnroll,						SIGNAL(triggered()),	this,		SLOT(doActionUnroll()));
+	connect(actionHeightGridGeneration,			SIGNAL(triggered()),	this,		SLOT(doActionHeightGridGeneration()));
+	connect(actionExportCoordToSF,				SIGNAL(triggered()),	this,		SLOT(doActionExportCoordToSF()));
+	//"Tools > Registration" menu
+	connect(actionRegister,						SIGNAL(triggered()),	this,		SLOT(doActionRegister()));
+	connect(actionPointPairsAlign,				SIGNAL(triggered()),	this,		SLOT(activateRegisterPointPairTool()));
+	//"Tools > Distances" menu
+	connect(actionCloudCloudDist,				SIGNAL(triggered()),	this,		SLOT(doActionCloudCloudDist()));
+	connect(actionCloudMeshDist,				SIGNAL(triggered()),	this,		SLOT(doActionCloudMeshDist()));
+	connect(actionCPS,							SIGNAL(triggered()),	this,		SLOT(doActionComputeCPS()));
+	//"Tools > Statistics" menu
+	connect(actionComputeStatParams,			SIGNAL(triggered()),	this,		SLOT(doActionComputeStatParams()));
+	connect(actionStatisticalTest,				SIGNAL(triggered()),	this,		SLOT(doActionStatisticalTest()));
+	//"Tools > Segmentation" menu
+	connect(actionLabelConnectedComponents,		SIGNAL(triggered()),	this,		SLOT(doActionLabelConnectedComponents()));
+	connect(actionKMeans,						SIGNAL(triggered()),	this,		SLOT(doActionKMeans()));
+	connect(actionFrontPropagation,				SIGNAL(triggered()),	this,		SLOT(doActionFrontPropagation()));
 	connect(actionCrossSection,					SIGNAL(triggered()),	this,		SLOT(activateClippingBoxMode()));
-    //"Tools > Fit" menu
-    connect(actionFitPlane,						SIGNAL(triggered()),    this,       SLOT(doActionFitPlane()));
-    connect(actionFitFacet,						SIGNAL(triggered()),    this,       SLOT(doActionFitFacet()));
-	connect(actionFitQuadric,					SIGNAL(triggered()),    this,       SLOT(doActionFitQuadric()));
-    //"Tools > Other" menu
-    connect(actionApproximateDensity,			SIGNAL(triggered()),    this,       SLOT(doComputeApproximateDensity()));
-    connect(actionAccurateDensity,				SIGNAL(triggered()),    this,       SLOT(doComputeAccurateDensity()));
-    connect(actionCurvature,                    SIGNAL(triggered()),    this,       SLOT(doComputeCurvature()));
-    connect(actionRoughness,                    SIGNAL(triggered()),    this,       SLOT(doComputeRoughness()));
-	connect(actionRemoveDuplicatePoints,		SIGNAL(triggered()),    this,       SLOT(doRemoveDuplicatePoints()));
+	//"Tools > Fit" menu
+	connect(actionFitPlane,						SIGNAL(triggered()),	this,		SLOT(doActionFitPlane()));
+	connect(actionFitFacet,						SIGNAL(triggered()),	this,		SLOT(doActionFitFacet()));
+	connect(actionFitQuadric,					SIGNAL(triggered()),	this,		SLOT(doActionFitQuadric()));
+	//"Tools > Other" menu
+	connect(actionApproximateDensity,			SIGNAL(triggered()),	this,		SLOT(doComputeApproximateDensity()));
+	connect(actionAccurateDensity,				SIGNAL(triggered()),	this,		SLOT(doComputeAccurateDensity()));
+	connect(actionCurvature,					SIGNAL(triggered()),	this,		SLOT(doComputeCurvature()));
+	connect(actionRoughness,					SIGNAL(triggered()),	this,		SLOT(doComputeRoughness()));
+	connect(actionRemoveDuplicatePoints,		SIGNAL(triggered()),	this,		SLOT(doRemoveDuplicatePoints()));
 	//"Tools"
-    connect(actionPointListPicking,             SIGNAL(triggered()),    this,       SLOT(activatePointListPickingMode()));
-    connect(actionPointPicking,                 SIGNAL(triggered()),    this,       SLOT(activatePointPickingMode()));
+	connect(actionPointListPicking,				SIGNAL(triggered()),	this,		SLOT(activatePointListPickingMode()));
+	connect(actionPointPicking,					SIGNAL(triggered()),	this,		SLOT(activatePointPickingMode()));
 
 	//"Tools > Sand box (research)" menu
-    connect(actionComputeKdTree,                SIGNAL(triggered()),    this,       SLOT(doActionComputeKdTree()));
-	connect(actionDistanceToBestFitQuadric3D,	SIGNAL(triggered()),    this,       SLOT(doActionComputeDistToBestFitQuadric3D()));
-    connect(actionComputeBestFitBB,             SIGNAL(triggered()),    this,       SLOT(doComputeBestFitBB()));
-    connect(actionAlign,                        SIGNAL(triggered()),    this,       SLOT(doAction4pcsRegister())); //Aurelien BEY le 13/11/2008
-    connect(actionSNETest,						SIGNAL(triggered()),    this,       SLOT(doSphericalNeighbourhoodExtractionTest()));
-    connect(actionCNETest,						SIGNAL(triggered()),    this,       SLOT(doCylindricalNeighbourhoodExtractionTest()));
-	connect(actionFindBiggestInnerRectangle,	SIGNAL(triggered()),    this,       SLOT(doActionFindBiggestInnerRectangle()));
-	connect(actionExportCloudsInfo,				SIGNAL(triggered()),    this,       SLOT(doActionExportCloudsInfo()));
+	connect(actionComputeKdTree,				SIGNAL(triggered()),	this,		SLOT(doActionComputeKdTree()));
+	connect(actionDistanceToBestFitQuadric3D,	SIGNAL(triggered()),	this,		SLOT(doActionComputeDistToBestFitQuadric3D()));
+	connect(actionComputeBestFitBB,				SIGNAL(triggered()),	this,		SLOT(doComputeBestFitBB()));
+	connect(actionAlign,						SIGNAL(triggered()),	this,		SLOT(doAction4pcsRegister())); //Aurelien BEY le 13/11/2008
+	connect(actionSNETest,						SIGNAL(triggered()),	this,		SLOT(doSphericalNeighbourhoodExtractionTest()));
+	connect(actionCNETest,						SIGNAL(triggered()),	this,		SLOT(doCylindricalNeighbourhoodExtractionTest()));
+	connect(actionFindBiggestInnerRectangle,	SIGNAL(triggered()),	this,		SLOT(doActionFindBiggestInnerRectangle()));
+	connect(actionExportCloudsInfo,				SIGNAL(triggered()),	this,		SLOT(doActionExportCloudsInfo()));
 
-    //"Display" menu
-    connect(actionFullScreen,                   SIGNAL(toggled(bool)),  this,       SLOT(toggleFullScreen(bool)));
-    connect(actionRefresh,                      SIGNAL(triggered()),    this,       SLOT(refreshAll()));
-    connect(actionTestFrameRate,                SIGNAL(triggered()),    this,       SLOT(testFrameRate()));
-    connect(actionToggleCenteredPerspective,    SIGNAL(triggered()),    this,       SLOT(toggleActiveWindowCenteredPerspective()));
-    connect(actionToggleViewerBasedPerspective, SIGNAL(triggered()),    this,       SLOT(toggleActiveWindowViewerBasedPerspective()));
-    connect(actionEditCamera,                   SIGNAL(triggered()),    this,       SLOT(doActionEditCamera()));
-	connect(actionAdjustZoom,					SIGNAL(triggered()),    this,       SLOT(doActionAdjustZoom()));
-	connect(actionSaveViewportAsObject,			SIGNAL(triggered()),    this,       SLOT(doActionSaveViewportAsCamera()));
+	//"Display" menu
+	connect(actionFullScreen,					SIGNAL(toggled(bool)),	this,		SLOT(toggleFullScreen(bool)));
+	connect(actionRefresh,						SIGNAL(triggered()),	this,		SLOT(refreshAll()));
+	connect(actionTestFrameRate,				SIGNAL(triggered()),	this,		SLOT(testFrameRate()));
+	connect(actionToggleCenteredPerspective,	SIGNAL(triggered()),	this,		SLOT(toggleActiveWindowCenteredPerspective()));
+	connect(actionToggleViewerBasedPerspective, SIGNAL(triggered()),	this,		SLOT(toggleActiveWindowViewerBasedPerspective()));
+	connect(actionEditCamera,					SIGNAL(triggered()),	this,		SLOT(doActionEditCamera()));
+	connect(actionAdjustZoom,					SIGNAL(triggered()),	this,		SLOT(doActionAdjustZoom()));
+	connect(actionSaveViewportAsObject,			SIGNAL(triggered()),	this,		SLOT(doActionSaveViewportAsCamera()));
 
-    //"Display > Lights & Materials" menu
-    connect(actionDisplayOptions,				SIGNAL(triggered()),    this,       SLOT(setLightsAndMaterials()));
-    connect(actionToggleSunLight,               SIGNAL(triggered()),    this,       SLOT(toggleActiveWindowSunLight()));
-    connect(actionToggleCustomLight,            SIGNAL(triggered()),    this,       SLOT(toggleActiveWindowCustomLight()));
-    connect(actionRenderToFile,                 SIGNAL(triggered()),    this,       SLOT(doActionRenderToFile()));
-    //"Display > Shaders & filters" menu
-    connect(actionLoadShader,                   SIGNAL(triggered()),    this,       SLOT(doActionLoadShader()));
-    connect(actionDeleteShader,                 SIGNAL(triggered()),    this,       SLOT(doActionDeleteShader()));
-    connect(actionNoFilter,                     SIGNAL(triggered()),    this,       SLOT(doDisableGLFilter()));
+	//"Display > Lights & Materials" menu
+	connect(actionDisplayOptions,				SIGNAL(triggered()),	this,		SLOT(setLightsAndMaterials()));
+	connect(actionToggleSunLight,				SIGNAL(triggered()),	this,		SLOT(toggleActiveWindowSunLight()));
+	connect(actionToggleCustomLight,			SIGNAL(triggered()),	this,		SLOT(toggleActiveWindowCustomLight()));
+	connect(actionRenderToFile,					SIGNAL(triggered()),	this,		SLOT(doActionRenderToFile()));
+	//"Display > Shaders & filters" menu
+	connect(actionLoadShader,					SIGNAL(triggered()),	this,		SLOT(doActionLoadShader()));
+	connect(actionDeleteShader,					SIGNAL(triggered()),	this,		SLOT(doActionDeleteShader()));
+	connect(actionNoFilter,						SIGNAL(triggered()),	this,		SLOT(doDisableGLFilter()));
 
-    //"Display > Active SF" menu
-    connect(actionToggleActiveSFColorScale,		SIGNAL(triggered()),    this,       SLOT(doActionToggleActiveSFColorScale()));
-    connect(actionShowActiveSFPrevious,			SIGNAL(triggered()),    this,       SLOT(doActionShowActiveSFPrevious()));
-    connect(actionShowActiveSFNext,				SIGNAL(triggered()),    this,       SLOT(doActionShowActiveSFNext()));
+	//"Display > Active SF" menu
+	connect(actionToggleActiveSFColorScale,		SIGNAL(triggered()),	this,		SLOT(doActionToggleActiveSFColorScale()));
+	connect(actionShowActiveSFPrevious,			SIGNAL(triggered()),	this,		SLOT(doActionShowActiveSFPrevious()));
+	connect(actionShowActiveSFNext,				SIGNAL(triggered()),	this,		SLOT(doActionShowActiveSFNext()));
 
-    //"3D Views" menu
-    connect(menu3DViews,                        SIGNAL(aboutToShow()),  this,       SLOT(update3DViewsMenu()));
-    connect(actionNew3DView,                    SIGNAL(triggered()),    this,       SLOT(new3DView()));
-    connect(actionClose3DView,                  SIGNAL(triggered()),    m_mdiArea,  SLOT(closeActiveSubWindow()));
-    connect(actionCloseAll3DViews,              SIGNAL(triggered()),    m_mdiArea,  SLOT(closeAllSubWindows()));
-    connect(actionTile3DViews,                  SIGNAL(triggered()),    m_mdiArea,  SLOT(tileSubWindows()));
-    connect(actionCascade3DViews,               SIGNAL(triggered()),    m_mdiArea,  SLOT(cascadeSubWindows()));
-    connect(actionNext3DView,                   SIGNAL(triggered()),    m_mdiArea,  SLOT(activateNextSubWindow()));
-    connect(actionPrevious3DView,               SIGNAL(triggered()),    m_mdiArea,  SLOT(activatePreviousSubWindow()));
+	//"Display" menu
+	connect(actionResetGUIElementsPos,			SIGNAL(triggered()),	this,		SLOT(doActionResetGUIElementsPos()));
 
-    //"About" menu entry
-    connect(actionHelp,                         SIGNAL(triggered()),    this,       SLOT(help()));
-    connect(actionAbout,                        SIGNAL(triggered()),    this,       SLOT(about()));
-    connect(actionAboutPlugins,                 SIGNAL(triggered()),    this,       SLOT(aboutPlugins()));
+	//"3D Views" menu
+	connect(menu3DViews,						SIGNAL(aboutToShow()),	this,		SLOT(update3DViewsMenu()));
+	connect(actionNew3DView,					SIGNAL(triggered()),	this,		SLOT(new3DView()));
+	connect(actionClose3DView,					SIGNAL(triggered()),	m_mdiArea,	SLOT(closeActiveSubWindow()));
+	connect(actionCloseAll3DViews,				SIGNAL(triggered()),	m_mdiArea,	SLOT(closeAllSubWindows()));
+	connect(actionTile3DViews,					SIGNAL(triggered()),	m_mdiArea,	SLOT(tileSubWindows()));
+	connect(actionCascade3DViews,				SIGNAL(triggered()),	m_mdiArea,	SLOT(cascadeSubWindows()));
+	connect(actionNext3DView,					SIGNAL(triggered()),	m_mdiArea,	SLOT(activateNextSubWindow()));
+	connect(actionPrevious3DView,				SIGNAL(triggered()),	m_mdiArea,	SLOT(activatePreviousSubWindow()));
 
-    /*** Toolbars ***/
+	//"About" menu entry
+	connect(actionHelp,							SIGNAL(triggered()),	this,		SLOT(help()));
+	connect(actionAbout,						SIGNAL(triggered()),	this,		SLOT(about()));
+	connect(actionAboutPlugins,					SIGNAL(triggered()),	this,		SLOT(aboutPlugins()));
 
-    //View toolbar
-    connect(actionGlobalZoom,                   SIGNAL(triggered()),    this,       SLOT(setGlobalZoom()));
-    connect(actionPickRotationCenter,           SIGNAL(triggered()),    this,       SLOT(doPickRotationCenter()));
-    connect(actionZoomAndCenter,                SIGNAL(triggered()),    this,       SLOT(zoomOnSelectedEntities()));
-	connect(actionSetPivotAlwaysOn,				SIGNAL(triggered()),    this,       SLOT(setPivotAlwaysOn()));
-	connect(actionSetPivotRotationOnly,			SIGNAL(triggered()),    this,       SLOT(setPivotRotationOnly()));
-	connect(actionSetPivotOff,					SIGNAL(triggered()),    this,       SLOT(setPivotOff()));
-	connect(actionSetOrthoView,					SIGNAL(triggered()),    this,       SLOT(setOrthoView()));
-	connect(actionSetCenteredPerspectiveView,	SIGNAL(triggered()),    this,       SLOT(setCenteredPerspectiveView()));
-	connect(actionSetViewerPerspectiveView,		SIGNAL(triggered()),    this,       SLOT(setViewerPerspectiveView()));
-    connect(actionSetViewTop,                   SIGNAL(triggered()),    this,       SLOT(setTopView()));
-    connect(actionSetViewBottom,				SIGNAL(triggered()),    this,       SLOT(setBottomView()));
-    connect(actionSetViewFront,                 SIGNAL(triggered()),    this,       SLOT(setFrontView()));
-    connect(actionSetViewBack,                  SIGNAL(triggered()),    this,       SLOT(setBackView()));
-    connect(actionSetViewLeft,					SIGNAL(triggered()),    this,       SLOT(setLeftView()));
-    connect(actionSetViewRight,		            SIGNAL(triggered()),    this,       SLOT(setRightView()));
-    connect(actionSetViewIso1,		            SIGNAL(triggered()),    this,       SLOT(setIsoView1()));
-    connect(actionSetViewIso2,		            SIGNAL(triggered()),    this,       SLOT(setIsoView2()));
+	/*** Toolbars ***/
+
+	//View toolbar
+	connect(actionGlobalZoom,					SIGNAL(triggered()),	this,		SLOT(setGlobalZoom()));
+	connect(actionPickRotationCenter,			SIGNAL(triggered()),	this,		SLOT(doPickRotationCenter()));
+	connect(actionZoomAndCenter,				SIGNAL(triggered()),	this,		SLOT(zoomOnSelectedEntities()));
+	connect(actionSetPivotAlwaysOn,				SIGNAL(triggered()),	this,		SLOT(setPivotAlwaysOn()));
+	connect(actionSetPivotRotationOnly,			SIGNAL(triggered()),	this,		SLOT(setPivotRotationOnly()));
+	connect(actionSetPivotOff,					SIGNAL(triggered()),	this,		SLOT(setPivotOff()));
+	connect(actionSetOrthoView,					SIGNAL(triggered()),	this,		SLOT(setOrthoView()));
+	connect(actionSetCenteredPerspectiveView,	SIGNAL(triggered()),	this,		SLOT(setCenteredPerspectiveView()));
+	connect(actionSetViewerPerspectiveView,		SIGNAL(triggered()),	this,		SLOT(setViewerPerspectiveView()));
+	connect(actionSetViewTop,					SIGNAL(triggered()),	this,		SLOT(setTopView()));
+	connect(actionSetViewBottom,				SIGNAL(triggered()),	this,		SLOT(setBottomView()));
+	connect(actionSetViewFront,					SIGNAL(triggered()),	this,		SLOT(setFrontView()));
+	connect(actionSetViewBack,					SIGNAL(triggered()),	this,		SLOT(setBackView()));
+	connect(actionSetViewLeft,					SIGNAL(triggered()),	this,		SLOT(setLeftView()));
+	connect(actionSetViewRight,					SIGNAL(triggered()),	this,		SLOT(setRightView()));
+	connect(actionSetViewIso1,					SIGNAL(triggered()),	this,		SLOT(setIsoView1()));
+	connect(actionSetViewIso2,					SIGNAL(triggered()),	this,		SLOT(setIsoView2()));
 }
 
 void MainWindow::doActionColorize()
 {
-    doActionSetColor(true);
+	doActionSetColor(true);
 }
 
 void MainWindow::doActionSetUniqueColor()
 {
-    doActionSetColor(false);
+	doActionSetColor(false);
 }
 
 void MainWindow::doActionSetColor(bool colorize)
 {
-    //ask for color choice
-    QColor newCol = QColorDialog::getColor(Qt::white, this);
+	//ask for color choice
+	QColor newCol = QColorDialog::getColor(Qt::white, this);
 
-    if (!newCol.isValid())
-        return;
+	if (!newCol.isValid())
+		return;
 
 	ccHObject::Container selectedEntities = m_selectedEntities;
 	while (!selectedEntities.empty())
 	{
-        ccHObject* ent = selectedEntities.back();
+		ccHObject* ent = selectedEntities.back();
 		selectedEntities.pop_back();
 		if (ent->isA(CC_TYPES::HIERARCHY_OBJECT))
 		{
@@ -1047,7 +989,7 @@ void MainWindow::doActionSetColor(bool colorize)
 			for (unsigned i=0; i<ent->getChildrenNumber(); ++i)
 				selectedEntities.push_back(ent->getChild(i));
 		}
-        else if (ent->isA(CC_TYPES::POINT_CLOUD) || ent->isA(CC_TYPES::MESH))
+		else if (ent->isA(CC_TYPES::POINT_CLOUD) || ent->isA(CC_TYPES::MESH))
 		{
 			ccPointCloud* cloud = 0;
 			if (ent->isA(CC_TYPES::POINT_CLOUD))
@@ -1089,44 +1031,44 @@ void MainWindow::doActionSetColor(bool colorize)
 			else if (cloud->getParent() && cloud->getParent()->isKindOf(CC_TYPES::MESH))
 				cloud->getParent()->showColors(true);
 		}
-        else if (ent->isA(CC_TYPES::POLY_LINE))
-        {
-            ccPolyline * poly = ccHObjectCaster::ToPolyline(ent);
-            colorType col[3] = {static_cast<colorType>(newCol.red()),
+		else if (ent->isA(CC_TYPES::POLY_LINE))
+		{
+			ccPolyline * poly = ccHObjectCaster::ToPolyline(ent);
+			colorType col[3] = {static_cast<colorType>(newCol.red()),
 								static_cast<colorType>(newCol.green()),
 								static_cast<colorType>(newCol.blue()) };
-            poly->setColor(col);
-            ent->showColors(true);
-            ent->prepareDisplayForRefresh();
-        }
-        else if (ent->isA(CC_TYPES::FACET))
-        {
-            ccFacet* facet = ccHObjectCaster::ToFacet(ent);
-            colorType col[3] = {static_cast<colorType>(newCol.red()),
+			poly->setColor(col);
+			ent->showColors(true);
+			ent->prepareDisplayForRefresh();
+		}
+		else if (ent->isA(CC_TYPES::FACET))
+		{
+			ccFacet* facet = ccHObjectCaster::ToFacet(ent);
+			colorType col[3] = {static_cast<colorType>(newCol.red()),
 								static_cast<colorType>(newCol.green()),
 								static_cast<colorType>(newCol.blue()) };
-            facet->setColor(col);
-            ent->showColors(true);
-            ent->prepareDisplayForRefresh();
-        }
+			facet->setColor(col);
+			ent->showColors(true);
+			ent->prepareDisplayForRefresh();
+		}
 		else
 		{
 			ccLog::Warning(QString("[SetColor] Can't change color of entity '%1'").arg(ent->getName()));
 		}
-    }
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionSetColorGradient()
 {
-    ccColorGradientDlg dlg(this);
-    if (!dlg.exec())
-        return;
+	ccColorGradientDlg dlg(this);
+	if (!dlg.exec())
+		return;
 
 	unsigned char dim = dlg.getDimension();
-    ccColorGradientDlg::GradientType ramp = dlg.getType();
+	ccColorGradientDlg::GradientType ramp = dlg.getType();
 
 	ccColorScale::Shared colorScale(0);
 	if (ramp == ccColorGradientDlg::Default)
@@ -1143,21 +1085,21 @@ void MainWindow::doActionSetColorGradient()
 	}
 	assert(colorScale || ramp == ccColorGradientDlg::Banding);
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
 
 		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
 
-        if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
-        {
+		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
+		{
 			ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
 
 			bool success = false;
@@ -1171,11 +1113,38 @@ void MainWindow::doActionSetColorGradient()
 				ent->showColors(true);
 				ent->prepareDisplayForRefresh();
 			}
-        }
-    }
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
+}
+
+void MainWindow::doActionChangeColorLevels()
+{
+	if (m_selectedEntities.size() != 1)
+	{
+		ccConsole::Error("Select one and only one colored cloud or mesh!");
+		return;
+	}
+
+	bool lockedVertices;
+	ccPointCloud* pointCloud = ccHObjectCaster::ToPointCloud(m_selectedEntities[0],&lockedVertices);
+	if (!pointCloud || lockedVertices)
+	{
+		if (lockedVertices)
+			DisplayLockedVerticesWarning(pointCloud->getName(),true);
+		return;
+	}
+
+	if (!pointCloud->hasColors())
+	{
+		ccConsole::Error("Selected entity has no colors!");
+		return;
+	}
+
+	ccColorLevelsDlg dlg(this,pointCloud);
+	dlg.exec();
 }
 
 void MainWindow::doActionInterpolateColors()
@@ -1242,21 +1211,21 @@ void MainWindow::doActionInterpolateColors()
 
 void MainWindow::doActionInvertNormals()
 {
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
 		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
 
-        if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
-        {
-            ccPointCloud* ccCloud = static_cast<ccPointCloud*>(cloud);
+		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
+		{
+			ccPointCloud* ccCloud = static_cast<ccPointCloud*>(cloud);
 			if (ccCloud->hasNormals())
 			{
 				ccCloud->invertNormals();
@@ -1264,9 +1233,9 @@ void MainWindow::doActionInvertNormals()
 				ccCloud->prepareDisplayForRefresh_recursive();
 			}
 		}
-    }
+	}
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::doActionConvertNormalsToDipDir()
@@ -1283,21 +1252,21 @@ void MainWindow::doActionConvertNormalsTo(NORMAL_CONVERSION_DEST dest)
 {
 	unsigned errorCount = 0;
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
 		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
 
-        if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
-        {
-            ccPointCloud* ccCloud = static_cast<ccPointCloud*>(cloud);
+		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
+		{
+			ccPointCloud* ccCloud = static_cast<ccPointCloud*>(cloud);
 			if (ccCloud->hasNormals())
 			{
 				bool success = true;
@@ -1378,8 +1347,8 @@ void MainWindow::doActionConvertNormalsTo(NORMAL_CONVERSION_DEST dest)
 					++errorCount;
 				}
 			}
-        }
-    }
+		}
+	}
 
 	//errors should have been sent to console as warnings
 	if (errorCount)
@@ -1387,7 +1356,7 @@ void MainWindow::doActionConvertNormalsTo(NORMAL_CONVERSION_DEST dest)
 		ccConsole::Error("Error(s) occurred! (see console)");
 	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -1403,7 +1372,7 @@ void MainWindow::doActionComputeKdTree()
 		cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),true);
 			return;
 		}
 	}
@@ -1419,7 +1388,7 @@ void MainWindow::doActionComputeKdTree()
 	if (!ok)
 		return;
 
-    ccProgressDialog pDlg(true,this);
+	ccProgressDialog pDlg(true,this);
 
 	//computation
 	QElapsedTimer eTimer;
@@ -1459,18 +1428,18 @@ void MainWindow::doActionComputeOctree()
 {
 	ccBBox bbox;
 	std::set<ccGenericPointCloud*> clouds;
-    size_t selNum = m_selectedEntities.size();
+	size_t selNum = m_selectedEntities.size();
 	PointCoordinateType maxBoxSize = -1;
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
 
 		//specific test for locked vertices
 		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (cloud && lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
 		clouds.insert(cloud);
@@ -1501,15 +1470,15 @@ void MainWindow::doActionComputeOctree()
 	if (!coDlg.exec())
 		return;
 
-    ccProgressDialog pDlg(true,this);
+	ccProgressDialog pDlg(true,this);
 
 	//if we must use a custom bounding box, we update 'bbox'
 	if (coDlg.getMode() == ccComputeOctreeDlg::CUSTOM_BBOX)
 		bbox = coDlg.getCustomBBox();
 
-    for (std::set<ccGenericPointCloud*>::iterator it = clouds.begin(); it != clouds.end(); ++it)
-    {
-        ccGenericPointCloud* cloud = *it;
+	for (std::set<ccGenericPointCloud*>::iterator it = clouds.begin(); it != clouds.end(); ++it)
+	{
+		ccGenericPointCloud* cloud = *it;
 
 		//we temporarily detach entity, as it may undergo
 		//"severe" modifications (octree deletion, etc.) --> see ccPointCloud::computeOctree
@@ -1570,9 +1539,9 @@ void MainWindow::doActionComputeOctree()
 		{
 			ccConsole::Warning(QString("Octree computation on cloud '%1' failed!").arg(cloud->getName()));
 		}
-    }
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -1580,32 +1549,32 @@ void MainWindow::doActionResampleWithOctree()
 {
 	bool ok;
 	int pointCount = QInputDialog::getInt(this,"Resample with octree", "Points (approx.)", 1000000, 1, INT_MAX, 100000, &ok);
-    if (!ok)
-        return;
+	if (!ok)
+		return;
 
-    ccProgressDialog pDlg(false,this);
+	ccProgressDialog pDlg(false,this);
 	assert(pointCount > 0);
-    unsigned aimedPoints = static_cast<unsigned>(pointCount);
+	unsigned aimedPoints = static_cast<unsigned>(pointCount);
 
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 	bool errors = false;
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccPointCloud* cloud = 0;
-        ccHObject* ent = selectedEntities[i];
-        /*if (ent->isKindOf(CC_TYPES::MESH)) //TODO
-            cloud = ccHObjectCaster::ToGenericMesh(ent)->getAssociatedCloud();
-        else */
-        if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
-            cloud = static_cast<ccPointCloud*>(ent);
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccPointCloud* cloud = 0;
+		ccHObject* ent = selectedEntities[i];
+		/*if (ent->isKindOf(CC_TYPES::MESH)) //TODO
+			cloud = ccHObjectCaster::ToGenericMesh(ent)->getAssociatedCloud();
+		else */
+		if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
+			cloud = static_cast<ccPointCloud*>(ent);
 
-        if (cloud)
-        {
-            ccOctree* octree = cloud->getOctree();
-            if (!octree)
+		if (cloud)
+		{
+			ccOctree* octree = cloud->getOctree();
+			if (!octree)
 			{
-                octree = cloud->computeOctree(&pDlg);
+				octree = cloud->computeOctree(&pDlg);
 				if (!octree)
 				{
 					ccConsole::Error(QString("Could not compute octree for cloud '%1'").arg(cloud->getName()));
@@ -1643,13 +1612,13 @@ void MainWindow::doActionResampleWithOctree()
 					errors = true;
 				}
 			}
-        }
-    }
+		}
+	}
 
 	if (errors)
 		ccLog::Error("[ResampleWithOctree] Errors occurred during the process! Result may be incomplete!");
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::doActionApplyTransformation()
@@ -1658,55 +1627,108 @@ void MainWindow::doActionApplyTransformation()
 	if (!dlg.exec())
 		return;
 
-	ccGLMatrix transMat = dlg.getTransformation();
-	CCVector3 T = transMat.getTranslationAsVec3D();
+	ccGLMatrixd transMat = dlg.getTransformation();
 
-	//test if translation is very big
-	const double maxCoord = ccCoordinatesShiftManager::MaxCoordinateAbsValue();
-	bool coordsAreTooBig = (	fabs(T.x) > maxCoord
-							||	fabs(T.y) > maxCoord
-							||	fabs(T.z) > maxCoord );
-	bool applyTranslationAsShift = false;
+	//if the transformation is partly converted to global shift/scale
+	bool updateGlobalShiftAndScale = false;
+	double scaleChange = 1.0;
+	CCVector3d shiftChange(0,0,0);
 
 	//we must backup 'm_selectedEntities' as removeObjectTemporarilyFromDBTree can modify it!
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 	bool firstCloud = true;
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
 
 		//specific test for locked vertices
 		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (cloud && lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
 
 		if (firstCloud)
 		{
-			if (coordsAreTooBig)
-			{
-				//if the translation is big, we must check that it's actually worsening the situation
-				//(and not improving it - in which case we shouldn't rant ;)
-				CCVector3 C = cloud->getBBCenter();
-				CCVector3 C2 = C;
-				transMat.apply(C2);
+			//test if the translated cloud was already "too big"
+			//(in which case we won't bother the user about the fact
+			//that the transformed cloud will be too big...)
+			ccBBox localBBox = cloud->getBB();
+			CCVector3d Pl = CCVector3d::fromArray(localBBox.minCorner().u);
+			double Dl = localBBox.getDiagNormd();
 
-				if (C2.norm() > C.norm())
+			//the cloud was alright
+			if (	!ccCoordinatesShiftManager::NeedShift(Pl)
+				&&	!ccCoordinatesShiftManager::NeedRescale(Dl))
+			{
+				//test if the translated cloud is not "too big" (in local coordinate space)
+				ccBBox rotatedBox = cloud->getBB() * transMat;
+				double Dl2 = rotatedBox.getDiagNorm();
+				CCVector3d Pl2 = CCVector3d::fromArray(rotatedBox.getCenter().u);
+
+				bool needShift = ccCoordinatesShiftManager::NeedShift(Pl2);
+				bool needRescale = ccCoordinatesShiftManager::NeedRescale(Dl2);
+
+				if (needShift || needRescale)
 				{
-					//TODO: what about the scale?
-					applyTranslationAsShift = (QMessageBox::question(	this,
-												"Big coordinates",
-												"Translation is too big (original precision may be lost!). Do you wish to save it as 'global shift' instead?\n(global shift will only be applied at export time)",
-												QMessageBox::Yes,
-												QMessageBox::No) == QMessageBox::Yes);
-					if (applyTranslationAsShift)
+					//existing shift information
+					CCVector3d globalShift = cloud->getGlobalShift();
+					double globalScale = cloud->getGlobalScale();
+			
+					//we compute the transformation matrix in the global coordinate space
+					ccGLMatrixd globalTransMat = transMat;
+					globalTransMat.scale(1.0/globalScale);
+					globalTransMat.setTranslation(globalTransMat.getTranslationAsVec3D() - globalShift);
+					//and we apply it to the cloud bounding-box
+					ccBBox rotatedBox = cloud->getBB() * globalTransMat;
+					double Dg = rotatedBox.getDiagNorm();
+					CCVector3d Pg = CCVector3d::fromArray(rotatedBox.getCenter().u);
+
+					//ask the user the right values!
+					ccShiftAndScaleCloudDlg sasDlg(Pl2,Dl2,Pg,Dg,this);
+					sasDlg.showApplyAllButton(false);
+					sasDlg.showTitle(true);
+					sasDlg.setKeepGlobalPos(true);
+					sasDlg.showKeepGlobalPosCheckbox(false); //we don't want the user to mess with this!
+
+					//add "original" entry
+					int index = sasDlg.addShiftInfo(ccShiftAndScaleCloudDlg::ShiftInfo("Original",globalShift,globalScale));
+					//sasDlg.makeCurrent(index);
+					//add "suggested" entry
+					CCVector3d suggestedShift = ccCoordinatesShiftManager::BestShift(Pg);
+					double suggestedScale = ccCoordinatesShiftManager::BestScale(Dg);
+					index = sasDlg.addShiftInfo(ccShiftAndScaleCloudDlg::ShiftInfo("Suggested",suggestedShift,suggestedScale));
+					sasDlg.makeCurrent(index);
+					//add "last" entry (if available)
+					ccShiftAndScaleCloudDlg::ShiftInfo lastInfo;
+					if (sasDlg.getLast(lastInfo))
+						sasDlg.addShiftInfo(lastInfo);
+					//add entries from file (if any)
+					sasDlg.addFileInfo();
+
+					if (sasDlg.exec())
 					{
-						//clear transformation translation
-						transMat.setTranslation(CCVector3(0,0,0));
+						//get the relative modification to existing global shift/scale info
+						assert(cloud->getGlobalScale() != 0);
+						scaleChange = sasDlg.getScale() / cloud->getGlobalScale();
+						shiftChange =  (sasDlg.getShift() - cloud->getGlobalShift());
+
+						updateGlobalShiftAndScale = (scaleChange != 1.0 || shiftChange.norm2() != 0);
+
+						//update transformation matrix accordingly
+						if (updateGlobalShiftAndScale)
+						{
+							transMat.scale(scaleChange);
+							transMat.setTranslation(transMat.getTranslationAsVec3D()+shiftChange*scaleChange);
+						}
+					}
+					else if (sasDlg.cancelled())
+					{
+						ccLog::Warning("[ApplyTransformation] Process cancelled by user");
+						return;
 					}
 				}
 			}
@@ -1714,22 +1736,30 @@ void MainWindow::doActionApplyTransformation()
 			firstCloud = false;
 		}
 
-		if (applyTranslationAsShift)
+		if (updateGlobalShiftAndScale)
 		{
 			//apply translation as global shift
-			cloud->setGlobalShift(cloud->getGlobalShift() - CCVector3d::fromArray(T.u));
+			cloud->setGlobalShift(cloud->getGlobalShift() + shiftChange);
+			cloud->setGlobalScale(cloud->getGlobalScale() * scaleChange);
+			const CCVector3d& T = cloud->getGlobalShift();
+			double scale = cloud->getGlobalScale();
+			ccLog::Warning(QString("[ApplyTransformation] Cloud '%1' global shift/scale information has been updated: shift = (%2,%3,%4) / scale = %5").arg(cloud->getName()).arg(T.x).arg(T.y).arg(T.z).arg(scale));
 		}
 
 		//we temporarily detach entity, as it may undergo
 		//"severe" modifications (octree deletion, etc.) --> see ccHObject::applyRigidTransformation
 		ccHObjectContext objContext = removeObjectTemporarilyFromDBTree(ent);
-		ent->setGLTransformation(transMat);
+		ent->setGLTransformation(ccGLMatrix(transMat.data()));
 		ent->applyGLTransformation_recursive();
 		ent->prepareDisplayForRefresh_recursive();
 		putObjectBackIntoDBTree(ent,objContext);
-    }
+	}
+	
+	ccLog::Print("[ApplyTransformation] Applied transformation matrix:");
+	ccLog::Print(transMat.toString(12,' ')); //full precision
+	ccLog::Print("Hint: copy it (CTRL+C) and apply it - or its inverse - on any entity with the 'Edit > Apply transformation' tool");
 
-    refreshAll();
+	refreshAll();
 }
 
 static double s_lastMultFactorX = 1.0;
@@ -1737,9 +1767,9 @@ static double s_lastMultFactorY = 1.0;
 static double s_lastMultFactorZ = 1.0;
 void MainWindow::doActionApplyScale()
 {
-    ccAskThreeDoubleValuesDlg dlg("fx","fy","fz",-1.0e6,1.0e6,s_lastMultFactorX,s_lastMultFactorY,s_lastMultFactorZ,8,"Scaling",this);
-    if (!dlg.exec())
-        return;
+	ccAskThreeDoubleValuesDlg dlg("fx","fy","fz",-1.0e6,1.0e6,s_lastMultFactorX,s_lastMultFactorY,s_lastMultFactorZ,8,"Scaling",this);
+	if (!dlg.exec())
+		return;
 
 	//save values for next time
 	double sX = s_lastMultFactorX = dlg.doubleSpinBox1->value();
@@ -1748,25 +1778,25 @@ void MainWindow::doActionApplyScale()
 
 	//we must backup 'm_selectedEntities' as removeObjectTemporarilyFromDBTree can modify it!
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 	size_t processNum = 0;
 	bool firstCloud = true;
 	bool applyScaleAsShift = false;
 
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
 		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			++processNum;
 			continue;
 		}
 
-        if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
-        {
+		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
+		{
 
 			if (firstCloud)
 			{
@@ -1827,149 +1857,216 @@ void MainWindow::doActionApplyScale()
 			}
 
 			++processNum;
-        }
-    }
+		}
+	}
 
 	if (processNum == 0)
 	{
 		ccConsole::Warning("No elligible entities (point clouds or meshes) were selected!");
 	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
-void MainWindow::doActionEditGlobalShift()
+void MainWindow::doActionEditGlobalShiftAndScale()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 1)
-    {
-		if (selNum > 1)
-			ccConsole::Error("Select only one point cloud or mesh!");
-        return;
-    }
-	ccHObject* ent = m_selectedEntities[0];
+	size_t selNum = m_selectedEntities.size();
 
-	bool lockedVertices;
-	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
-	//for point clouds only
-	if (!cloud)
-		return;
-	if (lockedVertices && !ent->isAncestorOf(cloud))
+	//get the global shift/scale info and bounding box of all selected clouds
+	std::vector<ccGenericPointCloud*> clouds;
+	CCVector3d Pl(0,0,0);
+	double Dl = 1.0;
+	CCVector3d Pg(0,0,0);
+	double Dg = 1.0;
+	//shift and scale (if unique)
+	CCVector3d shift(0,0,0);
+	double scale = 1.0;
 	{
-		//see ccPropertiesTreeDelegate::fillWithMesh
-		DisplayLockedVerticesWarning();
-		return;
+		bool uniqueShift = true;
+		bool uniqueScale = true;
+		ccBBox localBB;
+		//sadly we don't have a double-typed bounding box class yet ;)
+		CCVector3d globalBBmin(0,0,0), globalBBmax(0,0,0);
+
+		for (size_t i=0; i<selNum; ++i)
+		{
+			ccHObject* ent = m_selectedEntities[i];
+			bool lockedVertices;
+			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+			//for (unlocked) point clouds only
+			if (!cloud)
+				continue;
+			if (lockedVertices && !ent->isAncestorOf(cloud))
+			{
+				DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
+				continue;
+			}
+
+			CCVector3 Al = cloud->getBB().minCorner();
+			CCVector3 Bl = cloud->getBB().maxCorner();
+			CCVector3d Ag = cloud->toGlobal3d<PointCoordinateType>(Al);
+			CCVector3d Bg = cloud->toGlobal3d<PointCoordinateType>(Bl);
+
+			//update local BB
+			localBB.add(Al);
+			localBB.add(Bl);
+
+			//update global BB
+			if (clouds.empty())
+			{
+				globalBBmin = Ag;
+				globalBBmax = Bg;
+				shift = cloud->getGlobalShift();
+				uniqueScale = cloud->getGlobalScale();
+			}
+			else
+			{
+				globalBBmin = CCVector3d(	std::min(globalBBmin.x,Ag.x),
+											std::min(globalBBmin.y,Ag.y),
+											std::min(globalBBmin.z,Ag.z) );
+				globalBBmax = CCVector3d(	std::max(globalBBmax.x,Bg.x),
+											std::max(globalBBmax.y,Bg.y),
+											std::max(globalBBmax.z,Bg.z) );
+
+				if (uniqueShift)
+					uniqueShift = ((cloud->getGlobalShift() - shift).norm() < ZERO_TOLERANCE);
+				if (uniqueScale)
+					uniqueScale = (fabs(cloud->getGlobalScale() - scale) < ZERO_TOLERANCE);
+			}
+
+			clouds.push_back(cloud);
+		}
+
+		Pg = globalBBmin;
+		Dg = (globalBBmax-globalBBmin).norm();
+
+		Pl = CCVector3d::fromArray(localBB.minCorner().u);
+		Dl = (localBB.maxCorner()-localBB.minCorner()).normd();
+
+		if (!uniqueShift)
+			shift = Pl - Pg;
+		if (!uniqueScale)
+			scale = Dg / Dl;
 	}
 
-	assert(cloud);
-	const CCVector3d& shift = cloud->getGlobalShift();
+	if (clouds.empty())
+		return;
 
-	ccAskThreeDoubleValuesDlg dlg("x","y","z",-DBL_MAX,DBL_MAX,shift.x,shift.y,shift.z,2,"Global shift",this);
-    if (!dlg.exec())
-        return;
+	ccShiftAndScaleCloudDlg sasDlg(Pl,Dl,Pg,Dg,this);
+	sasDlg.showApplyAllButton(clouds.size() > 1);
+	sasDlg.showApplyButton(clouds.size() == 1);
+	sasDlg.showNoButton(false);
+	//add "original" entry
+	int index = sasDlg.addShiftInfo(ccShiftAndScaleCloudDlg::ShiftInfo("Original",shift,scale));
+	sasDlg.makeCurrent(index);
+	//add "last" entry (if available)
+	ccShiftAndScaleCloudDlg::ShiftInfo lastInfo;
+	if (sasDlg.getLast(lastInfo))
+		sasDlg.addShiftInfo(lastInfo);
+	//add entries from file (if any)
+	sasDlg.addFileInfo();
 
-	double x = dlg.doubleSpinBox1->value();
-	double y = dlg.doubleSpinBox2->value();
-	double z = dlg.doubleSpinBox3->value();
+	if (!sasDlg.exec())
+		return;
+
+	shift = sasDlg.getShift();
+	scale = sasDlg.getScale();
+	bool preserveGlobalPos = sasDlg.keepGlobalPos();
+
+	ccLog::Print("[Global Shift/Scale] New shift: (%f, %f, %f)",shift.x,shift.y,shift.z);
+	ccLog::Print("[Global Shift/Scale] New scale: %f",scale);
 
 	//apply new shift
-	cloud->setGlobalShift(x,y,z);
-	ccLog::Print("[doActionEditGlobalShift] New shift: (%f, %f, %f)",x,y,z);
-
-	updateUI();
-}
-
-void MainWindow::doActionEditGlobalScale()
-{
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 1)
-    {
-		if (selNum > 1)
-			ccConsole::Error("Select only one point cloud or mesh!");
-        return;
-    }
-	ccHObject* ent = m_selectedEntities[0];
-
-	bool lockedVertices;
-	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
-	//for point clouds only
-	if (!cloud)
-		return;
-	if (lockedVertices && !ent->isAncestorOf(cloud))
 	{
-		//see ccPropertiesTreeDelegate::fillWithMesh
-		DisplayLockedVerticesWarning();
-		return;
+		for (size_t i=0; i<clouds.size(); ++i)
+		{
+			ccGenericPointCloud* cloud = clouds[i];
+			if (preserveGlobalPos)
+			{
+				//to preserve the global position of the cloud, we may have to translate and/or rescale the cloud
+				CCVector3d Ql = CCVector3d::fromArray(cloud->getBB().minCorner().u);
+				CCVector3d Qg = cloud->toGlobal3d(Ql);
+				CCVector3d Ql2 = Qg * scale + shift;
+				CCVector3d T = Ql2 - Ql;
+
+				assert(cloud->getGlobalScale() > 0);
+				double scaleCoef = scale / cloud->getGlobalScale();
+
+				if (T.norm() > ZERO_TOLERANCE || fabs(scaleCoef-1.0) > ZERO_TOLERANCE)
+				{
+					ccGLMatrix transMat;
+					transMat.toIdentity();
+					transMat.scale(static_cast<float>(scaleCoef));
+					transMat.setTranslation(T);
+
+					cloud->applyGLTransformation_recursive(&transMat);
+					cloud->prepareDisplayForRefresh_recursive();
+
+					ccLog::Warning(QString("[Global Shift/Scale] To preserve its original position, the cloud '%1' has been translated of (%2,%3,%4) and rescaled of a factor %5").arg(cloud->getName()).arg(T.x).arg(T.y).arg(T.z).arg(scaleCoef));
+				}
+			}
+			cloud->setGlobalShift(shift);
+			cloud->setGlobalScale(scale);
+		}
 	}
 
-	assert(cloud);
-	double scale = cloud->getGlobalScale();
-
-	bool ok;
-	scale = QInputDialog::getDouble(this, "Edit global scale", "Global scale", scale, 1e-6, 1e6, 6, &ok);
-    if (!ok)
-        return;
-
-	//apply new scale
-	cloud->setGlobalScale(scale);
-	ccLog::Print("[doActionEditGlobalScale] New scale: %f",scale);
-
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doComputeBestFitBB()
 {
-    if (QMessageBox::warning(	this,
+	if (QMessageBox::warning(	this,
 								"This method is for test purpose only",
 								"Cloud(s) are going to be rotated while still displayed in their previous position! Proceed?",
 								QMessageBox::Yes | QMessageBox::No,
 								QMessageBox::No ) != QMessageBox::Yes)
 	{
-        return;
+		return;
 	}
 
 	//we must backup 'm_selectedEntities' as removeObjectTemporarilyFromDBTree can modify it!
 	ccHObject::Container selectedEntities = m_selectedEntities;
 	size_t selNum = selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
 
-        if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
-        {
-            CCLib::Neighbourhood Yk(cloud);
+		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
+		{
+			CCLib::Neighbourhood Yk(cloud);
 
-            CCLib::SquareMatrixd covMat = Yk.computeCovarianceMatrix();
-            if (covMat.isValid())
-            {
-                CCLib::SquareMatrixd eig = covMat.computeJacobianEigenValuesAndVectors();
-                if (eig.isValid())
-                {
-                    eig.sortEigenValuesAndVectors();
+			CCLib::SquareMatrixd covMat = Yk.computeCovarianceMatrix();
+			if (covMat.isValid())
+			{
+				CCLib::SquareMatrixd eig = covMat.computeJacobianEigenValuesAndVectors();
+				if (eig.isValid())
+				{
+					eig.sortEigenValuesAndVectors();
 
-                    ccGLMatrix trans;
-                    GLfloat* rotMat = trans.data();
-                    for (unsigned j=0; j<3; ++j)
-                    {
+					ccGLMatrix trans;
+					GLfloat* rotMat = trans.data();
+					for (unsigned j=0; j<3; ++j)
+					{
 						double u[3];
-                        eig.getEigenValueAndVector(j,u);
-                        CCVector3 v(static_cast<PointCoordinateType>(u[0]),
+						eig.getEigenValueAndVector(j,u);
+						CCVector3 v(static_cast<PointCoordinateType>(u[0]),
 									static_cast<PointCoordinateType>(u[1]),
 									static_cast<PointCoordinateType>(u[2]));
-                        v.normalize();
-                        rotMat[j*4]   = static_cast<float>(v.x);
-                        rotMat[j*4+1] = static_cast<float>(v.y);
-                        rotMat[j*4+2] = static_cast<float>(v.z);
-                    }
+						v.normalize();
+						rotMat[j*4]		= static_cast<float>(v.x);
+						rotMat[j*4+1]	= static_cast<float>(v.y);
+						rotMat[j*4+2]	= static_cast<float>(v.z);
+					}
 
 					const CCVector3* G = Yk.getGravityCenter();
 					assert(G);
-                    trans.shiftRotationCenter(*G);
+					trans.shiftRotationCenter(*G);
 
-                    cloud->setGLTransformation(trans);
-                    trans.invert();
+					cloud->setGLTransformation(trans);
+					trans.invert();
 
 					//we temporarily detach entity, as it may undergo
 					//"severe" modifications (octree deletion, etc.) --> see ccPointCloud::applyRigidTransformation
@@ -1977,33 +2074,33 @@ void MainWindow::doComputeBestFitBB()
 					static_cast<ccPointCloud*>(cloud)->applyRigidTransformation(trans);
 					putObjectBackIntoDBTree(cloud,objContext);
 
-                    ent->prepareDisplayForRefresh_recursive();
-                }
-            }
-        }
-    }
+					ent->prepareDisplayForRefresh_recursive();
+				}
+			}
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::doActionClearColor()
 {
-    doActionClearProperty(0);
+	doActionClearProperty(0);
 }
 
 void MainWindow::doActionClearNormals()
 {
-    doActionClearProperty(1);
+	doActionClearProperty(1);
 }
 
 void MainWindow::doActionDeleteScalarField()
 {
-    doActionClearProperty(2);
+	doActionClearProperty(2);
 }
 
 void MainWindow::doActionDeleteAllSF()
 {
-    doActionClearProperty(3);
+	doActionClearProperty(3);
 }
 
 void MainWindow::doActionClearProperty(int prop)
@@ -2011,10 +2108,10 @@ void MainWindow::doActionClearProperty(int prop)
 	//we must backup 'm_selectedEntities' as removeObjectTemporarilyFromDBTree can modify it!
 	ccHObject::Container selectedEntities = m_selectedEntities;
 
-    size_t selNum = selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
+	size_t selNum = selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
 
 		//specific case: clear normals on a mesh
 		if (prop == 1 && ( ent->isA(CC_TYPES::MESH) /*|| ent->isKindOf(CC_TYPES::PRIMITIVE)*/ )) //TODO
@@ -2051,159 +2148,162 @@ void MainWindow::doActionClearProperty(int prop)
 		}
 
 		bool lockedVertices;
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent,&lockedVertices);
 		if (lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
 
-        if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
-        {
-            switch (prop)
-            {
-            case 0: //colors
-                if (cloud->hasColors())
-                {
-                    static_cast<ccPointCloud*>(cloud)->unallocateColors();
-                    ent->prepareDisplayForRefresh();
-                }
-                break;
-            case 1: //normals
-                if (cloud->hasNormals())
-                {
-                    static_cast<ccPointCloud*>(cloud)->unallocateNorms();
-                    ent->prepareDisplayForRefresh();
-                }
-                break;
-            case 2: //current sf
-                if (cloud->hasDisplayedScalarField())
-                {
-                    ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
-                    pc->deleteScalarField(pc->getCurrentDisplayedScalarFieldIndex());
-                    ent->prepareDisplayForRefresh();
-                }
-                break;
-            case 3: //all sf
-                if (cloud->hasScalarFields())
-                {
-                    static_cast<ccPointCloud*>(cloud)->deleteAllScalarFields();
-                    ent->prepareDisplayForRefresh();
-                }
-                break;
-            }
-        }
-    }
+		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) // TODO
+		{
+			switch (prop)
+			{
+			case 0: //colors
+				if (cloud->hasColors())
+				{
+					static_cast<ccPointCloud*>(cloud)->unallocateColors();
+					ent->prepareDisplayForRefresh();
+				}
+				break;
+			case 1: //normals
+				if (cloud->hasNormals())
+				{
+					static_cast<ccPointCloud*>(cloud)->unallocateNorms();
+					ent->prepareDisplayForRefresh();
+				}
+				break;
+			case 2: //current sf
+				if (cloud->hasDisplayedScalarField())
+				{
+					ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+					pc->deleteScalarField(pc->getCurrentDisplayedScalarFieldIndex());
+					ent->prepareDisplayForRefresh();
+				}
+				break;
+			case 3: //all sf
+				if (cloud->hasScalarFields())
+				{
+					static_cast<ccPointCloud*>(cloud)->deleteAllScalarFields();
+					ent->prepareDisplayForRefresh();
+				}
+				break;
+			}
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionMeasureMeshSurface()
 {
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
-        if (ent->isKindOf(CC_TYPES::MESH))
-        {
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
+		if (ent->isKindOf(CC_TYPES::MESH))
+		{
 			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(ent);
-            double S = CCLib::MeshSamplingTools::computeMeshArea(mesh);
-            //we force the console to display itself
-            forceConsoleDisplay();
-            ccConsole::Print(QString("[Mesh Surface Measurer] Mesh %1: S=%2 (square units)").arg(ent->getName()).arg(S));
+			double S = CCLib::MeshSamplingTools::computeMeshArea(mesh);
+			//we force the console to display itself
+			forceConsoleDisplay();
+			ccConsole::Print(QString("[Mesh Surface Measurer] Mesh %1: S=%2 (square units)").arg(ent->getName()).arg(S));
 			if (mesh->size())
 				ccConsole::Print(QString("[Mesh Surface Measurer] Mean triangle surface: %1 (square units)").arg(S/double(mesh->size())));
-        }
-    }
+		}
+	}
 }
 
 void displaySensorProjectErrorString(int errorCode)
 {
-    switch (errorCode)
-    {
-    case -1:
-        ccConsole::Error("Internal error: bad input!");
-        break;
-    case -2:
-        ccConsole::Error("Error: depth buffer is too big (try to reduce angular steps)");
-        break;
-    case -3:
-        ccConsole::Error("Error: depth buffer is too small (try to increase angular steps)");
-        break;
-    case -4:
-        ccConsole::Error("Error: not enough memory! (try to reduce angular steps)");
-        break;
-    default:
-        ccConsole::Error("An unknown error occurred while creating sensor (code: %i)",errorCode);
-    }
+	switch (errorCode)
+	{
+	case -1:
+		ccConsole::Error("Internal error: bad input!");
+		break;
+	case -2:
+		ccConsole::Error("Error: depth buffer is too big (try to reduce angular steps)");
+		break;
+	case -3:
+		ccConsole::Error("Error: depth buffer is too small (try to increase angular steps)");
+		break;
+	case -4:
+		ccConsole::Error("Error: not enough memory! (try to reduce angular steps)");
+		break;
+	default:
+		ccConsole::Error("An unknown error occurred while creating sensor (code: %i)",errorCode);
+	}
 }
 
 void MainWindow::doActionComputeDistancesFromSensor()
 {
-    //there should be only one sensor in current selection!
-	if (m_selectedEntities.empty() || m_selectedEntities.size()>1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::GBL_SENSOR))
-    {
-        ccConsole::Error("Select one and only one sensor!");
-        return;
-    }
-
-	ccSensor* sensor = ccHObjectCaster::ToSensor(m_selectedEntities[0]);
-	assert(sensor);
-	if (!sensor)
-		return;
-
-    //sensor must have a parent cloud -> this error probably could not happen
-    //If in a future cc will permits to have not-cloud-associated sensors this will
-    //ensure to not have bugs
-    if (!sensor->getParent() || !sensor->getParent()->isKindOf(CC_TYPES::POINT_CLOUD))
-    {
-        ccConsole::Error("Sensor must be associated with a point cloud!");
-        return;
-    }
-
-    //get associated cloud
-	ccPointCloud * cloud = ccHObjectCaster::ToPointCloud(sensor->getParent());
-	assert(cloud);
-
-    //sensor center
-	CCVector3 sensorCenter;
-	if (!sensor->getActiveAbsoluteCenter(sensorCenter))
-		return;
-
-    //start dialog
-    ccSensorComputeDistancesDlg cdDlg(this);
-    if (!cdDlg.exec())
-        return;
-
-    //squared required?
-    bool squared = cdDlg.computeSquaredDistances();
-
-	//set up a new scalar field
-	const char* defaultRangesSFname = squared ? CC_DEFAULT_SQUARED_RANGES_SF_NAME : CC_DEFAULT_RANGES_SF_NAME;
-	int sfIdx = cloud->getScalarFieldIndexByName(defaultRangesSFname);
-	if (sfIdx < 0)
+	//we support more than just one sensor in selection
+	if (m_selectedEntities.empty())
 	{
-		sfIdx = cloud->addScalarField(defaultRangesSFname);
-		if (sfIdx < 0)
+		ccConsole::Error("Select at least a sensor.");
+		return;
+	}
+
+	//start dialog
+	ccSensorComputeDistancesDlg cdDlg(this);
+	if (!cdDlg.exec())
+		return;
+
+	for (int i = 0; i < m_selectedEntities.size(); ++i)
+	{
+		ccSensor* sensor = ccHObjectCaster::ToSensor(m_selectedEntities[i]);
+		assert(sensor);
+		if (!sensor)
+			continue; //skip this entity
+
+		//sensor must have a parent cloud -> this error probably could not happen
+		//If in a future cc will permits to have not-cloud-associated sensors this will
+		//ensure to not have bugs
+		if (!sensor->getParent() || !sensor->getParent()->isKindOf(CC_TYPES::POINT_CLOUD))
 		{
-			ccConsole::Error("Not enough memory!");
+			ccConsole::Error("Sensor must be associated with a point cloud!");
 			return;
 		}
-	}
-	CCLib::ScalarField* distances = cloud->getScalarField(sfIdx);
 
-	for (unsigned i=0; i<cloud->size(); ++i)
-	{
-		const CCVector3* P = cloud->getPoint(i);
-		ScalarType s = static_cast<ScalarType>(squared ? (*P-sensorCenter).norm2() :  (*P-sensorCenter).norm());
-		distances->setValue(i, s);
-	}
+		//get associated cloud
+		ccPointCloud * cloud = ccHObjectCaster::ToPointCloud(sensor->getParent());
+		assert(cloud);
 
-	distances->computeMinAndMax();
-	cloud->setCurrentDisplayedScalarField(sfIdx);
-	cloud->showSF(true);
-    cloud->prepareDisplayForRefresh_recursive();
+		//sensor center
+		CCVector3 sensorCenter;
+		if (!sensor->getActiveAbsoluteCenter(sensorCenter))
+			return;
+
+		//squared required?
+		bool squared = cdDlg.computeSquaredDistances();
+
+		//set up a new scalar field
+		const char* defaultRangesSFname = squared ? CC_DEFAULT_SQUARED_RANGES_SF_NAME : CC_DEFAULT_RANGES_SF_NAME;
+		int sfIdx = cloud->getScalarFieldIndexByName(defaultRangesSFname);
+		if (sfIdx < 0)
+		{
+			sfIdx = cloud->addScalarField(defaultRangesSFname);
+			if (sfIdx < 0)
+			{
+				ccConsole::Error("Not enough memory!");
+				return;
+			}
+		}
+		CCLib::ScalarField* distances = cloud->getScalarField(sfIdx);
+
+		for (unsigned i=0; i<cloud->size(); ++i)
+		{
+			const CCVector3* P = cloud->getPoint(i);
+			ScalarType s = static_cast<ScalarType>(squared ? (*P-sensorCenter).norm2() : (*P-sensorCenter).norm());
+			distances->setValue(i, s);
+		}
+
+		distances->computeMinAndMax();
+		cloud->setCurrentDisplayedScalarField(sfIdx);
+		cloud->showSF(true);
+		cloud->prepareDisplayForRefresh_recursive();
+	}
 
 	refreshAll();
 	updateUI();
@@ -2211,41 +2311,41 @@ void MainWindow::doActionComputeDistancesFromSensor()
 
 void MainWindow::doActionComputeScatteringAngles()
 {
-    //there should be only one sensor in current selection!
-    if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::GBL_SENSOR))
-    {
-        ccConsole::Error("Select one and only one GBL sensor!");
-        return;
-    }
+	//there should be only one sensor in current selection!
+	if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::GBL_SENSOR))
+	{
+		ccConsole::Error("Select one and only one GBL sensor!");
+		return;
+	}
 
 	ccSensor* sensor = ccHObjectCaster::ToSensor(m_selectedEntities[0]);
 	assert(sensor);
 
-    //sensor must have a parent cloud with normal
-    if (!sensor->getParent() || !sensor->getParent()->isKindOf(CC_TYPES::POINT_CLOUD) || !sensor->getParent()->hasNormals())
-    {
-        ccConsole::Error("Sensor must be associated to a point cloud with normals! (compute normals first)");
-        return;
-    }
+	//sensor must have a parent cloud with normal
+	if (!sensor->getParent() || !sensor->getParent()->isKindOf(CC_TYPES::POINT_CLOUD) || !sensor->getParent()->hasNormals())
+	{
+		ccConsole::Error("Sensor must be associated to a point cloud with normals! (compute normals first)");
+		return;
+	}
 
-    //sensor center
+	//sensor center
 	CCVector3 sensorCenter;
 	if (!sensor->getActiveAbsoluteCenter(sensorCenter))
 		return;
 
-    //get associated cloud
+	//get associated cloud
 	ccPointCloud * cloud = ccHObjectCaster::ToPointCloud(sensor->getParent());
 	assert(cloud);
 	if (!cloud)
 		return;
 
-    ccSensorComputeScatteringAnglesDlg cdDlg(this);
-    if (!cdDlg.exec())
-        return;
+	ccSensorComputeScatteringAnglesDlg cdDlg(this);
+	if (!cdDlg.exec())
+		return;
 
-    bool toDegreeFlag = cdDlg.anglesInDegrees();
+	bool toDegreeFlag = cdDlg.anglesInDegrees();
 
-    //prepare a new scalar field
+	//prepare a new scalar field
 	const char* defaultScatAnglesSFname = toDegreeFlag ? CC_DEFAULT_DEG_SCATTERING_ANGLES_SF_NAME : CC_DEFAULT_RAD_SCATTERING_ANGLES_SF_NAME;
 	int sfIdx = cloud->getScalarFieldIndexByName(defaultScatAnglesSFname);
 	if (sfIdx < 0)
@@ -2294,16 +2394,16 @@ void MainWindow::doActionComputeScatteringAngles()
 
 void MainWindow::doActionSetViewFromSensor()
 {
-    //there should be only one sensor in current selection!
-    if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::SENSOR))
-    {
-        ccConsole::Error("Select one and only one sensor!");
-        return;
-    }
+	//there should be only one sensor in current selection!
+	if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::SENSOR))
+	{
+		ccConsole::Error("Select one and only one sensor!");
+		return;
+	}
 
 	ccSensor* sensor = ccHObjectCaster::ToSensor(m_selectedEntities[0]);
 	assert(sensor);
-    //sensor center
+	//sensor center
 	ccIndexedTransformation trans;
 	if (!sensor->getAbsoluteTransformation(trans, sensor->getActiveIndex()))
 	{
@@ -2325,12 +2425,12 @@ void MainWindow::doActionSetViewFromSensor()
 	if (win)
 	{
 		//ccViewportParameters params = win->getViewportParameters();
-		win->setPerspectiveState(true,false);
-		win->setCameraPos(sensorCenter);
-		win->setPivotPoint(sensorCenter);
+		setViewerPerspectiveView(win);
+		win->setCameraPos(CCVector3d::fromArray(sensorCenter.u));
+		win->setPivotPoint(CCVector3d::fromArray(sensorCenter.u));
 		//FIXME: more complicated! Depends on the 'rotation order' for GBL sensors for instance
 		win->setView(CC_FRONT_VIEW,false);
-		win->rotateBaseViewMat(trans);
+		win->rotateBaseViewMat(ccGLMatrixd(trans.data()));
 		//TODO: can we set the right FOV?
 		win->redraw();
 	}
@@ -2342,44 +2442,44 @@ void MainWindow::doActionSetViewFromSensor()
 
 void MainWindow::doActionCreateGBLSensor()
 {
-    ccSensorProjectionDlg spDlg(this);
-    if (!spDlg.exec())
-        return;
+	ccSensorProjectionDlg spDlg(this);
+	if (!spDlg.exec())
+		return;
 
-    //We create the corresponding sensor for each input cloud (in a perfect world, there should be only one ;)
+	//We create the corresponding sensor for each input cloud (in a perfect world, there should be only one ;)
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
-        if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
-        {
-            ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
+	size_t selNum = selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
+		if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
 
-            //we create a new sensor
-            ccGBLSensor* sensor = new ccGBLSensor();
+			//we create a new sensor
+			ccGBLSensor* sensor = new ccGBLSensor();
 
-            //we init its parameters with dialog
-            spDlg.updateGBLSensor(sensor);
+			//we init its parameters with dialog
+			spDlg.updateGBLSensor(sensor);
 
-            //we compute projection
-            int errorCode;
-            CCLib::GenericIndexedCloud* projectedPoints = sensor->project(cloud,errorCode,true);
+			//we compute projection
+			int errorCode;
+			CCLib::GenericIndexedCloud* projectedPoints = sensor->project(cloud,errorCode,true);
 
-            if (projectedPoints)
-            {
-                cloud->addChild(sensor);
+			if (projectedPoints)
+			{
+				cloud->addChild(sensor);
 
-                //we try to guess the sensor relative size (dirty)
-                ccBBox bb = cloud->getBB();
-                double diag = bb.getDiagNorm();
-                if (diag < 1.0)
-                    sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e-3));
-                else if (diag > 10000.0)
-                    sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e3));
+				//we try to guess the sensor relative size (dirty)
+				ccBBox bb = cloud->getBB();
+				double diag = bb.getDiagNorm();
+				if (diag < 1.0)
+					sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e-3));
+				else if (diag > 10000.0)
+					sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e3));
 
-                //we display depth buffer
-                ccRenderingTools::ShowDepthBuffer(sensor,this);
+				//we display depth buffer
+				ccRenderingTools::ShowDepthBuffer(sensor,this);
 
 				////DGM: test
 				//{
@@ -2404,29 +2504,29 @@ void MainWindow::doActionCreateGBLSensor()
 				//ccIndexedTransformation trans;
 				//sensor->addPosition(trans,0);
 
-                ccGLWindow* win = static_cast<ccGLWindow*>(cloud->getDisplay());
-                if (win)
-                {
+				ccGLWindow* win = static_cast<ccGLWindow*>(cloud->getDisplay());
+				if (win)
+				{
 					sensor->setDisplay_recursive(win);
-                    sensor->setVisible(true);
-                    ccBBox box = cloud->getBB();
-                    win->updateConstellationCenterAndZoom(&box);
-                }
-                delete projectedPoints;
+					sensor->setVisible(true);
+					ccBBox box = cloud->getBB();
+					win->updateConstellationCenterAndZoom(&box);
+				}
+				delete projectedPoints;
 				projectedPoints = 0;
 
 				addToDB(sensor);
-            }
-            else
-            {
-                displaySensorProjectErrorString(errorCode);
-                delete sensor;
+			}
+			else
+			{
+				displaySensorProjectErrorString(errorCode);
+				delete sensor;
 				sensor = 0;
-            }
-        }
-    }
+			}
+		}
+	}
 
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::doActionCreateCameraSensor()
@@ -2449,11 +2549,11 @@ void MainWindow::doActionCreateCameraSensor()
 
 			//we try to guess the sensor relative size (dirty)
 			ccBBox bb = cloud->getBB();
-                double diag = bb.getDiagNorm();
-                if (diag < 1.0)
-                    sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e-3));
-                else if (diag > 10000.0)
-                    sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e3));
+			double diag = bb.getDiagNorm();
+			if (diag < 1.0)
+				sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e-3));
+			else if (diag > 10000.0)
+				sensor->setGraphicScale(static_cast<PointCoordinateType>(1.0e3));
 
 			/*//we update sensor graphic representation
 			sensor->updateGraphicRepresentation();*/
@@ -2480,83 +2580,83 @@ void MainWindow::doActionCreateCameraSensor()
 
 void MainWindow::doActionModifySensor()
 {
-    //there should be only one point cloud with sensor in current selection!
-    if (m_selectedEntities.empty() || m_selectedEntities.size()>1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::SENSOR))
-    {
-        ccConsole::Error("Select one and only one sensor!");
-        return;
-    }
+	//there should be only one point cloud with sensor in current selection!
+	if (m_selectedEntities.empty() || m_selectedEntities.size()>1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::SENSOR))
+	{
+		ccConsole::Error("Select one and only one sensor!");
+		return;
+	}
 
-    ccSensor* sensor = static_cast<ccSensor*>(m_selectedEntities[0]);
+	ccSensor* sensor = static_cast<ccSensor*>(m_selectedEntities[0]);
 
-    if (sensor->isA(CC_TYPES::GBL_SENSOR))
-    {
-        ccGBLSensor* gbl = static_cast<ccGBLSensor*>(sensor);
-        ccSensorProjectionDlg spDlg(this);
+	if (sensor->isA(CC_TYPES::GBL_SENSOR))
+	{
+		ccGBLSensor* gbl = static_cast<ccGBLSensor*>(sensor);
+		ccSensorProjectionDlg spDlg(this);
 
-        spDlg.initWithGBLSensor(gbl);
-        if (spDlg.exec())
-        {
-            //we init its parameters with dialog
-            spDlg.updateGBLSensor(gbl);
+		spDlg.initWithGBLSensor(gbl);
+		if (spDlg.exec())
+		{
+			//we init its parameters with dialog
+			spDlg.updateGBLSensor(gbl);
 
-            //we re-project cloud
-            if (gbl->getParent()->isKindOf(CC_TYPES::POINT_CLOUD))
-            {
-                int errorCode;
-                ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(gbl->getParent());
+			//we re-project cloud
+			if (gbl->getParent()->isKindOf(CC_TYPES::POINT_CLOUD))
+			{
+				int errorCode;
+				ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(gbl->getParent());
 
 				CCLib::GenericIndexedCloud* projectedPoints = gbl->project(cloud,errorCode,true);
-                if (projectedPoints)
-                {
-                    //we don't need the projected points anymore
-                    delete projectedPoints;
+				if (projectedPoints)
+				{
+					//we don't need the projected points anymore
+					delete projectedPoints;
 					projectedPoints = 0;
 
-                    //we display depth buffer
-                    ccRenderingTools::ShowDepthBuffer(gbl,this);
+					//we display depth buffer
+					ccRenderingTools::ShowDepthBuffer(gbl,this);
 
-                    //in case the sensor position has changed
-                    ccGLWindow* win = static_cast<ccGLWindow*>(cloud->getDisplay());
-                    if (win)
-                    {
-                        ccBBox box = cloud->getBB();
-                        win->updateConstellationCenterAndZoom(&box);
-                    }
+					//in case the sensor position has changed
+					ccGLWindow* win = static_cast<ccGLWindow*>(cloud->getDisplay());
+					if (win)
+					{
+						ccBBox box = cloud->getBB();
+						win->updateConstellationCenterAndZoom(&box);
+					}
 
-                    if (sensor->isVisible() && sensor->isEnabled())
-                    {
-                        sensor->prepareDisplayForRefresh();
-                        refreshAll();
-                    }
+					if (sensor->isVisible() && sensor->isEnabled())
+					{
+						sensor->prepareDisplayForRefresh();
+						refreshAll();
+					}
 
-                    updateUI();
-                }
-                else
-                {
-                    displaySensorProjectErrorString(errorCode);
-                }
-            }
-            else
-            {
-                ccConsole::Error(QString("Internal error: sensor ('%1') parent is not a point cloud!").arg(sensor->getName()));
-            }
-        }
-    }
-    else
-    {
-        ccConsole::Error("Can't modify this kind of sensor!");
-    }
+					updateUI();
+				}
+				else
+				{
+					displaySensorProjectErrorString(errorCode);
+				}
+			}
+			else
+			{
+				ccConsole::Error(QString("Internal error: sensor ('%1') parent is not a point cloud!").arg(sensor->getName()));
+			}
+		}
+	}
+	else
+	{
+		ccConsole::Error("Can't modify this kind of sensor!");
+	}
 }
 
 void MainWindow::doActionProjectUncertainty()
 {
 	//there should only be one sensor in the current selection!
-    if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::CAMERA_SENSOR))
-    {
-        ccConsole::Error("Select one and only one camera (projective) sensor!");
-        return;
-    }
+	if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::CAMERA_SENSOR))
+	{
+		ccConsole::Error("Select one and only one camera (projective) sensor!");
+		return;
+	}
 
 	ccCameraSensor* sensor = ccHObjectCaster::ToCameraSensor(m_selectedEntities[0]);
 	assert(sensor);
@@ -2567,15 +2667,13 @@ void MainWindow::doActionProjectUncertainty()
 	if (!sensor->getParent() || !sensor->getParent()->isA(CC_TYPES::POINT_CLOUD))
 	{
 		ccConsole::Error("The sensor must be the child of a point cloud!");
-        return;
+		return;
 	}
 
-	bool lockedVertices;
-	ccPointCloud* pointCloud = ccHObjectCaster::ToPointCloud(sensor->getParent(),&lockedVertices);
-	if (!pointCloud || lockedVertices)
+	ccPointCloud* pointCloud = ccHObjectCaster::ToPointCloud(sensor->getParent());
+	if (!pointCloud)
 	{
-		if (lockedVertices)
-			DisplayLockedVerticesWarning();
+		assert(false);
 		return;
 	}
 
@@ -2583,7 +2681,7 @@ void MainWindow::doActionProjectUncertainty()
 	if (!points.reserve(pointCloud->size()))
 	{
 		ccConsole::Error("Not enough memory!");
-        return;
+		return;
 	}
 	points.setPointIndex(0,pointCloud->size());
 
@@ -2592,17 +2690,17 @@ void MainWindow::doActionProjectUncertainty()
 	if (!sensor->computeUncertainty(&points, accuracy/*, false*/))
 	{
 		ccConsole::Error("Not enough memory!");
-        return;
+		return;
 	}
 
 	/////////////
 	// SIGMA D //
 	/////////////
-	char dimChar[3] = {'x','y','z'};
+	const char dimChar[3] = {'x','y','z'};
 	for (unsigned d=0; d<3; ++d)
 	{
 		// add scalar field
-		QString sfName = QString("Sensor uncertainty (%1)").arg(dimChar[d]);
+		QString sfName = QString("[%1] Uncertainty (%2)").arg(sensor->getName()).arg(dimChar[d]);
 		int sfIdx = pointCloud->getScalarFieldIndexByName(qPrintable(sfName));
 		if (sfIdx < 0)
 			sfIdx = pointCloud->addScalarField(qPrintable(sfName));
@@ -2617,8 +2715,10 @@ void MainWindow::doActionProjectUncertainty()
 		assert(sf);
 		if (sf)
 		{
-			for (size_t i=0 ; i<accuracy.size() ; i++)
-				sf->setValue(static_cast<unsigned>(i), accuracy[i].u[d]);
+			unsigned count = static_cast<unsigned>(accuracy.size());
+			assert(count == pointCloud->size());
+			for (unsigned i=0; i<count; i++)
+				sf->setValue(i, accuracy[i].u[d]);
 			sf->computeMinAndMax();
 		}
 	}
@@ -2629,7 +2729,7 @@ void MainWindow::doActionProjectUncertainty()
 
 	// add scalar field
 	{
-		QString sfName = QString("Sensor uncertainty (3D)");
+		QString sfName = QString("[%1] Uncertainty (3D)").arg(sensor->getName());
 		int sfIdx = pointCloud->getScalarFieldIndexByName(qPrintable(sfName));
 		if (sfIdx < 0)
 			sfIdx = pointCloud->addScalarField(qPrintable(sfName));
@@ -2644,8 +2744,10 @@ void MainWindow::doActionProjectUncertainty()
 		assert(sf);
 		if (sf)
 		{
-			for (size_t i=0 ; i<accuracy.size() ; i++)
-				sf->setValue(static_cast<unsigned>(i), accuracy[i].norm());
+			unsigned count = static_cast<unsigned>(accuracy.size());
+			assert(count == pointCloud->size());
+			for (unsigned i=0; i<count; i++)
+				sf->setValue(i, accuracy[i].norm());
 			sf->computeMinAndMax();
 		}
 
@@ -2660,11 +2762,11 @@ void MainWindow::doActionProjectUncertainty()
 void MainWindow::doActionCheckPointsInsideFrustrum()
 {
 	//there should be only one camera sensor in the current selection!
-    if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::CAMERA_SENSOR))
-    {
-        ccConsole::Error("Select one and only one camera sensor!");
-        return;
-    }
+	if (m_selectedEntities.size() != 1 || !m_selectedEntities[0]->isKindOf(CC_TYPES::CAMERA_SENSOR))
+	{
+		ccConsole::Error("Select one and only one camera sensor!");
+		return;
+	}
 
 	ccCameraSensor* sensor = ccHObjectCaster::ToCameraSensor(m_selectedEntities[0]);
 	if (!sensor)
@@ -2674,7 +2776,7 @@ void MainWindow::doActionCheckPointsInsideFrustrum()
 	if (!sensor->getParent() || !sensor->getParent()->isA(CC_TYPES::POINT_CLOUD))
 	{
 		ccConsole::Error("The sensor must be the child of a point cloud!");
-        return;
+		return;
 	}
 
 	ccPointCloud* pointCloud = ccHObjectCaster::ToPointCloud(sensor->getParent());
@@ -2748,90 +2850,95 @@ void MainWindow::doActionCheckPointsInsideFrustrum()
 
 void MainWindow::doActionShowDepthBuffer()
 {
-    if (m_selectedEntities.empty())
-        return;
+	if (m_selectedEntities.empty())
+		return;
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
-        if (ent->isKindOf(CC_TYPES::GBL_SENSOR))
-        {
-            ccGBLSensor* sensor = static_cast<ccGBLSensor*>(m_selectedEntities[0]);
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
+		if (ent->isKindOf(CC_TYPES::GBL_SENSOR))
+		{
+			ccGBLSensor* sensor = static_cast<ccGBLSensor*>(m_selectedEntities[0]);
+			if (!sensor->getDepthBuffer().zBuff)
+			{
+				ccConsole::Error("[ShowDepthBuffer] Depth buffer not computed for this sensor.");
+				return;
+			}
 
-            ccRenderingTools::ShowDepthBuffer(sensor,this);
-        }
-    }
+			ccRenderingTools::ShowDepthBuffer(sensor,this);
+		}
+	}
 }
 
 static CC_FILE_TYPES currentDBSaveDlgFilter = DM_ASCII;
 void MainWindow::doActionExportDepthBuffer()
 {
-    if (m_selectedEntities.empty())
-        return;
+	if (m_selectedEntities.empty())
+		return;
 
-    //we set up file filters
-    QStringList filters;
-    filters << CC_FILE_TYPE_FILTERS[DM_ASCII];
+	//we set up file filters
+	QStringList filters;
+	filters << CC_FILE_TYPE_FILTERS[DM_ASCII];
 
-    QFileDialog dialog(this);
-    dialog.setFilters(filters);
-    dialog.setViewMode(QFileDialog::Detail);
-    dialog.setConfirmOverwrite(true);
-    dialog.setAcceptMode(QFileDialog::AcceptSave);
+	QFileDialog dialog(this);
+	dialog.setNameFilters(filters);
+	dialog.setViewMode(QFileDialog::Detail);
+	dialog.setConfirmOverwrite(true);
+	dialog.setAcceptMode(QFileDialog::AcceptSave);
 
-    dialog.selectFilter(CC_FILE_TYPE_FILTERS[currentDBSaveDlgFilter]);
+	dialog.selectNameFilter(CC_FILE_TYPE_FILTERS[currentDBSaveDlgFilter]);
 
-    QString filename = m_selectedEntities[0]->getName()+QString(".")+QString(CC_FILE_TYPE_DEFAULT_EXTENSION[currentDBSaveDlgFilter]);
-    dialog.selectFile(filename);
+	QString filename = m_selectedEntities[0]->getName()+QString(".")+QString(CC_FILE_TYPE_DEFAULT_EXTENSION[currentDBSaveDlgFilter]);
+	dialog.selectFile(filename);
 
-    if (dialog.exec())
-    {
-        QStringList fileNames = dialog.selectedFiles();
-        if (fileNames.empty())
-            return;
+	if (dialog.exec())
+	{
+		QStringList fileNames = dialog.selectedFiles();
+		if (fileNames.empty())
+			return;
 
-        assert(fileNames.size() == 1);
+		assert(fileNames.size() == 1);
 
-        //we try to find the selected file format
-        QString filter = dialog.selectedFilter();
-        CC_FILE_TYPES fType = UNKNOWN_FILE;
-        for (unsigned i=0; i<static_cast<unsigned>(FILE_TYPES_COUNT); ++i)
-        {
-            if (filter == QString(CC_FILE_TYPE_FILTERS[i]))
-            {
-                fType = CC_FILE_TYPES_ENUMS[i];
-                break;
-            }
-        }
-        currentDBSaveDlgFilter = fType;
+		//we try to find the selected file format
+		QString filter = dialog.selectedNameFilter();
+		CC_FILE_TYPES fType = UNKNOWN_FILE;
+		for (unsigned i=0; i<static_cast<unsigned>(FILE_TYPES_COUNT); ++i)
+		{
+			if (filter == QString(CC_FILE_TYPE_FILTERS[i]))
+			{
+				fType = CC_FILE_TYPES_ENUMS[i];
+				break;
+			}
+		}
+		currentDBSaveDlgFilter = fType;
 
-        ccHObject* toSave = 0;
-        bool multEntities = false;
-        if (m_selectedEntities.size() > 1)
-        {
-            toSave = new ccHObject("Temp Group");
-            for (size_t i=0; i<m_selectedEntities.size(); ++i)
+		ccHObject* toSave = 0;
+		bool multEntities = false;
+		if (m_selectedEntities.size() > 1)
+		{
+			toSave = new ccHObject("Temp Group");
+			for (size_t i=0; i<m_selectedEntities.size(); ++i)
 				toSave->addChild(m_selectedEntities[i],ccHObject::DP_NONE);
-            multEntities = true;
-        }
-        else
-        {
-            toSave = m_selectedEntities[0];
-        }
+			multEntities = true;
+		}
+		else
+		{
+			toSave = m_selectedEntities[0];
+		}
 
-        CC_FILE_ERROR result = FileIOFilter::SaveToFile(toSave,
+		CC_FILE_ERROR result = FileIOFilter::SaveToFile(toSave,
 														qPrintable(fileNames.at(0)),
 														fType);
 
-        if (result!=CC_FERR_NO_ERROR)
-            FileIOFilter::DisplayErrorMessage(result,"saving depth buffer",fileNames.at(0));
+		if (result!=CC_FERR_NO_ERROR)
+			FileIOFilter::DisplayErrorMessage(result,"saving depth buffer",fileNames.at(0));
 		else
 			ccLog::Print(QString("[doActionExportDepthBuffer] File '%1' successfully exported").arg(fileNames.at(0)));
 
-        if (multEntities)
-            delete toSave;
-    }
+		if (multEntities)
+			delete toSave;
+	}
 }
 
 void MainWindow::doActionConvertTextureToColor()
@@ -2839,11 +2946,11 @@ void MainWindow::doActionConvertTextureToColor()
 	ccHObject::Container selectedEntities = m_selectedEntities;
 
 	for (size_t i=0; i<selectedEntities.size(); ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
-        if (ent->isA(CC_TYPES::MESH)/*|| ent->isKindOf(CC_TYPES::PRIMITIVE)*/) //TODO
-        {
-            ccMesh* mesh = ccHObjectCaster::ToMesh(ent);
+	{
+		ccHObject* ent = selectedEntities[i];
+		if (ent->isA(CC_TYPES::MESH)/*|| ent->isKindOf(CC_TYPES::PRIMITIVE)*/) //TODO
+		{
+			ccMesh* mesh = ccHObjectCaster::ToMesh(ent);
 			assert(mesh);
 
 			if (!mesh->hasMaterials())
@@ -2880,7 +2987,7 @@ void MainWindow::doActionConvertTextureToColor()
 		}
 	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -2892,14 +2999,14 @@ void MainWindow::doActionSamplePoints()
 	//restore last parameters
 	dlg.setPointsNumber(s_ptsSamplingCount);
 	dlg.setDensityValue(s_ptsSamplingDensity);
-    if (!dlg.exec())
-        return;
+	if (!dlg.exec())
+		return;
 
-    ccProgressDialog pDlg(false,this);
+	ccProgressDialog pDlg(false,this);
 
-    bool withNormals = dlg.generateNormals();
-    bool withRGB = dlg.interpolateRGB();
-    bool withTexture = dlg.interpolateTexture();
+	bool withNormals = dlg.generateNormals();
+	bool withRGB = dlg.interpolateRGB();
+	bool withTexture = dlg.interpolateTexture();
 	bool useDensity = dlg.useDensity();
 	assert(dlg.getPointsNumber() >= 0);
 	s_ptsSamplingCount = static_cast<unsigned>(dlg.getPointsNumber());
@@ -2910,11 +3017,11 @@ void MainWindow::doActionSamplePoints()
 	ccHObject::Container selectedEntities = m_selectedEntities;
 
 	for (size_t i=0; i<selectedEntities.size() ;++i)
-    {
-        ccHObject* ent = selectedEntities[i];
-        if (ent->isKindOf(CC_TYPES::MESH))
-        {
-            ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(ent);
+	{
+		ccHObject* ent = selectedEntities[i];
+		if (ent->isKindOf(CC_TYPES::MESH))
+		{
+			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(ent);
 			assert(mesh);
 
 			ccPointCloud* cloud = mesh->samplePoints(	useDensity,
@@ -2926,23 +3033,20 @@ void MainWindow::doActionSamplePoints()
 
 			if (cloud)
 			{
-                addToDB(cloud);
-            }
+				addToDB(cloud);
+			}
 			else
 			{
 				errors = true;
 			}
-        }
-    }
+		}
+	}
 
 	if (errors)
 		ccLog::Error("[doActionSamplePoints] Errors occurred during the process! Result may be incomplete!");
 
-    refreshAll();
+	refreshAll();
 }
-
-//semi-persistent setting for 'doRemoveDuplicatePoints'
-static double s_minDistanceBetweenPoints = 1.0e-12;
 
 void MainWindow::doRemoveDuplicatePoints()
 {
@@ -2950,13 +3054,21 @@ void MainWindow::doRemoveDuplicatePoints()
 		return;
 
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 	bool first = true;
 
+	//persistent setting(s)
+	QSettings settings;
+	settings.beginGroup(s_psDuplicatePointsGroup);
+	double minDistanceBetweenPoints = settings.value(s_psDuplicatePointsMinDist,1.0e-12).toDouble();
+
 	bool ok;
-	s_minDistanceBetweenPoints = QInputDialog::getDouble(this, "Remove duplicate points", "Min distance between points:", s_minDistanceBetweenPoints, 0, 1.0e8, 12, &ok);
+	minDistanceBetweenPoints = QInputDialog::getDouble(this, "Remove duplicate points", "Min distance between points:", minDistanceBetweenPoints, 0, 1.0e8, 12, &ok);
 	if (!ok)
 		return;
+
+	//save parameter
+	settings.setValue(s_psDuplicatePointsMinDist,minDistanceBetweenPoints);
 
 	for (size_t i=0; i<selNum; ++i)
 	{
@@ -2977,10 +3089,10 @@ void MainWindow::doRemoveDuplicatePoints()
 				break;
 			}
 
-            ccOctree* octree = cloud->getOctree();
+			ccOctree* octree = cloud->getOctree();
 			ccProgressDialog pDlg(true,this);
 
-			int result = CCLib::GeometricalAnalysisTools::flagDuplicatePoints(cloud,s_minDistanceBetweenPoints,&pDlg,octree);
+			int result = CCLib::GeometricalAnalysisTools::flagDuplicatePoints(cloud,minDistanceBetweenPoints,&pDlg,octree);
 
 			if (result >= 0)
 			{
@@ -3031,16 +3143,16 @@ void MainWindow::doRemoveDuplicatePoints()
 		}
 	}
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::doActionFilterByValue()
 {
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 
-    typedef std::pair<ccHObject*,ccPointCloud*> entityAndVerticesType;
-    std::vector<entityAndVerticesType> toFilter;
+	typedef std::pair<ccHObject*,ccPointCloud*> entityAndVerticesType;
+	std::vector<entityAndVerticesType> toFilter;
 	{
 		for (size_t i=0; i<selNum; ++i)
 		{
@@ -3065,14 +3177,14 @@ void MainWindow::doActionFilterByValue()
 		}
 	}
 
-    double minVald = 0.0;
-    double maxVald = 1.0;
+	double minVald = 0.0;
+	double maxVald = 1.0;
 
-    if (toFilter.empty())
-        return;
+	if (toFilter.empty())
+		return;
 
-    //compute min and max "displayed" scalar values of currently selected
-    //entities (the ones with an active scalar field only!)
+	//compute min and max "displayed" scalar values of currently selected
+	//entities (the ones with an active scalar field only!)
 	{
 		for (size_t i=0; i<toFilter.size(); ++i)
 		{
@@ -3094,14 +3206,14 @@ void MainWindow::doActionFilterByValue()
 		}
 	}
 
-    ccAskTwoDoubleValuesDlg dlg("Min","Max",-DBL_MAX,DBL_MAX,minVald,maxVald,8,"Filter by scalar value",this);
-    if (!dlg.exec())
-        return;
+	ccAskTwoDoubleValuesDlg dlg("Min","Max",-1.0e9,1.0e9,minVald,maxVald,8,"Filter by scalar value",this);
+	if (!dlg.exec())
+		return;
 
-    ScalarType minVal = (ScalarType)dlg.doubleSpinBox1->value();
-    ScalarType maxVal = (ScalarType)dlg.doubleSpinBox2->value();
+	ScalarType minVal = (ScalarType)dlg.doubleSpinBox1->value();
+	ScalarType maxVal = (ScalarType)dlg.doubleSpinBox2->value();
 
-    ccHObject* firstResult = 0;
+	ccHObject* firstResult = 0;
 	{
 		for (size_t i=0; i<toFilter.size(); ++i)
 		{
@@ -3150,24 +3262,108 @@ void MainWindow::doActionFilterByValue()
 		}
 	}
 
-    if (firstResult)
-    {
-        ccConsole::Warning("Previously selected entities (sources) have been hidden!");
+	if (firstResult)
+	{
+		ccConsole::Warning("Previously selected entities (sources) have been hidden!");
 		if (m_ccRoot)
 			m_ccRoot->selectEntity(firstResult);
-    }
+	}
 
-    refreshAll();
+	refreshAll();
+}
+
+static int s_randomColorsNumber = 256;
+void MainWindow::doActionSFConvertToRandomRGB()
+{
+	bool ok;
+	s_randomColorsNumber = QInputDialog::getInt(this, "Random colors", "Number of random colors (will be regularly sampled over the SF interval):", s_randomColorsNumber, 2, 2147483647, 16, &ok);
+	if (!ok)
+		return;
+	assert(s_randomColorsNumber > 1);
+
+	ColorsTableType* randomColors = new ColorsTableType;
+	if (!randomColors->reserve(static_cast<unsigned>(s_randomColorsNumber)))
+	{
+		ccConsole::Error("Not enough memory!");
+		return;
+	}
+
+	//generate random colors
+	{
+		for (int i=0; i<s_randomColorsNumber; ++i)
+		{
+			colorType col[3];
+			ccColor::Generator::Random(col);
+			randomColors->addElement(col);
+		}
+	}
+
+	//apply random colors
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccGenericPointCloud* cloud = 0;
+		ccHObject* ent = m_selectedEntities[i];
+
+		bool lockedVertices;
+		cloud = ccHObjectCaster::ToPointCloud(ent,&lockedVertices);
+		if (lockedVertices)
+		{
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
+			continue;
+		}
+		if (cloud) //TODO
+		{
+			ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+			ccScalarField* sf = pc->getCurrentDisplayedScalarField();
+			//if there is no displayed SF --> nothing to do!
+			if (sf && sf->currentSize() >= pc->size())
+			{
+				if (!pc->resizeTheRGBTable(false))
+				{
+					ccConsole::Error("Not enough memory!");
+					break;
+				}
+				else
+				{
+					ScalarType minSF = sf->getMin();
+					ScalarType maxSF = sf->getMax();
+
+					ScalarType step = (maxSF-minSF)/(s_randomColorsNumber-1);
+					if (step == 0)
+						step = static_cast<ScalarType>(1.0);
+
+					for (unsigned i=0; i<pc->size(); ++i)
+					{
+						ScalarType val = sf->getValue(i);
+						unsigned colIndex = static_cast<unsigned>((val-minSF)/step);
+						if (colIndex == s_randomColorsNumber)
+							--colIndex;
+
+						pc->setPointColor(i,randomColors->getValue(colIndex));
+					}
+
+					pc->showColors(true);
+					pc->showSF(false);
+				}
+			}
+
+			cloud->prepareDisplayForRefresh_recursive();
+		}
+	}
+
+	refreshAll();
+	updateUI();
 }
 
 void MainWindow::doActionSFConvertToRGB()
 {
-    //we first ask the user if the SF colors should be mixed with existing colors
-    bool mixWithExistingColors=false;
+	//we first ask the user if the SF colors should be mixed with existing colors
+	bool mixWithExistingColors = false;
 	{
 		QMessageBox::StandardButton answer = QMessageBox::warning(	this,
 																	"Scalar Field to RGB",
-																	"Mix with existing colors (if relevant)?",
+																	"Mix with existing colors (if any)?",
 																	QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
 																	QMessageBox::Yes );
 		if (answer == QMessageBox::Yes)
@@ -3176,37 +3372,37 @@ void MainWindow::doActionSFConvertToRGB()
 			return;
 	}
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccGenericPointCloud* cloud = 0;
-        ccHObject* ent = m_selectedEntities[i];
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccGenericPointCloud* cloud = 0;
+		ccHObject* ent = m_selectedEntities[i];
 
 		bool lockedVertices;
 		cloud = ccHObjectCaster::ToPointCloud(ent,&lockedVertices);
 		if (lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
-        if (cloud) //TODO
-        {
-            ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
-            //if there is no displayed SF --> nothing to do!
-            if (pc->getCurrentDisplayedScalarField())
-            {
+		if (cloud) //TODO
+		{
+			ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+			//if there is no displayed SF --> nothing to do!
+			if (pc->getCurrentDisplayedScalarField())
+			{
 				if (pc->setRGBColorWithCurrentScalarField(mixWithExistingColors))
 				{
 					ent->showColors(true);
 					ent->showSF(false);
 				}
-            }
+			}
 
-            cloud->prepareDisplayForRefresh_recursive();
-        }
-    }
+			cloud->prepareDisplayForRefresh_recursive();
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -3227,13 +3423,13 @@ void MainWindow::doActionShowActiveSFNext()
 
 void MainWindow::doApplyActiveSFAction(int action)
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 1)
-    {
+	size_t selNum = m_selectedEntities.size();
+	if (selNum != 1)
+	{
 		if (selNum > 1)
 			ccConsole::Error("Select only one point cloud or mesh!");
-        return;
-    }
+		return;
+	}
 	ccHObject* ent = m_selectedEntities[0];
 
 	bool lockedVertices;
@@ -3245,7 +3441,7 @@ void MainWindow::doApplyActiveSFAction(int action)
 	if (lockedVertices && !ent->isAncestorOf(cloud))
 	{
 		//see ccPropertiesTreeDelegate::fillWithMesh
-		DisplayLockedVerticesWarning();
+		DisplayLockedVerticesWarning(ent->getName(),true);
 		return;
 	}
 
@@ -3278,23 +3474,23 @@ void MainWindow::doApplyActiveSFAction(int action)
 			break;
 	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionRenameSF()
 {
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
 		ccGenericPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_selectedEntities[i]);
-        if (cloud) //TODO
-        {
-            ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+		if (cloud) //TODO
+		{
+			ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
 			ccScalarField* sf = pc->getCurrentDisplayedScalarField();
-            //if there is no displayed SF --> nothing to do!
-            if (!sf)
-            {
+			//if there is no displayed SF --> nothing to do!
+			if (!sf)
+			{
 				ccConsole::Warning(QString("Cloud %1 has no displayed scalar field!").arg(pc->getName()));
 			}
 			else
@@ -3304,9 +3500,9 @@ void MainWindow::doActionRenameSF()
 				QString newName = QInputDialog::getText(this,"SF name","name:",QLineEdit::Normal, QString(sfName ? sfName : "unknown"), &ok);
 				if (ok)
 					sf->setName(qPrintable(newName));
-            }
-        }
-    }
+			}
+		}
+	}
 
 	updateUI();
 }
@@ -3326,13 +3522,13 @@ void MainWindow::doActionOpenColorScalesManager()
 
 void MainWindow::doActionAddIdField()
 {
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccGenericPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_selectedEntities[i]);
-        if (cloud) //TODO
-        {
-            ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccGenericPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_selectedEntities[i]);
+		if (cloud) //TODO
+		{
+			ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
 
 			int sfIdx = pc->getScalarFieldIndexByName("Id");
 			if (sfIdx < 0)
@@ -3346,19 +3542,19 @@ void MainWindow::doActionAddIdField()
 			CCLib::ScalarField* sf = pc->getScalarField(sfIdx);
 			assert(sf->currentSize() == pc->size());
 
-            for (unsigned j=0 ; j<cloud->size(); j++)
+			for (unsigned j=0 ; j<cloud->size(); j++)
 			{
 				ScalarType idValue = static_cast<ScalarType>(j);
-                sf->setValue(j, idValue);
+				sf->setValue(j, idValue);
 			}
 
-            sf->computeMinAndMax();
+			sf->computeMinAndMax();
 			pc->setCurrentDisplayedScalarField(sfIdx);
 			pc->showSF(true);
-        }
-    }
+		}
+	}
 
-    updateUI();
+	updateUI();
 }
 
 PointCoordinateType MainWindow::GetDefaultCloudKernelSize(const ccHObject::Container& entities)
@@ -3387,9 +3583,9 @@ PointCoordinateType MainWindow::GetDefaultCloudKernelSize(const ccHObject::Conta
 
 void MainWindow::doActionSFGaussianFilter()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0)
-        return;
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0)
+		return;
 
 	double sigma = GetDefaultCloudKernelSize(m_selectedEntities);
 	if (sigma < 0.0)
@@ -3399,49 +3595,50 @@ void MainWindow::doActionSFGaussianFilter()
 	}
 
 	bool ok;
-	sigma = QInputDialog::getDouble(this,"Gaussian filter","sigma:",sigma,DBL_MIN,DBL_MAX,8,&ok);
-    if (!ok)
-        return;
+	sigma = QInputDialog::getDouble(this,"Gaussian filter","sigma:",sigma,DBL_MIN,1.0e9,8,&ok);
+	if (!ok)
+		return;
 
-    for (size_t i=0; i<selNum; ++i)
-    {
+	for (size_t i=0; i<selNum; ++i)
+	{
 		bool lockedVertices;
-		ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_selectedEntities[i],&lockedVertices);
+		ccHObject* ent = m_selectedEntities[i];
+		ccPointCloud* pc = ccHObjectCaster::ToPointCloud(ent,&lockedVertices);
 		if (!pc || lockedVertices)
 		{
-			DisplayLockedVerticesWarning();
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
 			continue;
 		}
 
-        //la methode est activee sur le champ scalaire affiche
-        CCLib::ScalarField* sf = pc->getCurrentDisplayedScalarField();
-        if (sf)
-        {
-            //on met en lecture (OUT) le champ scalaire actuellement affiche
-            int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
-            assert(outSfIdx >= 0);
+		//la methode est activee sur le champ scalaire affiche
+		CCLib::ScalarField* sf = pc->getCurrentDisplayedScalarField();
+		if (sf)
+		{
+			//on met en lecture (OUT) le champ scalaire actuellement affiche
+			int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
+			assert(outSfIdx >= 0);
 
-            pc->setCurrentOutScalarField(outSfIdx);
-            CCLib::ScalarField* outSF = pc->getCurrentOutScalarField();
-            assert(sf);
+			pc->setCurrentOutScalarField(outSfIdx);
+			CCLib::ScalarField* outSF = pc->getCurrentOutScalarField();
+			assert(sf);
 
-            QString sfName = QString("%1.smooth(%2)").arg(outSF->getName()).arg(sigma);
-            int sfIdx = pc->getScalarFieldIndexByName(qPrintable(sfName));
-            if (sfIdx < 0)
-                sfIdx = pc->addScalarField(qPrintable(sfName)); //output SF has same type as input SF
-            if (sfIdx >= 0)
-                pc->setCurrentInScalarField(sfIdx);
-            else
-            {
-                ccConsole::Error(QString("Failed to create scalar field for cloud '%1' (not enough memory?)").arg(pc->getName()));
-                continue;
-            }
+			QString sfName = QString("%1.smooth(%2)").arg(outSF->getName()).arg(sigma);
+			int sfIdx = pc->getScalarFieldIndexByName(qPrintable(sfName));
+			if (sfIdx < 0)
+				sfIdx = pc->addScalarField(qPrintable(sfName)); //output SF has same type as input SF
+			if (sfIdx >= 0)
+				pc->setCurrentInScalarField(sfIdx);
+			else
+			{
+				ccConsole::Error(QString("Failed to create scalar field for cloud '%1' (not enough memory?)").arg(pc->getName()));
+				continue;
+			}
 
-            ccOctree* octree = pc->getOctree();
-            if (!octree)
+			ccOctree* octree = pc->getOctree();
+			if (!octree)
 			{
 				ccProgressDialog pDlg(true,this);
-                octree = pc->computeOctree(&pDlg);
+				octree = pc->computeOctree(&pDlg);
 				if (!octree)
 				{
 					ccConsole::Error(QString("Couldn't compute octree for cloud '%1'!").arg(pc->getName()));
@@ -3449,167 +3646,168 @@ void MainWindow::doActionSFGaussianFilter()
 				}
 			}
 
-            if (octree)
-            {
-                ccProgressDialog pDlg(true,this);
+			if (octree)
+			{
+				ccProgressDialog pDlg(true,this);
 				QElapsedTimer eTimer;
 				eTimer.start();
-                CCLib::ScalarFieldTools::applyScalarFieldGaussianFilter(static_cast<PointCoordinateType>(sigma),
+				CCLib::ScalarFieldTools::applyScalarFieldGaussianFilter(static_cast<PointCoordinateType>(sigma),
 																		pc,
 																		-1,
 																		&pDlg,
 																		octree);
 				ccConsole::Print("[GaussianFilter] Timing: %3.2f s.",static_cast<double>(eTimer.elapsed())/1.0e3);
-                pc->setCurrentDisplayedScalarField(sfIdx);
+				pc->setCurrentDisplayedScalarField(sfIdx);
 				pc->showSF(sfIdx >= 0);
-                sf = pc->getCurrentDisplayedScalarField();
-                if (sf)
-                    sf->computeMinAndMax();
-                pc->prepareDisplayForRefresh_recursive();
-            }
-            else
-            {
-                ccConsole::Error(QString("Failed to compute entity [%1] octree! (not enough memory?)").arg(pc->getName()));
-            }
-        }
-        else
-        {
-            ccConsole::Warning(QString("Entity [%1] has no active scalar field!").arg(pc->getName()));
-        }
-    }
+				sf = pc->getCurrentDisplayedScalarField();
+				if (sf)
+					sf->computeMinAndMax();
+				pc->prepareDisplayForRefresh_recursive();
+			}
+			else
+			{
+				ccConsole::Error(QString("Failed to compute entity [%1] octree! (not enough memory?)").arg(pc->getName()));
+			}
+		}
+		else
+		{
+			ccConsole::Warning(QString("Entity [%1] has no active scalar field!").arg(pc->getName()));
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionSFBilateralFilter()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0)
-        return;
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0)
+		return;
 
-    double sigma = GetDefaultCloudKernelSize(m_selectedEntities);
-    if (sigma < 0.0)
-    {
-        ccConsole::Error("No elligible point cloud in selection!");
-        return;
-    }
+	double sigma = GetDefaultCloudKernelSize(m_selectedEntities);
+	if (sigma < 0.0)
+	{
+		ccConsole::Error("No elligible point cloud in selection!");
+		return;
+	}
 
-    //estimate a good value for scalar field sigma, based on the first cloud
-    //and its displayed scalar field
-    ccPointCloud* pc_test = ccHObjectCaster::ToPointCloud(m_selectedEntities[0]);
-    CCLib::ScalarField* sf_test = pc_test->getCurrentDisplayedScalarField();
-    ScalarType range = sf_test->getMax() - sf_test->getMin();
-    double scalarFieldSigma = range / 4; // using 1/4 of total range
+	//estimate a good value for scalar field sigma, based on the first cloud
+	//and its displayed scalar field
+	ccPointCloud* pc_test = ccHObjectCaster::ToPointCloud(m_selectedEntities[0]);
+	CCLib::ScalarField* sf_test = pc_test->getCurrentDisplayedScalarField();
+	ScalarType range = sf_test->getMax() - sf_test->getMin();
+	double scalarFieldSigma = range / 4; // using 1/4 of total range
 
 
-    ccAskTwoDoubleValuesDlg dlg("Spatial sigma", "Scalar sigma", DBL_MIN, DBL_MAX, sigma, scalarFieldSigma , 8, 0, this);
-    dlg.doubleSpinBox1->setStatusTip("3*sigma = 98% attenuation");
-    dlg.doubleSpinBox2->setStatusTip("Scalar field's sigma controls how much the filter behaves as a Gaussian Filter\n sigma at +inf uses the whole range of scalars ");
-    if (!dlg.exec())
-        return;
+	ccAskTwoDoubleValuesDlg dlg("Spatial sigma", "Scalar sigma", DBL_MIN, 1.0e9, sigma, scalarFieldSigma , 8, 0, this);
+	dlg.doubleSpinBox1->setStatusTip("3*sigma = 98% attenuation");
+	dlg.doubleSpinBox2->setStatusTip("Scalar field's sigma controls how much the filter behaves as a Gaussian Filter\n sigma at +inf uses the whole range of scalars ");
+	if (!dlg.exec())
+		return;
 
-    //get values
-    sigma = dlg.doubleSpinBox1->value();
-    scalarFieldSigma = dlg.doubleSpinBox2->value();
+	//get values
+	sigma = dlg.doubleSpinBox1->value();
+	scalarFieldSigma = dlg.doubleSpinBox2->value();
 
-    for (size_t i=0; i<selNum; ++i)
-    {
-        bool lockedVertices;
-        ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_selectedEntities[i],&lockedVertices);
-        if (!pc || lockedVertices)
-        {
-            DisplayLockedVerticesWarning();
-            continue;
-        }
+	for (size_t i=0; i<selNum; ++i)
+	{
+		bool lockedVertices;
+		ccHObject* ent = m_selectedEntities[i];
+		ccPointCloud* pc = ccHObjectCaster::ToPointCloud(ent,&lockedVertices);
+		if (!pc || lockedVertices)
+		{
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
+			continue;
+		}
 
-        //the algorithm will use the currently displayed SF
-        CCLib::ScalarField* sf = pc->getCurrentDisplayedScalarField();
-        if (sf)
-        {
-            //we set the displayed SF as "OUT" SF
-            int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
-            assert(outSfIdx >= 0);
+		//the algorithm will use the currently displayed SF
+		CCLib::ScalarField* sf = pc->getCurrentDisplayedScalarField();
+		if (sf)
+		{
+			//we set the displayed SF as "OUT" SF
+			int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
+			assert(outSfIdx >= 0);
 
-            pc->setCurrentOutScalarField(outSfIdx);
-            CCLib::ScalarField* outSF = pc->getCurrentOutScalarField();
-            assert(sf);
+			pc->setCurrentOutScalarField(outSfIdx);
+			CCLib::ScalarField* outSF = pc->getCurrentOutScalarField();
+			assert(sf);
 
-            QString sfName = QString("%1.bilsmooth(%2,%3)").arg(outSF->getName()).arg(sigma).arg(scalarFieldSigma);
-            int sfIdx = pc->getScalarFieldIndexByName(qPrintable(sfName));
-            if (sfIdx < 0)
-                sfIdx = pc->addScalarField(qPrintable(sfName)); //output SF has same type as input SF
-            if (sfIdx >= 0)
-                pc->setCurrentInScalarField(sfIdx);
-            else
-            {
-                ccConsole::Error(QString("Failed to create scalar field for cloud '%1' (not enough memory?)").arg(pc->getName()));
-                continue;
-            }
+			QString sfName = QString("%1.bilsmooth(%2,%3)").arg(outSF->getName()).arg(sigma).arg(scalarFieldSigma);
+			int sfIdx = pc->getScalarFieldIndexByName(qPrintable(sfName));
+			if (sfIdx < 0)
+				sfIdx = pc->addScalarField(qPrintable(sfName)); //output SF has same type as input SF
+			if (sfIdx >= 0)
+				pc->setCurrentInScalarField(sfIdx);
+			else
+			{
+				ccConsole::Error(QString("Failed to create scalar field for cloud '%1' (not enough memory?)").arg(pc->getName()));
+				continue;
+			}
 
-            ccOctree* octree = pc->getOctree();
-            if (!octree)
-            {
-                ccProgressDialog pDlg(true,this);
-                octree = pc->computeOctree(&pDlg);
-                if (!octree)
-                {
-                    ccConsole::Error(QString("Couldn't compute octree for cloud '%1'!").arg(pc->getName()));
-                    continue;
-                }
-            }
+			ccOctree* octree = pc->getOctree();
+			if (!octree)
+			{
+				ccProgressDialog pDlg(true,this);
+				octree = pc->computeOctree(&pDlg);
+				if (!octree)
+				{
+					ccConsole::Error(QString("Couldn't compute octree for cloud '%1'!").arg(pc->getName()));
+					continue;
+				}
+			}
 
 			assert(octree);
-            {
-                ccProgressDialog pDlg(true,this);
-                QElapsedTimer eTimer;
-                eTimer.start();
+			{
+				ccProgressDialog pDlg(true,this);
+				QElapsedTimer eTimer;
+				eTimer.start();
 
-                CCLib::ScalarFieldTools::applyScalarFieldGaussianFilter(static_cast<PointCoordinateType>(sigma),
+				CCLib::ScalarFieldTools::applyScalarFieldGaussianFilter(static_cast<PointCoordinateType>(sigma),
 																		pc,
 																		static_cast<PointCoordinateType>(scalarFieldSigma),
 																		&pDlg,
 																		octree);
-                ccConsole::Print("[BilateralFilter] Timing: %3.2f s.",eTimer.elapsed()/1.0e3);
-                pc->setCurrentDisplayedScalarField(sfIdx);
-                pc->showSF(sfIdx >= 0);
-                sf = pc->getCurrentDisplayedScalarField();
-                if (sf)
-                    sf->computeMinAndMax();
-                pc->prepareDisplayForRefresh_recursive();
-            }
-        }
-        else
-        {
-            ccConsole::Warning(QString("Entity [%1] has no active scalar field!").arg(pc->getName()));
-        }
-    }
+				ccConsole::Print("[BilateralFilter] Timing: %3.2f s.",eTimer.elapsed()/1.0e3);
+				pc->setCurrentDisplayedScalarField(sfIdx);
+				pc->showSF(sfIdx >= 0);
+				sf = pc->getCurrentDisplayedScalarField();
+				if (sf)
+					sf->computeMinAndMax();
+				pc->prepareDisplayForRefresh_recursive();
+			}
+		}
+		else
+		{
+			ccConsole::Warning(QString("Entity [%1] has no active scalar field!").arg(pc->getName()));
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionSmoothMeshSF()
 {
-    doMeshSFAction(ccMesh::SMOOTH_MESH_SF);
+	doMeshSFAction(ccMesh::SMOOTH_MESH_SF);
 }
 
 void MainWindow::doActionEnhanceMeshSF()
 {
-    doMeshSFAction(ccMesh::ENHANCE_MESH_SF);
+	doMeshSFAction(ccMesh::ENHANCE_MESH_SF);
 }
 
 void MainWindow::doMeshSFAction(ccMesh::MESH_SCALAR_FIELD_PROCESS process)
 {
-    ccProgressDialog pDlg(false,this);
+	ccProgressDialog pDlg(false,this);
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
-        if (ent->isKindOf(CC_TYPES::MESH) || ent->isKindOf(CC_TYPES::PRIMITIVE)) //TODO
-        {
-            ccMesh* mesh = ccHObjectCaster::ToMesh(ent);
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
+		if (ent->isKindOf(CC_TYPES::MESH) || ent->isKindOf(CC_TYPES::PRIMITIVE)) //TODO
+		{
+			ccMesh* mesh = ccHObjectCaster::ToMesh(ent);
 			if (mesh)
 			{
 				ccGenericPointCloud* cloud = mesh->getAssociatedCloud();
@@ -3633,10 +3831,10 @@ void MainWindow::doMeshSFAction(ccMesh::MESH_SCALAR_FIELD_PROCESS process)
 					}
 				}
 			}
-        }
-    }
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -3650,12 +3848,12 @@ void MainWindow::doActionSubdivideMesh()
 
 	//ccProgressDialog pDlg(true,this);
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
-        if (ent->isKindOf(CC_TYPES::MESH))
-        {
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
+		if (ent->isKindOf(CC_TYPES::MESH))
+		{
 			//single mesh?
 			if (ent->isA(CC_TYPES::MESH))
 			{
@@ -3689,9 +3887,9 @@ void MainWindow::doActionSubdivideMesh()
 				ccLog::Warning("[Subdivide] Works only on real meshes!");
 			}
 		}
-    }
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -3709,13 +3907,13 @@ void MainWindow::doActionSmoothMeshLaplacian()
 
 	ccProgressDialog pDlg(true,this);
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = m_selectedEntities[i];
-        if (ent->isA(CC_TYPES::MESH) || ent->isA(CC_TYPES::PRIMITIVE)) //FIXME: can we really do this with primitives?
-        {
-            ccMesh* mesh = ccHObjectCaster::ToMesh(ent);
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
+		if (ent->isA(CC_TYPES::MESH) || ent->isA(CC_TYPES::PRIMITIVE)) //FIXME: can we really do this with primitives?
+		{
+			ccMesh* mesh = ccHObjectCaster::ToMesh(ent);
 
 			if (mesh->laplacianSmooth(	s_laplacianSmooth_nbIter,
 										static_cast<PointCoordinateType>(s_laplacianSmooth_factor),
@@ -3726,90 +3924,90 @@ void MainWindow::doActionSmoothMeshLaplacian()
 			else
 			{
 				ccConsole::Warning(QString("Failed to apply Laplacian smoothing to mesh '%1'").arg(mesh->getName()));
-            }
-        }
-    }
+			}
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::RemoveSiblingsFromCCObjectList(ccHObject::Container& ccObjects)
 {
-    ccHObject::Container keptObjects;
-    size_t count = ccObjects.size();
-    keptObjects.reserve(count);
+	ccHObject::Container keptObjects;
+	size_t count = ccObjects.size();
+	keptObjects.reserve(count);
 
-    for (size_t i=0; i<count; ++i)
-    {
-        ccHObject* obj = ccObjects[i];
-        assert(obj);
-        for (size_t j=0; j<count; ++j)
-        {
-            if (i != j)
-            {
-                if (ccObjects[j]->isAncestorOf(obj))
-                {
-                    obj=0;
-                    break;
-                }
-            }
-        }
+	for (size_t i=0; i<count; ++i)
+	{
+		ccHObject* obj = ccObjects[i];
+		assert(obj);
+		for (size_t j=0; j<count; ++j)
+		{
+			if (i != j)
+			{
+				if (ccObjects[j]->isAncestorOf(obj))
+				{
+					obj = 0;
+					break;
+				}
+			}
+		}
 
-        if (obj)
-            keptObjects.push_back(obj);
-        else
-            ccObjects[i] = 0;
-    }
+		if (obj)
+			keptObjects.push_back(obj);
+		else
+			ccObjects[i] = 0;
+	}
 
-    ccObjects = keptObjects;
+	ccObjects = keptObjects;
 }
 
 void MainWindow::doActionMerge()
 {
-    ccPointCloud* firstCloud = 0;
+	ccPointCloud* firstCloud = 0;
 	ccHObjectContext firstCloudContext;
 
-    //we deselect all selected entities (as they are going to disappear)
-    ccHObject::Container _selectedEntities = m_selectedEntities;
+	//we deselect all selected entities (as they are going to disappear)
+	ccHObject::Container _selectedEntities = m_selectedEntities;
 	if (m_ccRoot)
 		m_ccRoot->unselectAllEntities();
 
 	//we will remove the useless clouds later
 	ccHObject::Container toBeRemoved;
 
-    size_t selNum = _selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = _selectedEntities[i];
+	size_t selNum = _selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = _selectedEntities[i];
 		if (!ent)
 			continue;
 
-        //point clouds are simply added to the first selected ones
-        //and then removed
-        if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
-        {
-            ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
+		//point clouds are simply added to the first selected ones
+		//and then removed
+		if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
 
-            if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
-            {
-                ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+			if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
+			{
+				ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
 
-                if (!firstCloud)
+				if (!firstCloud)
 				{
-                    firstCloud = pc;
+					firstCloud = pc;
 					//we temporarily detach the first cloud, as it may undergo
 					//"severe" modifications (octree deletion, etc.) --> see ccPointCloud::operator +=
 					firstCloudContext = removeObjectTemporarilyFromDBTree(firstCloud);
 				}
-                else
-                {
-                    unsigned beforePts = firstCloud->size();
-                    unsigned newPts = pc->size();
-                    *firstCloud += pc;
+				else
+				{
+					unsigned beforePts = firstCloud->size();
+					unsigned newPts = pc->size();
+					*firstCloud += pc;
 
-                    //success?
-                    if (firstCloud->size() == beforePts + newPts)
+					//success?
+					if (firstCloud->size() == beforePts + newPts)
 					{
 						firstCloud->prepareDisplayForRefresh_recursive();
 
@@ -3854,13 +4052,13 @@ void MainWindow::doActionMerge()
 					}
 					pc=0;
 				}
-            }
-        }
-        //meshes are placed in a common mesh group
-        else if (ent->isKindOf(CC_TYPES::MESH))
-        {
-            ccConsole::Warning("Can't merge meshes yet! Sorry ...");
-        }
+			}
+		}
+		//meshes are placed in a common mesh group
+		else if (ent->isKindOf(CC_TYPES::MESH))
+		{
+			ccConsole::Warning("Can't merge meshes yet! Sorry ...");
+		}
 		else
 		{
 			ccConsole::Warning(QString("Entity '%1' is neither a cloud nor a mesh, can't merge it!").arg(ent->getName()));
@@ -3868,7 +4066,7 @@ void MainWindow::doActionMerge()
 
 		//security (we don't want to encounter it again)
 		_selectedEntities[i]=0;
-    }
+	}
 
 	//something to remove?
 	while (!toBeRemoved.empty())
@@ -3881,49 +4079,50 @@ void MainWindow::doActionMerge()
 	if (firstCloud)
 		putObjectBackIntoDBTree(firstCloud,firstCloudContext);
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::zoomOn(ccDrawableObject* object)
 {
-    ccGLWindow* win = static_cast<ccGLWindow*>(object->getDisplay());
-    if (win)
-    {
-        ccBBox box = object->getBB(true,false,win);
-        win->updateConstellationCenterAndZoom(&box);
-    }
+	ccGLWindow* win = static_cast<ccGLWindow*>(object->getDisplay());
+	if (win)
+	{
+		ccBBox box = object->getBB(true,false,win);
+		win->updateConstellationCenterAndZoom(&box);
+	}
 }
 
 void MainWindow::doActionRegister()
 {
-    if (	m_selectedEntities.size() != 2
+	if (	m_selectedEntities.size() != 2
 		||	(!m_selectedEntities[0]->isKindOf(CC_TYPES::POINT_CLOUD) && !m_selectedEntities[0]->isKindOf(CC_TYPES::MESH))
 		||	(!m_selectedEntities[1]->isKindOf(CC_TYPES::POINT_CLOUD) && !m_selectedEntities[1]->isKindOf(CC_TYPES::MESH)) )
-    {
-        ccConsole::Error("Select 2 point clouds or meshes!");
-        return;
-    }
+	{
+		ccConsole::Error("Select 2 point clouds or meshes!");
+		return;
+	}
 
-    ccHObject *data = static_cast<ccHObject*>(m_selectedEntities[1]);
-    ccHObject *model = static_cast<ccHObject*>(m_selectedEntities[0]);
+	ccHObject *data = static_cast<ccHObject*>(m_selectedEntities[1]);
+	ccHObject *model = static_cast<ccHObject*>(m_selectedEntities[0]);
 
-    ccRegistrationDlg rDlg(data,model,this);
-    if (!rDlg.exec())
-        return;
+	ccRegistrationDlg rDlg(data,model,this);
+	if (!rDlg.exec())
+		return;
 
-    //DGM (23/01/09): model and data order may have changed!
-    model = rDlg.getModelEntity();
-    data = rDlg.getDataEntity();
+	//DGM (23/01/09): model and data order may have changed!
+	model = rDlg.getModelEntity();
+	data = rDlg.getDataEntity();
 
-    double minErrorDecrease			= rDlg.getMinErrorDecrease();
-    unsigned maxIterationCount		= rDlg.getMaxIterationCount();
-	unsigned randomSamplingLimit	= rDlg.randomSamplingLimit();
-    bool removeFarthestPoints		= rDlg.removeFarthestPoints();
-    ConvergenceMethod method		= rDlg.getConvergenceMethod();
-	bool useDataSFAsWeights			= rDlg.useDataSFAsWeights();
-    bool useModelSFAsWeights		= rDlg.useModelSFAsWeights();
-    bool adjustScale				= rDlg.adjustScale();
+	double minErrorDecrease										= rDlg.getMinErrorDecrease();
+	unsigned maxIterationCount									= rDlg.getMaxIterationCount();
+	unsigned randomSamplingLimit								= rDlg.randomSamplingLimit();
+	bool removeFarthestPoints									= rDlg.removeFarthestPoints();
+	bool useDataSFAsWeights										= rDlg.useDataSFAsWeights();
+	bool useModelSFAsWeights									= rDlg.useModelSFAsWeights();
+	bool adjustScale											= rDlg.adjustScale();
+	int transformationFilters									= rDlg.getTransformationFilters();
+	CCLib::ICPRegistrationTools::CONVERGENCE_TYPE method		= rDlg.getConvergenceMethod();
 
 	ccGLMatrix transMat;
 	double finalError = 0.0;
@@ -3942,10 +4141,11 @@ void MainWindow::doActionRegister()
 									adjustScale,
 									useDataSFAsWeights,
 									useModelSFAsWeights,
+									transformationFilters,
 									this))
 	{
 		QString rmsString = QString("Final RMS: %1").arg(finalError);
-        ccLog::Print(QString("[Register] ") + rmsString);
+		ccLog::Print(QString("[Register] ") + rmsString);
 
 		QStringList summary;
 		summary << rmsString;
@@ -3979,67 +4179,67 @@ void MainWindow::doActionRegister()
 		summary << "Refer to Console (F8) for more details";
 
 		//cloud to move
-        ccGenericPointCloud* pc = 0;
+		ccGenericPointCloud* pc = 0;
 
-        if (data->isKindOf(CC_TYPES::POINT_CLOUD))
-        {
-            pc = ccHObjectCaster::ToGenericPointCloud(data);
-        }
-        else if (data->isKindOf(CC_TYPES::MESH))
-        {
-            ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(data);
-            pc = mesh->getAssociatedCloud();
+		if (data->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			pc = ccHObjectCaster::ToGenericPointCloud(data);
+		}
+		else if (data->isKindOf(CC_TYPES::MESH))
+		{
+			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(data);
+			pc = mesh->getAssociatedCloud();
 
-            //warning: point cloud is locked!
-            if (pc->isLocked())
-            {
-                pc = 0;
-                //we ask the user about cloning the 'data' mesh
-                QMessageBox::StandardButton result = QMessageBox::question(this,
-                                                     "Registration",
-                                                     "Data mesh vertices are locked (they may be shared with other meshes): Do you wish to clone this mesh to apply transformation?",
-                                                     QMessageBox::Ok | QMessageBox::Cancel,
-                                                     QMessageBox::Ok);
+			//warning: point cloud is locked!
+			if (pc->isLocked())
+			{
+				pc = 0;
+				//we ask the user about cloning the 'data' mesh
+				QMessageBox::StandardButton result = QMessageBox::question(	this,
+																			"Registration",
+																			"Data mesh vertices are locked (they may be shared with other meshes): Do you wish to clone this mesh to apply transformation?",
+																			QMessageBox::Ok | QMessageBox::Cancel,
+																			QMessageBox::Ok);
 
-                //continue process?
-                if (result == QMessageBox::Ok)
-                {
+				//continue process?
+				if (result == QMessageBox::Ok)
+				{
 					ccGenericMesh* newMesh = 0;
 					if (mesh->isA(CC_TYPES::MESH))
-						newMesh = static_cast<ccMesh*>(mesh)->clone();
+						newMesh = static_cast<ccMesh*>(mesh)->cloneMesh();
 					else
 					{
 						//FIXME TODO
-                        ccLog::Error("Doesn't work on sub-meshes yet!");
+						ccLog::Error("Doesn't work on sub-meshes yet!");
 					}
 
-                    if (newMesh)
-                    {
+					if (newMesh)
+					{
 						newMesh->setDisplay(data->getDisplay());
-                        addToDB(newMesh);
-                        data = newMesh;
-                        pc = newMesh->getAssociatedCloud();
-                    }
-                    else
-                    {
-                        ccLog::Error("Failed to clone 'data' mesh! (not enough memory?)");
-                    }
-                }
-            }
-        }
+						addToDB(newMesh);
+						data = newMesh;
+						pc = newMesh->getAssociatedCloud();
+					}
+					else
+					{
+						ccLog::Error("Failed to clone 'data' mesh! (not enough memory?)");
+					}
+				}
+			}
+		}
 
-        //if we managed to get a point cloud to move!
-        if (pc)
-        {
+		//if we managed to get a point cloud to move!
+		if (pc)
+		{
 			//we temporarily detach cloud, as it may undergo
 			//"severe" modifications (octree deletion, etc.) --> see ccPointCloud::applyRigidTransformation
 			ccHObjectContext objContext = removeObjectTemporarilyFromDBTree(pc);
 			pc->applyRigidTransformation(transMat);
 			putObjectBackIntoDBTree(pc,objContext);
 
-            //don't forget to update mesh bounding box also!
-            if (data->isKindOf(CC_TYPES::MESH))
-                ccHObjectCaster::ToGenericMesh(data)->refreshBB();
+			//don't forget to update mesh bounding box also!
+			if (data->isKindOf(CC_TYPES::MESH))
+				ccHObjectCaster::ToGenericMesh(data)->refreshBB();
 
 			//don't forget global shift
 			ccGenericPointCloud* refPc = ccHObjectCaster::ToGenericPointCloud(model);
@@ -4064,63 +4264,63 @@ void MainWindow::doActionRegister()
 				}
 			}
 
-            data->prepareDisplayForRefresh_recursive();
-            data->setName(data->getName()+QString(".registered"));
-            zoomOn(data);
-        }
+			data->prepareDisplayForRefresh_recursive();
+			data->setName(data->getName()+QString(".registered"));
+			zoomOn(data);
+		}
 
 		//pop-up summary
 		summary << "Refer to Console (F8) for more details";
 		QMessageBox::information(this,"Register info",summary.join("\n"));
 		forceConsoleDisplay();
-    }
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 //Aurelien BEY le 13/11/2008 : ajout de la fonction permettant de traiter la fonctionnalite de recalage grossier
 void MainWindow::doAction4pcsRegister()
 {
-    if (QMessageBox::warning(	this,
+	if (QMessageBox::warning(	this,
 								"Work in progress",
 								"This method is still under development: are you sure you want to use it? (a crash may likely happen)",
 								QMessageBox::Yes,QMessageBox::No) == QMessageBox::No )
-        return;
+								return;
 
-    if (m_selectedEntities.size() != 2)
-    {
-        ccConsole::Error("Select 2 point clouds!");
-        return;
-    }
+	if (m_selectedEntities.size() != 2)
+	{
+		ccConsole::Error("Select 2 point clouds!");
+		return;
+	}
 
-    if (!m_selectedEntities[0]->isKindOf(CC_TYPES::POINT_CLOUD) ||
-            !m_selectedEntities[1]->isKindOf(CC_TYPES::POINT_CLOUD))
-    {
-        ccConsole::Error("Select 2 point clouds!");
-        return;
-    }
+	if (!m_selectedEntities[0]->isKindOf(CC_TYPES::POINT_CLOUD) ||
+		!m_selectedEntities[1]->isKindOf(CC_TYPES::POINT_CLOUD))
+	{
+		ccConsole::Error("Select 2 point clouds!");
+		return;
+	}
 
-    ccGenericPointCloud *model = ccHObjectCaster::ToGenericPointCloud(m_selectedEntities[0]);
-    ccGenericPointCloud *data = ccHObjectCaster::ToGenericPointCloud(m_selectedEntities[1]);
+	ccGenericPointCloud *model = ccHObjectCaster::ToGenericPointCloud(m_selectedEntities[0]);
+	ccGenericPointCloud *data = ccHObjectCaster::ToGenericPointCloud(m_selectedEntities[1]);
 
-    ccAlignDlg aDlg(model, data);
-    if (!aDlg.exec())
-        return;
+	ccAlignDlg aDlg(model, data);
+	if (!aDlg.exec())
+		return;
 
-    model = aDlg.getModelObject();
-    data = aDlg.getDataObject();
+	model = aDlg.getModelObject();
+	data = aDlg.getDataObject();
 
-    //Take the correct number of points among the clouds
-    CCLib::ReferenceCloud *subModel = aDlg.getSampledModel();
-    CCLib::ReferenceCloud *subData = aDlg.getSampledData();
+	//Take the correct number of points among the clouds
+	CCLib::ReferenceCloud *subModel = aDlg.getSampledModel();
+	CCLib::ReferenceCloud *subData = aDlg.getSampledData();
 
-    unsigned nbMaxCandidates = aDlg.isNumberOfCandidatesLimited() ? aDlg.getMaxNumberOfCandidates() : 0;
+	unsigned nbMaxCandidates = aDlg.isNumberOfCandidatesLimited() ? aDlg.getMaxNumberOfCandidates() : 0;
 
-    ccProgressDialog pDlg(true,this);
+	ccProgressDialog pDlg(true,this);
 
-    CCLib::PointProjectionTools::Transformation transform;
-    if (CCLib::FPCSRegistrationTools::RegisterClouds(	subModel,
+	CCLib::PointProjectionTools::Transformation transform;
+	if (CCLib::FPCSRegistrationTools::RegisterClouds(	subModel,
 														subData,
 														transform,
 														static_cast<ScalarType>(aDlg.getDelta()),
@@ -4130,10 +4330,10 @@ void MainWindow::doAction4pcsRegister()
 														5000,
 														&pDlg,
 														nbMaxCandidates))
-    {
+	{
 		//output resulting transformation matrix
 		{
-			ccGLMatrix transMat(transform.R,transform.T);
+			ccGLMatrix transMat = FromCCLibMatrix<PointCoordinateType,float>(transform.R,transform.T);
 			forceConsoleDisplay();
 			ccConsole::Print("[Align] Resulting matrix:");
 			ccConsole::Print(transMat.toString(12,' ')); //full precision
@@ -4143,27 +4343,27 @@ void MainWindow::doAction4pcsRegister()
 		ccPointCloud *newDataCloud=0;
 		if (data->isA(CC_TYPES::POINT_CLOUD))
 		{
-            newDataCloud = static_cast<ccPointCloud*>(data)->cloneThis();
+			newDataCloud = static_cast<ccPointCloud*>(data)->cloneThis();
 		}
-        else
+		else
 		{
-            newDataCloud = ccPointCloud::From(data);
+			newDataCloud = ccPointCloud::From(data);
 			newDataCloud->setGlobalShift(data->getGlobalShift());
 			newDataCloud->setGlobalScale(data->getGlobalScale());
 		}
 
-        if (data->getParent())
-            data->getParent()->addChild(newDataCloud);
-        newDataCloud->setName(data->getName()+QString(".registered"));
-        newDataCloud->applyTransformation(transform);
-        newDataCloud->setDisplay(data->getDisplay());
-        newDataCloud->prepareDisplayForRefresh();
-        zoomOn(newDataCloud);
-        addToDB(newDataCloud);
+		if (data->getParent())
+			data->getParent()->addChild(newDataCloud);
+		newDataCloud->setName(data->getName()+QString(".registered"));
+		newDataCloud->applyTransformation(transform);
+		newDataCloud->setDisplay(data->getDisplay());
+		newDataCloud->prepareDisplayForRefresh();
+		zoomOn(newDataCloud);
+		addToDB(newDataCloud);
 
-        data->setEnabled(false);
-        data->prepareDisplayForRefresh_recursive();
-    }
+		data->setEnabled(false);
+		data->prepareDisplayForRefresh_recursive();
+	}
 	else
 	{
 		ccConsole::Warning("[Align] Registration failed!");
@@ -4174,7 +4374,7 @@ void MainWindow::doAction4pcsRegister()
 	if (subData)
 		delete subData;
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -4198,16 +4398,16 @@ void MainWindow::doActionSubsample()
 		}
 	}
 
-    if (clouds.empty())
-    {
-        ccConsole::Error("Select at least one point cloud!");
-        return;
-    }
+	if (clouds.empty())
+	{
+		ccConsole::Error("Select at least one point cloud!");
+		return;
+	}
 
 	//Display dialog
-    ccSubsamplingDlg sDlg(maxPointCount, maxCloudRadius, this);
-    if (!sDlg.exec())
-        return;
+	ccSubsamplingDlg sDlg(maxPointCount, maxCloudRadius, this);
+	if (!sDlg.exec())
+		return;
 
 	//process clouds
 	{
@@ -4271,153 +4471,153 @@ void MainWindow::doActionSubsample()
 		}
 	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionStatisticalTest()
 {
-    ccPickOneElementDlg pDlg("Distribution","Choose distribution",this);
-    pDlg.addElement("Gauss");
-    pDlg.addElement("Weibull");
-    pDlg.setDefaultIndex(0);
-    if (!pDlg.exec())
-        return;
-
-    int distribIndex = pDlg.getSelectedIndex();
-
-    ccStatisticalTestDlg* sDlg = 0;
-    switch (distribIndex)
-    {
-    case 0: //Gauss
-        sDlg = new ccStatisticalTestDlg("mu","sigma",QString(),"Local Statistical Test (Gauss)",this);
-        break;
-    case 1: //Weibull
-        sDlg = new ccStatisticalTestDlg("a","b","shift","Local Statistical Test (Weibull)",this);
-        break;
-    default:
-        ccConsole::Error("Invalid distribution!");
+	ccPickOneElementDlg pDlg("Distribution","Choose distribution",this);
+	pDlg.addElement("Gauss");
+	pDlg.addElement("Weibull");
+	pDlg.setDefaultIndex(0);
+	if (!pDlg.exec())
 		return;
-    }
 
-    if (!sDlg->exec())
-    {
-        delete sDlg;
-        return;
-    }
+	int distribIndex = pDlg.getSelectedIndex();
 
-	//build up corresponding distribution
-    CCLib::GenericDistribution* distrib=0;
+	ccStatisticalTestDlg* sDlg = 0;
+	switch (distribIndex)
 	{
-		ScalarType a = static_cast<ScalarType>(sDlg->getParam1());
-		ScalarType b = static_cast<ScalarType>(sDlg->getParam2());
-		ScalarType c = static_cast<ScalarType>(sDlg->getParam3());
-
-		switch (distribIndex)
-		{
-		case 0: //Gauss
-		{
-			CCLib::NormalDistribution* N = new CCLib::NormalDistribution();
-			N->setParameters(a,b*b); //warning: we input sigma2 here (not sigma)
-			distrib = static_cast<CCLib::GenericDistribution*>(N);
-			break;
-		}
-		case 1: //Weibull
-			CCLib::WeibullDistribution* W = new CCLib::WeibullDistribution();
-			W->setParameters(a,b,c);
-			distrib = static_cast<CCLib::GenericDistribution*>(W);
-			break;
-		}
+	case 0: //Gauss
+		sDlg = new ccStatisticalTestDlg("mu","sigma",QString(),"Local Statistical Test (Gauss)",this);
+		break;
+	case 1: //Weibull
+		sDlg = new ccStatisticalTestDlg("a","b","shift","Local Statistical Test (Weibull)",this);
+		break;
+	default:
+		ccConsole::Error("Invalid distribution!");
+		return;
 	}
 
-	double pChi2 = sDlg->getProba();
-	int nn = sDlg->getNeighborsNumber();
+	if (sDlg->exec())
+	{
+		//build up corresponding distribution
+		CCLib::GenericDistribution* distrib = 0;
+		{
+			ScalarType a = static_cast<ScalarType>(sDlg->getParam1());
+			ScalarType b = static_cast<ScalarType>(sDlg->getParam2());
+			ScalarType c = static_cast<ScalarType>(sDlg->getParam3());
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_selectedEntities[i]); //TODO
-        if (pc)
-        {
-            //we apply method on currently displayed SF
-            ccScalarField* inSF = pc->getCurrentDisplayedScalarField();
-            if (inSF)
-            {
-                assert(inSF->isAllocated());
+			switch (distribIndex)
+			{
+			case 0: //Gauss
+			{
+				CCLib::NormalDistribution* N = new CCLib::NormalDistribution();
+				N->setParameters(a,b*b); //warning: we input sigma2 here (not sigma)
+				distrib = static_cast<CCLib::GenericDistribution*>(N);
+				break;
+			}
+			case 1: //Weibull
+				CCLib::WeibullDistribution* W = new CCLib::WeibullDistribution();
+				W->setParameters(a,b,c);
+				distrib = static_cast<CCLib::GenericDistribution*>(W);
+				break;
+			}
+		}
 
-                //force SF as 'OUT' field (in case of)
-				int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
-				pc->setCurrentOutScalarField(outSfIdx);
+		double pChi2 = sDlg->getProba();
+		int nn = sDlg->getNeighborsNumber();
 
-				//force Chi2 Distances field as 'IN' field (create it by the way if necessary)
-				int chi2SfIdx = pc->getScalarFieldIndexByName(CC_CHI2_DISTANCES_DEFAULT_SF_NAME);
-				if (chi2SfIdx < 0)
-					chi2SfIdx = pc->addScalarField(CC_CHI2_DISTANCES_DEFAULT_SF_NAME);
-				if (chi2SfIdx < 0)
+		size_t selNum = m_selectedEntities.size();
+		for (size_t i=0; i<selNum; ++i)
+		{
+			ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_selectedEntities[i]); //TODO
+			if (pc)
+			{
+				//we apply method on currently displayed SF
+				ccScalarField* inSF = pc->getCurrentDisplayedScalarField();
+				if (inSF)
 				{
-					ccConsole::Error("Couldn't allocate a new scalar field for computing chi2 distances! Try to free some memory ...");
-					break;
-				}
-				pc->setCurrentInScalarField(chi2SfIdx);
+					assert(inSF->isAllocated());
 
-				//compute octree if necessary
-				ccOctree* theOctree=pc->getOctree();
-				if (!theOctree)
-				{
-					ccProgressDialog pDlg(true,this);
-					theOctree = pc->computeOctree(&pDlg);
-					if (!theOctree)
+					//force SF as 'OUT' field (in case of)
+					int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
+					pc->setCurrentOutScalarField(outSfIdx);
+
+					//force Chi2 Distances field as 'IN' field (create it by the way if necessary)
+					int chi2SfIdx = pc->getScalarFieldIndexByName(CC_CHI2_DISTANCES_DEFAULT_SF_NAME);
+					if (chi2SfIdx < 0)
+						chi2SfIdx = pc->addScalarField(CC_CHI2_DISTANCES_DEFAULT_SF_NAME);
+					if (chi2SfIdx < 0)
 					{
-						ccConsole::Error(QString("Couldn't compute octree for cloud '%1'!").arg(pc->getName()));
+						ccConsole::Error("Couldn't allocate a new scalar field for computing chi2 distances! Try to free some memory ...");
 						break;
 					}
-				}
+					pc->setCurrentInScalarField(chi2SfIdx);
 
-				ccProgressDialog pDlg(true,this);
+					//compute octree if necessary
+					ccOctree* theOctree=pc->getOctree();
+					if (!theOctree)
+					{
+						ccProgressDialog pDlg(true,this);
+						theOctree = pc->computeOctree(&pDlg);
+						if (!theOctree)
+						{
+							ccConsole::Error(QString("Couldn't compute octree for cloud '%1'!").arg(pc->getName()));
+							break;
+						}
+					}
 
-				QElapsedTimer eTimer;
-				eTimer.start();
+					ccProgressDialog pDlg(true,this);
 
-				double chi2dist = CCLib::StatisticalTestingTools::testCloudWithStatisticalModel(distrib,pc,nn,pChi2,&pDlg,theOctree);
+					QElapsedTimer eTimer;
+					eTimer.start();
 
-				ccConsole::Print("[Chi2 Test] Timing: %3.2f ms.",eTimer.elapsed()/1.0e3);
-				ccConsole::Print("[Chi2 Test] %s test result = %f",distrib->getName(),chi2dist);
+					double chi2dist = CCLib::StatisticalTestingTools::testCloudWithStatisticalModel(distrib,pc,nn,pChi2,&pDlg,theOctree);
 
-				//we set the theoretical Chi2 distance limit as the minimum displayed SF value so that all points below are grayed
-				{
-					ccScalarField* chi2SF = static_cast<ccScalarField*>(pc->getCurrentInScalarField());
-					assert(chi2SF);
-					chi2SF->computeMinAndMax();
-					chi2dist *= chi2dist;
-					chi2SF->setMinDisplayed(static_cast<ScalarType>(chi2dist));
-					chi2SF->setSymmetricalScale(false);
-					chi2SF->setSaturationStart(static_cast<ScalarType>(chi2dist));
-					//chi2SF->setSaturationStop(chi2dist);
-					pc->setCurrentDisplayedScalarField(chi2SfIdx);
-					pc->showSF(true);
-					pc->prepareDisplayForRefresh_recursive();
+					ccConsole::Print("[Chi2 Test] Timing: %3.2f ms.",eTimer.elapsed()/1.0e3);
+					ccConsole::Print("[Chi2 Test] %s test result = %f",distrib->getName(),chi2dist);
+
+					//we set the theoretical Chi2 distance limit as the minimum displayed SF value so that all points below are grayed
+					{
+						ccScalarField* chi2SF = static_cast<ccScalarField*>(pc->getCurrentInScalarField());
+						assert(chi2SF);
+						chi2SF->computeMinAndMax();
+						chi2dist *= chi2dist;
+						chi2SF->setMinDisplayed(static_cast<ScalarType>(chi2dist));
+						chi2SF->setSymmetricalScale(false);
+						chi2SF->setSaturationStart(static_cast<ScalarType>(chi2dist));
+						//chi2SF->setSaturationStop(chi2dist);
+						pc->setCurrentDisplayedScalarField(chi2SfIdx);
+						pc->showSF(true);
+						pc->prepareDisplayForRefresh_recursive();
+					}
 				}
 			}
 		}
-    }
 
-    delete distrib;
-    delete sDlg;
+		delete distrib;
+		distrib = 0;
+	}
 
-    refreshAll();
+	delete sDlg;
+	sDlg = 0;
+
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionComputeStatParams()
 {
-    ccPickOneElementDlg pDlg("Distribution","Distribution Fitting",this);
-    pDlg.addElement("Gauss");
-    pDlg.addElement("Weibull");
-    pDlg.setDefaultIndex(0);
-    if (!pDlg.exec())
-        return;
+	ccPickOneElementDlg pDlg("Distribution","Distribution Fitting",this);
+	pDlg.addElement("Gauss");
+	pDlg.addElement("Weibull");
+	pDlg.setDefaultIndex(0);
+	if (!pDlg.exec())
+		return;
 
-    CCLib::GenericDistribution* distrib=0;
+	CCLib::GenericDistribution* distrib = 0;
 	{
 		switch (pDlg.getSelectedIndex())
 		{
@@ -4432,27 +4632,27 @@ void MainWindow::doActionComputeStatParams()
 			return;
 		}
 	}
-    assert(distrib);
+	assert(distrib);
 
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_selectedEntities[i]); //TODO
-        if (pc)
-        {
-            //we apply method on currently displayed SF
-            ccScalarField* sf = pc->getCurrentDisplayedScalarField();
-            if (sf)
-            {
-                assert(sf->isAllocated());
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_selectedEntities[i]); //TODO
+		if (pc)
+		{
+			//we apply method on currently displayed SF
+			ccScalarField* sf = pc->getCurrentDisplayedScalarField();
+			if (sf)
+			{
+				assert(sf->isAllocated());
 
-                //force SF as 'OUT' field (in case of)
-                int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
+				//force SF as 'OUT' field (in case of)
+				int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
 				assert(outSfIdx >= 0);
-                pc->setCurrentOutScalarField(outSfIdx);
+				pc->setCurrentOutScalarField(outSfIdx);
 
-                if (distrib->computeParameters(pc))
-                {
+				if (distrib->computeParameters(pc))
+				{
 					QString description;
 
 					unsigned precision = ccGui::Parameters().displayedNumPrecision;
@@ -4479,56 +4679,61 @@ void MainWindow::doActionComputeStatParams()
 					description.prepend(QString("%1: ").arg(distrib->getName()));
 					ccConsole::Print(QString("[Distribution fitting] %1").arg(description));
 
-                    //Auto Chi2
-                    unsigned numberOfClasses = static_cast<unsigned>(ceil(sqrt(static_cast<double>(pc->size()))));
-                    unsigned* histo = new unsigned[numberOfClasses];
-                    double* npis = new double[numberOfClasses];
+					//Auto Chi2
+					unsigned numberOfClasses = static_cast<unsigned>(ceil(sqrt(static_cast<double>(pc->size()))));
+					std::vector<unsigned> histo;
+					std::vector<double> npis;
+					try
 					{
-						unsigned finalNumberOfClasses = 0;
-						double chi2dist = CCLib::StatisticalTestingTools::computeAdaptativeChi2Dist(distrib,pc,0,finalNumberOfClasses,false,0,0,histo,npis);
-
-						if (chi2dist >= 0.0)
-						{
-							ccConsole::Print("[Distribution fitting] %s: Chi2 Distance = %f",distrib->getName(),chi2dist);
-						}
-						else
-						{
-							ccConsole::Warning("[Distribution fitting] Failed to compute Chi2 distance?!");
-							delete[] histo;
-							histo=0;
-							delete[] npis;
-							npis=0;
-						}
+						histo.resize(numberOfClasses,0);
+						npis.resize(numberOfClasses,0.0);
+					}
+					catch(std::bad_alloc)
+					{
+						ccConsole::Warning("[Distribution fitting] Not enough memory!");
+						continue;
 					}
 
+					unsigned finalNumberOfClasses = 0;
+					double chi2dist = CCLib::StatisticalTestingTools::computeAdaptativeChi2Dist(distrib,pc,0,finalNumberOfClasses,false,0,0,&(histo[0]),&(npis[0]));
+
+					if (chi2dist >= 0.0)
+					{
+						ccConsole::Print("[Distribution fitting] %s: Chi2 Distance = %f",distrib->getName(),chi2dist);
+					}
+					else
+					{
+						ccConsole::Warning("[Distribution fitting] Failed to compute Chi2 distance?!");
+						continue;
+					}
+
+					//show histogram
 					ccHistogramWindowDlg* hDlg = new ccHistogramWindowDlg(this);
 					hDlg->setWindowTitle("[Distribution fitting]");
 					{
 						ccHistogramWindow* histogram = hDlg->window();
-						histogram->setInfoStr(description);
-						if (histo && npis)
-						{
-							histogram->fromBinArray(histo,numberOfClasses,sf->getMin(),sf->getMax(),true);
-							histo=0;
-							histogram->setCurveValues(npis,numberOfClasses,true);
-							npis=0;
-						}
-						else
-						{
-							histogram->fromSF(sf,numberOfClasses);
-						}
+						histogram->fromBinArray(histo,sf->getMin(),sf->getMax());
+						histo.clear();
+						histogram->setCurveValues(npis);
+						npis.clear();
+						histogram->setTitle(description);
+						histogram->setColorScheme(ccHistogramWindow::USE_CUSTOM_COLOR_SCALE);
+						histogram->setColorScale(sf->getColorScale());
+						histogram->setAxisLabels(sf->getName(),"Count");
+						histogram->refresh();
 					}
 					hDlg->show();
 				}
-                else
+				else
 				{
-                    ccConsole::Warning(QString("[Entity: %1]-[SF: %2] Couldn't compute distribution parameters!").arg(pc->getName()).arg(pc->getScalarFieldName(outSfIdx)));
+					ccConsole::Warning(QString("[Entity: %1]-[SF: %2] Couldn't compute distribution parameters!").arg(pc->getName()).arg(pc->getScalarFieldName(outSfIdx)));
 				}
-            }
-        }
-    }
+			}
+		}
+	}
 
-    delete distrib;
+	delete distrib;
+	distrib = 0;
 }
 
 struct ComponentIndexAndSize
@@ -4683,22 +4888,22 @@ void MainWindow::doActionLabelConnectedComponents()
 	ccLabelingDlg dlg(this);
 	if (count == 1)
 		dlg.octreeLevelSpinBox->setCloud(clouds.front());
-    if (!dlg.exec())
-        return;
+	if (!dlg.exec())
+		return;
 
-    int octreeLevel = dlg.getOctreeLevel();
-    int minComponentSize = dlg.getMinPointsNb();
-    bool randColors = dlg.randomColors();
+	int octreeLevel = dlg.getOctreeLevel();
+	int minComponentSize = dlg.getMinPointsNb();
+	bool randColors = dlg.randomColors();
 
-    ccProgressDialog pDlg(false,this);
+	ccProgressDialog pDlg(false,this);
 
 	//we unselect all entities as we are going to automatically select the created components
 	//(otherwise the user won't percieve the change!)
 	if (m_ccRoot)
 		m_ccRoot->unselectAllEntities();
 
-    for (size_t i=0; i<count; ++i)
-    {
+	for (size_t i=0; i<count; ++i)
+	{
 		ccGenericPointCloud* cloud = clouds[i];
 
 		if (cloud && cloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
@@ -4757,10 +4962,10 @@ void MainWindow::doActionLabelConnectedComponents()
 			{
 				createComponentsClouds(cloud, components, minComponentSize, randColors, true);
 			}
-        }
-    }
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -4803,7 +5008,7 @@ void MainWindow::doActionSetSFAsCoord()
 						if (!hasDefaultValueForNaN)
 						{
 							bool ok;
-							double out = QInputDialog::getDouble(this,"SF --> coordinate","Enter the coordinate equivalent for NaN values:",defaultValueForNaN,-DBL_MAX,DBL_MAX,6,&ok);
+							double out = QInputDialog::getDouble(this,"SF --> coordinate","Enter the coordinate equivalent for NaN values:",defaultValueForNaN,-1.0e9,1.0e9,6,&ok);
 							if (ok)
 								defaultValueForNaN = static_cast<ScalarType>(out);
 							else
@@ -4897,47 +5102,47 @@ void MainWindow::doActionExportCoordToSF()
 
 void MainWindow::doActionHeightGridGeneration()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 1)
-    {
-        ccConsole::Error("Select only one point cloud!");
-        return;
-    }
+	size_t selNum = m_selectedEntities.size();
+	if (selNum != 1)
+	{
+		ccConsole::Error("Select only one point cloud!");
+		return;
+	}
 
-    ccHObject* ent = m_selectedEntities[0];
-    if (!ent->isKindOf(CC_TYPES::POINT_CLOUD) )
-    {
-        ccConsole::Error("Select a point cloud!");
-        return;
-    }
+	ccHObject* ent = m_selectedEntities[0];
+	if (!ent->isKindOf(CC_TYPES::POINT_CLOUD) )
+	{
+		ccConsole::Error("Select a point cloud!");
+		return;
+	}
 
 	ccHeightGridGenerationDlg dlg(ent->getMyOwnBB(),this);
-    if (!dlg.exec())
-        return;
+	if (!dlg.exec())
+		return;
 
-    bool generateCloud = dlg.generateCloud();
+	bool generateCloud = dlg.generateCloud();
 	bool generateCountSF = dlg.generateCountSF();
 	bool resampleOriginalCloud = dlg.resampleOriginalCloud();
-    bool generateImage = dlg.generateImage();
-    bool generateASCII = dlg.generateASCII();
+	bool generateImage = dlg.generateImage();
+	bool generateASCII = dlg.generateASCII();
 	bool generateRaster = dlg.generateRaster();
 
-    if (!generateCloud && !generateImage && !generateASCII && !generateRaster)
-    {
-        ccConsole::Error("Nothing to do?! Mind the 'Generate' checkboxes...");
-        return;
-    }
+	if (!generateCloud && !generateImage && !generateASCII && !generateRaster)
+	{
+		ccConsole::Error("Nothing to do?! Mind the 'Generate' checkboxes...");
+		return;
+	}
 
-    //Grid step must be > 0
-    double gridStep = dlg.getGridStep();
-    assert(gridStep > 0);
+	//Grid step must be > 0
+	double gridStep = dlg.getGridStep();
+	assert(gridStep > 0);
 	//Custom bundig box
 	ccBBox box = dlg.getCustomBBox();
 
-    ccProgressDialog pDlg(true,this);
-    ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
+	ccProgressDialog pDlg(true,this);
+	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
 
-    //let's rock
+	//let's rock
 	ccPointCloud* outputGrid = ccHeightGridGeneration::Compute(	cloud,
 																gridStep,
 																box,
@@ -4991,19 +5196,19 @@ void MainWindow::doActionHeightGridGeneration()
 
 void MainWindow::doActionComputeMeshAA()
 {
-    doActionComputeMesh(GENERIC);
+	doActionComputeMesh(GENERIC);
 }
 
 void MainWindow::doActionComputeMeshLS()
 {
-    doActionComputeMesh(GENERIC_BEST_LS_PLANE);
+	doActionComputeMesh(GENERIC_BEST_LS_PLANE);
 }
 
 static double s_meshMaxEdgeLength = 0;
 void MainWindow::doActionComputeMesh(CC_TRIANGULATION_TYPES type)
 {
 	bool ok = true;
-	double maxEdgeLength = QInputDialog::getDouble(this,"Triangulate", "Max edge length (0 = no limit)", s_meshMaxEdgeLength, 0, DBL_MAX, 8, &ok);
+	double maxEdgeLength = QInputDialog::getDouble(this,"Triangulate", "Max edge length (0 = no limit)", s_meshMaxEdgeLength, 0, 1.0e9, 8, &ok);
 	if (!ok)
 		return;
 	s_meshMaxEdgeLength = maxEdgeLength;
@@ -5039,10 +5244,10 @@ void MainWindow::doActionComputeMesh(CC_TRIANGULATION_TYPES type)
 	pDlg.show();
 	QApplication::processEvents();
 
-    for (size_t i=0; i<clouds.size(); ++i)
-    {
-        ccHObject* ent = clouds[i];
-        assert(ent->isKindOf(CC_TYPES::POINT_CLOUD));
+	for (size_t i=0; i<clouds.size(); ++i)
+	{
+		ccHObject* ent = clouds[i];
+		assert(ent->isKindOf(CC_TYPES::POINT_CLOUD));
 
 		//compute mesh
 		ccMesh* mesh = 0;
@@ -5092,26 +5297,26 @@ void MainWindow::doActionComputeMesh(CC_TRIANGULATION_TYPES type)
 			ccConsole::Error("An error occurred while computing mesh! (not enough memory?)");
 			break;
 		}
-    }
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionFitQuadric()
 {
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 
 	bool errors = false;
 	//for all selected entities
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
 		//look for clouds
-        if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
-        {
-            ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
+		if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
 
 			double rms = 0;
 			ccQuadric* quadric = ccQuadric::Fit(cloud,&rms);
@@ -5126,21 +5331,21 @@ void MainWindow::doActionFitQuadric()
 				ccConsole::Print(QString("[doActionFitQuadric] Quadric equation: ") + quadric->getEquationString());
 				ccConsole::Print(QString("[doActionFitQuadric] RMS: %1").arg(rms));
 
-            }
-            else
-            {
-                ccConsole::Warning(QString("Failed to compute quadric on cloud '%1'").arg(cloud->getName()));
+			}
+			else
+			{
+				ccConsole::Warning(QString("Failed to compute quadric on cloud '%1'").arg(cloud->getName()));
 				errors = true;
-            }
-        }
-    }
+			}
+		}
+	}
 
 	if (errors)
 	{
 		ccConsole::Error("Error(s) occurred: see console");
 	}
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::doActionComputeDistToBestFitQuadric3D()
@@ -5153,197 +5358,197 @@ void MainWindow::doActionComputeDistToBestFitQuadric3D()
 		return;
 
 	size_t selNum = selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
-        if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
-        {
-            ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
-            CCLib::Neighbourhood Yk(cloud);
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
+		if (ent->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(ent);
+			CCLib::Neighbourhood Yk(cloud);
 
-            const double* Q = Yk.get3DQuadric();
-            if (Q)
-            {
-                const double& a = Q[0];
-                const double& b = Q[1];
-                const double& c = Q[2];
-                const double& e = Q[3];
-                const double& f = Q[4];
-                const double& g = Q[5];
-                const double& l = Q[6];
-                const double& m = Q[7];
-                const double& n = Q[8];
-                const double& d = Q[9];
+			const double* Q = Yk.get3DQuadric();
+			if (Q)
+			{
+				const double& a = Q[0];
+				const double& b = Q[1];
+				const double& c = Q[2];
+				const double& e = Q[3];
+				const double& f = Q[4];
+				const double& g = Q[5];
+				const double& l = Q[6];
+				const double& m = Q[7];
+				const double& n = Q[8];
+				const double& d = Q[9];
 
-                //gravity center
-                const CCVector3* G = Yk.getGravityCenter();
-                if (!G)
-                {
-                    ccConsole::Warning(QString("Failed to get gravity center of cloud '%1'!").arg(cloud->getName()));
-                    continue;
-                }
+				//gravity center
+				const CCVector3* G = Yk.getGravityCenter();
+				if (!G)
+				{
+					ccConsole::Warning(QString("Failed to get gravity center of cloud '%1'!").arg(cloud->getName()));
+					continue;
+				}
 
-                const ccBBox bbox = cloud->getBB();
+				const ccBBox bbox = cloud->getBB();
 				PointCoordinateType maxDim = bbox.getMaxBoxDim();
-                CCVector3 C = bbox.getCenter();
+				CCVector3 C = bbox.getCenter();
 
 				//Sample points on a cube and compute for each of them the distance to the Quadric
-                ccPointCloud* newCloud = new ccPointCloud();
-                if (!newCloud->reserve(steps*steps*steps))
+				ccPointCloud* newCloud = new ccPointCloud();
+				if (!newCloud->reserve(steps*steps*steps))
 				{
 					ccConsole::Error("Not enough memory!");
 				}
 
 				const char defaultSFName[] = "Dist. to 3D quadric";
 				int sfIdx = newCloud->getScalarFieldIndexByName(defaultSFName);
-                if (sfIdx < 0)
+				if (sfIdx < 0)
 					sfIdx = newCloud->addScalarField(defaultSFName);
-                if (sfIdx < 0)
-                {
-                    ccConsole::Error("Couldn't allocate a new scalar field for computing distances! Try to free some memory ...");
-                    delete newCloud;
-                    continue;
-                }
+				if (sfIdx < 0)
+				{
+					ccConsole::Error("Couldn't allocate a new scalar field for computing distances! Try to free some memory ...");
+					delete newCloud;
+					continue;
+				}
 
 				ccScalarField* sf = static_cast<ccScalarField*>(newCloud->getScalarField(sfIdx));
 				assert(sf);
 
-                //FILE* fp = fopen("doActionComputeQuadric3D_trace.txt","wt");
+				//FILE* fp = fopen("doActionComputeQuadric3D_trace.txt","wt");
 				unsigned count = 0;
-                for (int x=0; x<steps; ++x)
-                {
+				for (int x=0; x<steps; ++x)
+				{
 					CCVector3 P;
-                    P.x = C.x + maxDim * (static_cast<PointCoordinateType>(x) / static_cast<PointCoordinateType>(steps-1) - PC_ONE/2);
-                    for (int y=0; y<steps; ++y)
-                    {
-                        P.y = C.y + maxDim * (static_cast<PointCoordinateType>(y) / static_cast<PointCoordinateType>(steps-1) - PC_ONE/2);
-                        for (int z=0; z<steps; ++z)
-                        {
-                            P.z = C.z + maxDim * (static_cast<PointCoordinateType>(z) / static_cast<PointCoordinateType>(steps-1) - PC_ONE/2);
-                            newCloud->addPoint(P);
+					P.x = C.x + maxDim * (static_cast<PointCoordinateType>(x) / static_cast<PointCoordinateType>(steps-1) - PC_ONE/2);
+					for (int y=0; y<steps; ++y)
+					{
+						P.y = C.y + maxDim * (static_cast<PointCoordinateType>(y) / static_cast<PointCoordinateType>(steps-1) - PC_ONE/2);
+						for (int z=0; z<steps; ++z)
+						{
+							P.z = C.z + maxDim * (static_cast<PointCoordinateType>(z) / static_cast<PointCoordinateType>(steps-1) - PC_ONE/2);
+							newCloud->addPoint(P);
 
 							//compute distance to quadric
 							CCVector3 Pc = P-*G;
-							ScalarType dist = static_cast<ScalarType>(		a*Pc.x*Pc.x + b*Pc.y*Pc.y + c*Pc.z*Pc.z
-																		+	e*Pc.x*Pc.y + f*Pc.y*Pc.z + g*Pc.x*Pc.z
-																		+	l*Pc.x + m*Pc.y + n*Pc.z + d);
-                            
+							ScalarType dist = static_cast<ScalarType>(	a*Pc.x*Pc.x + b*Pc.y*Pc.y + c*Pc.z*Pc.z
+																	+	e*Pc.x*Pc.y + f*Pc.y*Pc.z + g*Pc.x*Pc.z
+																	+	l*Pc.x + m*Pc.y + n*Pc.z + d);
+
 							sf->setValue(count++,dist);
-                            //fprintf(fp,"%f %f %f %f\n",Pc.x,Pc.y,Pc.z,dist);
-                        }
-                    }
-                }
-                //fclose(fp);
-                
+							//fprintf(fp,"%f %f %f %f\n",Pc.x,Pc.y,Pc.z,dist);
+						}
+					}
+				}
+				//fclose(fp);
+
 				if (sf)
 				{
 					sf->computeMinAndMax();
 					newCloud->setCurrentDisplayedScalarField(sfIdx);
 					newCloud->showSF(true);
 				}
-                newCloud->setName("Distance map to 3D quadric");
-                newCloud->setDisplay(cloud->getDisplay());
-                newCloud->prepareDisplayForRefresh();
+				newCloud->setName("Distance map to 3D quadric");
+				newCloud->setDisplay(cloud->getDisplay());
+				newCloud->prepareDisplayForRefresh();
 
 				addToDB(newCloud);
-            }
-            else
-            {
-                ccConsole::Warning(QString("Failed to compute 3D quadric on cloud '%1'").arg(cloud->getName()));
-            }
-        }
-    }
+			}
+			else
+			{
+				ccConsole::Warning(QString("Failed to compute 3D quadric on cloud '%1'").arg(cloud->getName()));
+			}
+		}
+	}
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::doActionComputeCPS()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 2)
-    {
-        ccConsole::Error("Select 2 point clouds!");
-        return;
-    }
+	size_t selNum = m_selectedEntities.size();
+	if (selNum != 2)
+	{
+		ccConsole::Error("Select 2 point clouds!");
+		return;
+	}
 
-    if (!m_selectedEntities[0]->isKindOf(CC_TYPES::POINT_CLOUD) ||
-            !m_selectedEntities[1]->isKindOf(CC_TYPES::POINT_CLOUD))
-    {
-        ccConsole::Error("Select 2 point clouds!");
-        return;
-    }
+	if (!m_selectedEntities[0]->isKindOf(CC_TYPES::POINT_CLOUD) ||
+		!m_selectedEntities[1]->isKindOf(CC_TYPES::POINT_CLOUD))
+	{
+		ccConsole::Error("Select 2 point clouds!");
+		return;
+	}
 
-    ccOrderChoiceDlg dlg(	m_selectedEntities[0], "Compared",
+	ccOrderChoiceDlg dlg(	m_selectedEntities[0], "Compared",
 							m_selectedEntities[1], "Reference",
 							this );
-    if (!dlg.exec())
-        return;
+	if (!dlg.exec())
+		return;
 
-    ccGenericPointCloud* compCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getFirstEntity());
-    ccGenericPointCloud* srcCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getSecondEntity());
+	ccGenericPointCloud* compCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getFirstEntity());
+	ccGenericPointCloud* srcCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getSecondEntity());
 
-    if (!compCloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
-    {
-        ccConsole::Error("Compared cloud must be a real point cloud!");
-        return;
-    }
-    ccPointCloud* cmpPC = static_cast<ccPointCloud*>(compCloud);
+	if (!compCloud->isA(CC_TYPES::POINT_CLOUD)) //TODO
+	{
+		ccConsole::Error("Compared cloud must be a real point cloud!");
+		return;
+	}
+	ccPointCloud* cmpPC = static_cast<ccPointCloud*>(compCloud);
 
-    int sfIdx = cmpPC->getScalarFieldIndexByName("tempScalarField");
-    if (sfIdx < 0)
+	int sfIdx = cmpPC->getScalarFieldIndexByName("tempScalarField");
+	if (sfIdx < 0)
 		sfIdx = cmpPC->addScalarField("tempScalarField");
-    if (sfIdx < 0)
-    {
-        ccConsole::Error("Couldn't allocate a new scalar field for computing distances! Try to free some memory ...");
-        return;
-    }
-    cmpPC->setCurrentScalarField(sfIdx);
-    cmpPC->enableScalarField();
+	if (sfIdx < 0)
+	{
+		ccConsole::Error("Couldn't allocate a new scalar field for computing distances! Try to free some memory ...");
+		return;
+	}
+	cmpPC->setCurrentScalarField(sfIdx);
+	cmpPC->enableScalarField();
 	cmpPC->forEach(CCLib::ScalarFieldTools::SetScalarValueToNaN);
 
-    CCLib::ReferenceCloud CPSet(srcCloud);
-    ccProgressDialog pDlg(true,this);
+	CCLib::ReferenceCloud CPSet(srcCloud);
+	ccProgressDialog pDlg(true,this);
 	CCLib::DistanceComputationTools::Cloud2CloudDistanceComputationParams params;
 	params.CPSet = &CPSet;
-    int result = CCLib::DistanceComputationTools::computeHausdorffDistance(compCloud,srcCloud,params,&pDlg);
-    cmpPC->deleteScalarField(sfIdx);
+	int result = CCLib::DistanceComputationTools::computeHausdorffDistance(compCloud,srcCloud,params,&pDlg);
+	cmpPC->deleteScalarField(sfIdx);
 
-    if (result >= 0)
-    {
-        ccPointCloud* newCloud = 0;
-        //if the source cloud is a "true" cloud, the extracted CPS
-        //will also get its attributes
-        if (srcCloud->isA(CC_TYPES::POINT_CLOUD))
+	if (result >= 0)
+	{
+		ccPointCloud* newCloud = 0;
+		//if the source cloud is a "true" cloud, the extracted CPS
+		//will also get its attributes
+		if (srcCloud->isA(CC_TYPES::POINT_CLOUD))
 			newCloud = static_cast<ccPointCloud*>(srcCloud)->partialClone(&CPSet);
-        else
+		else
 		{
-            newCloud = ccPointCloud::From(&CPSet);
+			newCloud = ccPointCloud::From(&CPSet);
 			newCloud->setGlobalShift(srcCloud->getGlobalShift());
 			newCloud->setGlobalScale(srcCloud->getGlobalScale());
 		}
 
 		newCloud->setName(QString("[%1]->CPSet(%2)").arg(srcCloud->getName()).arg(compCloud->getName()));
-        newCloud->setDisplay(compCloud->getDisplay());
-        newCloud->prepareDisplayForRefresh();
-        addToDB(newCloud);
+		newCloud->setDisplay(compCloud->getDisplay());
+		newCloud->prepareDisplayForRefresh();
+		addToDB(newCloud);
 
 		//we hide the source cloud (for a clearer display)
-        srcCloud->setEnabled(false);
-        srcCloud->prepareDisplayForRefresh();
-    }
+		srcCloud->setEnabled(false);
+		srcCloud->prepareDisplayForRefresh();
+	}
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::doActionComputeNormals()
 {
-    if (m_selectedEntities.empty())
-    {
-        ccConsole::Error("Select at least one point cloud");
-        return;
-    }
+	if (m_selectedEntities.empty())
+	{
+		ccConsole::Error("Select at least one point cloud");
+		return;
+	}
 
-    size_t count = m_selectedEntities.size();
+	size_t count = m_selectedEntities.size();
 	PointCoordinateType defaultRadius = 0;
 	bool onlyMeshes = true;
 	bool hasMeshes = false;
@@ -5375,8 +5580,8 @@ void MainWindow::doActionComputeNormals()
 		return;
 	}
 
-    CC_LOCAL_MODEL_TYPES model = NO_MODEL;
-    int preferedOrientation = -1;
+	CC_LOCAL_MODEL_TYPES model = NO_MODEL;
+	int preferedOrientation = -1;
 
 	//We display dialog only for point clouds
 	if (!onlyMeshes)
@@ -5402,10 +5607,10 @@ void MainWindow::doActionComputeNormals()
 											QMessageBox::No ) == QMessageBox::Yes);
 	}
 
-    //Compute normals for each selected cloud
-    for (size_t i=0; i<m_selectedEntities.size(); i++)
-    {
-        if (m_selectedEntities[i]->isA(CC_TYPES::POINT_CLOUD))
+	//Compute normals for each selected cloud
+	for (size_t i=0; i<m_selectedEntities.size(); i++)
+	{
+		if (m_selectedEntities[i]->isA(CC_TYPES::POINT_CLOUD))
 		{
 			ccPointCloud* cloud = static_cast<ccPointCloud*>(m_selectedEntities[i]);
 
@@ -5431,7 +5636,7 @@ void MainWindow::doActionComputeNormals()
 
 			if (!cloud->hasNormals())
 			{
-                if (!cloud->resizeTheNormsTable())
+				if (!cloud->resizeTheNormsTable())
 				{
 					ccConsole::Error(QString("Failed to instantiate normals array on cloud '%1'").arg(cloud->getName()));
 					continue;
@@ -5464,7 +5669,7 @@ void MainWindow::doActionComputeNormals()
 			}
 			mesh->prepareDisplayForRefresh_recursive();
 		}
-    }
+	}
 
 	//ask the user if we wants to orient cloud normals (with MST)
 	if (	!onlyMeshes
@@ -5477,27 +5682,27 @@ void MainWindow::doActionComputeNormals()
 		doActionOrientNormalsMST();
 	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionOrientNormalsMST()
 {
-    if (m_selectedEntities.empty())
-    {
-        ccConsole::Error("Select at least one point cloud");
-        return;
-    }
+	if (m_selectedEntities.empty())
+	{
+		ccConsole::Error("Select at least one point cloud");
+		return;
+	}
 
 	ccProgressDialog pDlg(true,this);
 
 	bool success = false;
-    for (size_t i=0; i<m_selectedEntities.size(); i++)
-    {
-        if (!m_selectedEntities[i]->isA(CC_TYPES::POINT_CLOUD))
-            continue;
+	for (size_t i=0; i<m_selectedEntities.size(); i++)
+	{
+		if (!m_selectedEntities[i]->isA(CC_TYPES::POINT_CLOUD))
+			continue;
 
-        ccPointCloud* cloud = static_cast<ccPointCloud*>(m_selectedEntities[i]);
+		ccPointCloud* cloud = static_cast<ccPointCloud*>(m_selectedEntities[i]);
 		if (!cloud->hasNormals())
 		{
 			ccConsole::Warning(QString("Cloud '%1' has no normals!").arg(cloud->getName()));
@@ -5520,99 +5725,99 @@ void MainWindow::doActionOrientNormalsMST()
 	if (success)
 		ccLog::Warning("Normals have been oriented: you may still have to globally invert the cloud normals however (Edit > Normals > Invert).");
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionOrientNormalsFM()
 {
-    if (m_selectedEntities.empty())
-    {
-        ccConsole::Error("Select at least one point cloud");
-        return;
-    }
+	if (m_selectedEntities.empty())
+	{
+		ccConsole::Error("Select at least one point cloud");
+		return;
+	}
 
 	bool ok;
 	int value = QInputDialog::getInt(this,"Orient normals (FM)", "Octree level", 5, 1, CCLib::DgmOctree::MAX_OCTREE_LEVEL, 1, &ok);
-    if (!ok)
-        return;
+	if (!ok)
+		return;
 	assert(value >= 0 && value <= 255);
-    uchar level = static_cast<uchar>(value);
+	uchar level = static_cast<uchar>(value);
 
 	ccProgressDialog pDlg(false,this);
 
 	bool success = false;
-    for (size_t i=0; i<m_selectedEntities.size(); i++)
-    {
-        if (!m_selectedEntities[i]->isA(CC_TYPES::POINT_CLOUD))
-            continue;
+	for (size_t i=0; i<m_selectedEntities.size(); i++)
+	{
+		if (!m_selectedEntities[i]->isA(CC_TYPES::POINT_CLOUD))
+			continue;
 
-        ccPointCloud* cloud = static_cast<ccPointCloud*>(m_selectedEntities[i]);
+		ccPointCloud* cloud = static_cast<ccPointCloud*>(m_selectedEntities[i]);
 		if (!cloud->hasNormals())
 		{
 			ccConsole::Warning(QString("Cloud '%1' has no normals!").arg(cloud->getName()));
 			continue;
 		}
 
-        if (!cloud->getOctree())
+		if (!cloud->getOctree())
 		{
-            if (!cloud->computeOctree((CCLib::GenericProgressCallback*)&pDlg))
-            {
-                ccConsole::Error(QString("Could not compute octree for cloud '%1'").arg(cloud->getName()));
-                continue;
-            }
+			if (!cloud->computeOctree((CCLib::GenericProgressCallback*)&pDlg))
+			{
+				ccConsole::Error(QString("Could not compute octree for cloud '%1'").arg(cloud->getName()));
+				continue;
+			}
 		}
 
 		unsigned pointCount = cloud->size();
 
-        NormsIndexesTableType* normsIndexes = new NormsIndexesTableType;
-        if (!normsIndexes->reserve(pointCount))
+		NormsIndexesTableType* normsIndexes = new NormsIndexesTableType;
+		if (!normsIndexes->reserve(pointCount))
 		{
 			ccConsole::Error(QString("Not engouh memory! (cloud '%1')").arg(cloud->getName()));
 			continue;
 		}
 
 		//init array with current normals
-        for (unsigned j=0; j<pointCount; j++)
-        {
-            const normsType& index = cloud->getPointNormalIndex(j);
+		for (unsigned j=0; j<pointCount; j++)
+		{
+			const normsType& index = cloud->getPointNormalIndex(j);
 			normsIndexes->addElement(index);
-        }
+		}
 
 		//apply algorithm
 		ccFastMarchingForNormsDirection::ResolveNormsDirectionByFrontPropagation(cloud, normsIndexes, level, (CCLib::GenericProgressCallback*)&pDlg, cloud->getOctree());
 
 		//compress resulting normals and transfer them to the cloud
 		for (unsigned j=0; j<pointCount; j++)
-            cloud->setPointNormalIndex(j, normsIndexes->getValue(j));
+			cloud->setPointNormalIndex(j, normsIndexes->getValue(j));
 
 		normsIndexes->release();
 		normsIndexes=0;
 
 		cloud->prepareDisplayForRefresh();
 		success = true;
-    }
+	}
 
 	if (success)
 		ccLog::Warning("Normals have been oriented: you may still have to globally invert the cloud normals however (Edit > Normals > Invert).");
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 static int s_innerRectDim = 2;
 void MainWindow::doActionFindBiggestInnerRectangle()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0)
-        return;
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0)
+		return;
 
 	ccHObject* entity = m_selectedEntities.size() == 1 ? m_selectedEntities[0] : 0;
 	if (!entity || !entity->isKindOf(CC_TYPES::POINT_CLOUD))
-    {
-        ccConsole::Error("Select one point cloud!");
-        return;
-    }
+	{
+		ccConsole::Error("Select one point cloud!");
+		return;
+	}
 
 	bool ok;
 	int dim = QInputDialog::getInt(this,"Dimension","Orthogonal dim (X=0 / Y=1 / Z=2)",s_innerRectDim,0,2,1,&ok);
@@ -5637,30 +5842,30 @@ void MainWindow::doActionFindBiggestInnerRectangle()
 
 void MainWindow::doActionMatchBBCenters()
 {
-    size_t selNum = m_selectedEntities.size();
+	size_t selNum = m_selectedEntities.size();
 
-    //we need at least 2 entities
-    if (selNum < 2)
-        return;
+	//we need at least 2 entities
+	if (selNum < 2)
+		return;
 
 	//we must backup 'm_selectedEntities' as removeObjectTemporarilyFromDBTree can modify it!
 	ccHObject::Container selectedEntities = m_selectedEntities;
 
 	//by default, we take the first entity as reference
-    //TODO: maybe the user would like to select the reference himself ;)
-    ccHObject* refEnt = selectedEntities[0];
-    CCVector3 refCenter = refEnt->getBBCenter();
+	//TODO: maybe the user would like to select the reference himself ;)
+	ccHObject* refEnt = selectedEntities[0];
+	CCVector3 refCenter = refEnt->getBBCenter();
 
-    for (size_t i=1; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
-        CCVector3 center = ent->getBBCenter();
+	for (size_t i=1; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
+		CCVector3 center = ent->getBBCenter();
 
-        CCVector3 T = refCenter-center;
+		CCVector3 T = refCenter-center;
 
-        //transformation (used only for translation)
-        ccGLMatrix glTrans;
-        glTrans += T;
+		//transformation (used only for translation)
+		ccGLMatrix glTrans;
+		glTrans += T;
 
 		forceConsoleDisplay();
 		ccConsole::Print(QString("[Synchronize] Transformation matrix (%1 --> %2):").arg(ent->getName()).arg(selectedEntities[0]->getName()));
@@ -5674,69 +5879,69 @@ void MainWindow::doActionMatchBBCenters()
 		putObjectBackIntoDBTree(ent,objContext);
 
 		ent->prepareDisplayForRefresh_recursive();
-    }
+	}
 
-    zoomOnSelectedEntities();
+	zoomOnSelectedEntities();
 
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::doActionUnroll()
 {
-    //there should be only one point cloud with sensor in current selection!
-    if (m_selectedEntities.empty() || m_selectedEntities.size()>1)
-    {
-        ccConsole::Error("Select one and only one entity!");
-        return;
-    }
+	//there should be only one point cloud with sensor in current selection!
+	if (m_selectedEntities.empty() || m_selectedEntities.size()>1)
+	{
+		ccConsole::Error("Select one and only one entity!");
+		return;
+	}
 
-    //if selected entity is a mesh, the method will be applied to its vertices
+	//if selected entity is a mesh, the method will be applied to its vertices
 	bool lockedVertices;
 	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(m_selectedEntities[0],&lockedVertices);
 	if (lockedVertices)
 	{
-		DisplayLockedVerticesWarning();
+		DisplayLockedVerticesWarning(m_selectedEntities[0]->getName(),true);
 		return;
 	}
 
-    //for "real" point clouds only
-    if (!cloud || !cloud->isA(CC_TYPES::POINT_CLOUD))
-    {
-        ccConsole::Error("Method can't be applied on locked vertices or virtual point clouds!");
-        return;
-    }
-    ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+	//for "real" point clouds only
+	if (!cloud || !cloud->isA(CC_TYPES::POINT_CLOUD))
+	{
+		ccConsole::Error("Method can't be applied on locked vertices or virtual point clouds!");
+		return;
+	}
+	ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
 
-    ccUnrollDlg unrollDlg(this);
-    if (!unrollDlg.exec())
-        return;
+	ccUnrollDlg unrollDlg(this);
+	if (!unrollDlg.exec())
+		return;
 
-    int mode = unrollDlg.getType();
-    PointCoordinateType radius = static_cast<PointCoordinateType>(unrollDlg.getRadius());
-    double angle = unrollDlg.getAngle();
-    unsigned char dim = (unsigned char)unrollDlg.getAxisDimension();
-    CCVector3* pCenter = 0;
-    CCVector3 center;
-    if (mode == 1 || !unrollDlg.isAxisPositionAuto())
-    {
-        center = unrollDlg.getAxisPosition();
-        pCenter = &center;
-    }
+	int mode = unrollDlg.getType();
+	PointCoordinateType radius = static_cast<PointCoordinateType>(unrollDlg.getRadius());
+	double angle = unrollDlg.getAngle();
+	unsigned char dim = (unsigned char)unrollDlg.getAxisDimension();
+	CCVector3* pCenter = 0;
+	CCVector3 center;
+	if (mode == 1 || !unrollDlg.isAxisPositionAuto())
+	{
+		center = unrollDlg.getAxisPosition();
+		pCenter = &center;
+	}
 
-    //We apply unrolling method
-    ccProgressDialog pDlg(true,this);
+	//We apply unrolling method
+	ccProgressDialog pDlg(true,this);
 
-    if (mode == 0)
-        pc->unrollOnCylinder(radius,pCenter,dim,(CCLib::GenericProgressCallback*)&pDlg);
-    else if (mode == 1)
-        pc->unrollOnCone(radius,angle,center,dim,(CCLib::GenericProgressCallback*)&pDlg);
-    else
-        assert(false);
+	if (mode == 0)
+		pc->unrollOnCylinder(radius,pCenter,dim,(CCLib::GenericProgressCallback*)&pDlg);
+	else if (mode == 1)
+		pc->unrollOnCone(radius,angle,center,dim,(CCLib::GenericProgressCallback*)&pDlg);
+	else
+		assert(false);
 
-    ccGLWindow* win = static_cast<ccGLWindow*>(cloud->getDisplay());
-    if (win)
-        win->updateConstellationCenterAndZoom();
-    updateUI();
+	ccGLWindow* win = static_cast<ccGLWindow*>(cloud->getDisplay());
+	if (win)
+		win->updateConstellationCenterAndZoom();
+	updateUI();
 }
 
 ccGLWindow *MainWindow::getActiveGLWindow()
@@ -5744,17 +5949,17 @@ ccGLWindow *MainWindow::getActiveGLWindow()
 	if (!m_mdiArea)
 		return 0;
 
-    QMdiSubWindow *activeSubWindow = m_mdiArea->activeSubWindow();
-    if (activeSubWindow)
-        return static_cast<ccGLWindow*>(activeSubWindow->widget());
-    else
-    {
-        QList<QMdiSubWindow*> subWindowList = m_mdiArea->subWindowList();
-        if (!subWindowList.isEmpty())
-            return static_cast<ccGLWindow*>(subWindowList[0]->widget());
-    }
+	QMdiSubWindow *activeSubWindow = m_mdiArea->activeSubWindow();
+	if (activeSubWindow)
+		return static_cast<ccGLWindow*>(activeSubWindow->widget());
+	else
+	{
+		QList<QMdiSubWindow*> subWindowList = m_mdiArea->subWindowList();
+		if (!subWindowList.isEmpty())
+			return static_cast<ccGLWindow*>(subWindowList[0]->widget());
+	}
 
-    return 0;
+	return 0;
 }
 
 QMdiSubWindow* MainWindow::getMDISubWindow(ccGLWindow* win)
@@ -5778,111 +5983,131 @@ ccGLWindow* MainWindow::new3DView()
 	if (!subWindowList.isEmpty())
 		otherWin=static_cast<ccGLWindow*>(subWindowList[0]->widget());
 
-    QGLFormat format;
-    format.setSwapInterval(0);
+	QGLFormat format = QGLFormat::defaultFormat();
+	format.setStencil(false);
+	format.setSwapInterval(0);
 	ccGLWindow *view3D = new ccGLWindow(this,format,otherWin); //We share OpenGL contexts between windows!
-    view3D->setMinimumSize(400,300);
-    view3D->resize(500,400);
+	view3D->setMinimumSize(400,300);
+	view3D->resize(500,400);
 
-    m_mdiArea->addSubWindow(view3D);
+	m_mdiArea->addSubWindow(view3D);
 
-    connect(view3D,	SIGNAL(entitySelectionChanged(int)),				m_ccRoot,	SLOT(selectEntity(int)));
-    connect(view3D,	SIGNAL(entitiesSelectionChanged(std::set<int>)),	m_ccRoot,	SLOT(selectEntities(std::set<int>)));
+	connect(view3D,	SIGNAL(entitySelectionChanged(int)),				m_ccRoot,	SLOT(selectEntity(int)));
+	connect(view3D,	SIGNAL(entitiesSelectionChanged(std::set<int>)),	m_ccRoot,	SLOT(selectEntities(std::set<int>)));
 
 	//'echo' mode
-    connect(view3D,	SIGNAL(mouseWheelRotated(float)),				this,       SLOT(echoMouseWheelRotate(float)));
-    connect(view3D,	SIGNAL(cameraDisplaced(float,float)),			this,       SLOT(echoCameraDisplaced(float,float)));
-    connect(view3D,	SIGNAL(viewMatRotated(const ccGLMatrix&)),		this,       SLOT(echoBaseViewMatRotation(const ccGLMatrix&)));
-    connect(view3D,	SIGNAL(cameraPosChanged(const CCVector3&)),		this,       SLOT(echoCameraPosChanged(const CCVector3&)));
-    connect(view3D,	SIGNAL(pivotPointChanged(const CCVector3&)),	this,       SLOT(echoPivotPointChanged(const CCVector3&)));
-    connect(view3D,	SIGNAL(pixelSizeChanged(float)),				this,       SLOT(echoPixelSizeChanged(float)));
+	connect(view3D,	SIGNAL(mouseWheelRotated(float)),					this,		SLOT(echoMouseWheelRotate(float)));
+	connect(view3D,	SIGNAL(cameraDisplaced(float,float)),				this,		SLOT(echoCameraDisplaced(float,float)));
+	connect(view3D,	SIGNAL(viewMatRotated(const ccGLMatrixd&)),			this,		SLOT(echoBaseViewMatRotation(const ccGLMatrixd&)));
+	connect(view3D,	SIGNAL(cameraPosChanged(const CCVector3d&)),		this,		SLOT(echoCameraPosChanged(const CCVector3d&)));
+	connect(view3D,	SIGNAL(pivotPointChanged(const CCVector3d&)),		this,		SLOT(echoPivotPointChanged(const CCVector3d&)));
+	connect(view3D,	SIGNAL(pixelSizeChanged(float)),					this,		SLOT(echoPixelSizeChanged(float)));
 
-    connect(view3D,	SIGNAL(destroyed(QObject*)),					this,       SLOT(prepareWindowDeletion(QObject*)));
-    connect(view3D,	SIGNAL(filesDropped(const QStringList&)),		this,       SLOT(addToDBAuto(const QStringList&)));
-    connect(view3D,	SIGNAL(newLabel(ccHObject*)),					this,       SLOT(handleNewLabel(ccHObject*)));
+	connect(view3D,	SIGNAL(destroyed(QObject*)),						this,		SLOT(prepareWindowDeletion(QObject*)));
+	connect(view3D,	SIGNAL(filesDropped(const QStringList&)),			this,		SLOT(addToDBAuto(const QStringList&)));
+	connect(view3D,	SIGNAL(newLabel(ccHObject*)),						this,		SLOT(handleNewLabel(ccHObject*)));
 
 	view3D->setSceneDB(m_ccRoot->getRootEntity());
-    view3D->setAttribute(Qt::WA_DeleteOnClose);
-    m_ccRoot->updatePropertiesView();
+	view3D->setAttribute(Qt::WA_DeleteOnClose);
+	m_ccRoot->updatePropertiesView();
 
-    QMainWindow::statusBar()->showMessage(QString("New 3D View"), 2000);
+	QMainWindow::statusBar()->showMessage(QString("New 3D View"), 2000);
 
-    view3D->showMaximized();
+	view3D->showMaximized();
 
 	return view3D;
 }
 
 void MainWindow::prepareWindowDeletion(QObject* glWindow)
 {
-    if (!m_ccRoot)
-        return;
+	if (!m_ccRoot)
+		return;
 
-    //we assume only ccGLWindow can be connected to this slot!
-    ccGLWindow* win = qobject_cast<ccGLWindow*>(glWindow);
+	//we assume only ccGLWindow can be connected to this slot!
+	ccGLWindow* win = qobject_cast<ccGLWindow*>(glWindow);
 
-    m_ccRoot->hidePropertiesView();
-    m_ccRoot->getRootEntity()->removeFromDisplay_recursive(win);
-    m_ccRoot->updatePropertiesView();
+	m_ccRoot->hidePropertiesView();
+	m_ccRoot->getRootEntity()->removeFromDisplay_recursive(win);
+	m_ccRoot->updatePropertiesView();
+}
+
+static bool s_autoSaveGuiElementPos = true;
+void MainWindow::doActionResetGUIElementsPos()
+{
+	QSettings settings;
+	settings.remove(s_psMainWinGeom);
+	settings.remove(s_psMainWinState);
+
+	QMessageBox::information(this,"Restart","To finish the process, you'll have to close and restart CloudCompare");
+
+	//to avoid saving them right away!
+	s_autoSaveGuiElementPos = false;
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    //if (m_uiFrozen)
-    //{
-    //    ccConsole::Error("Close current dialog/interactor first!");
-    //    event->ignore();
-    //}
-    //else
-    {
-		if (m_ccRoot && m_ccRoot->getRootEntity()->getChildrenNumber() == 0
+	//if (m_uiFrozen)
+	//{
+	//	ccConsole::Error("Close current dialog/interactor first!");
+	//	event->ignore();
+	//}
+	//else
+	{
+		if ((m_ccRoot && m_ccRoot->getRootEntity()->getChildrenNumber() == 0)
 			|| QMessageBox::question(	this,
 										"Quit",
 										"Are you sure you want to quit?",
 										QMessageBox::Ok,QMessageBox::Cancel ) != QMessageBox::Cancel)
 		{
-            event->accept();
-        }
-        else
-        {
-            event->ignore();
-        }
-    }
+			event->accept();
+		}
+		else
+		{
+			event->ignore();
+		}
+	}
 
-    //save the state as settings
-    QSettings settings;
-    settings.setValue("mainWindowGeometry", saveGeometry());
-    settings.setValue("mainWindowState", saveState());
+	if (s_autoSaveGuiElementPos)
+		saveGUIElementsPos();
+}
+
+void MainWindow::saveGUIElementsPos()
+{
+	//save the state as settings
+	QSettings settings;
+	settings.setValue(s_psMainWinGeom, saveGeometry());
+	settings.setValue(s_psMainWinState, saveState());
 }
 
 void MainWindow::moveEvent(QMoveEvent* event)
 {
-    QMainWindow::moveEvent(event);
+	QMainWindow::moveEvent(event);
 
-    updateMDIDialogsPlacement();
+	updateMDIDialogsPlacement();
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
 {
-    QMainWindow::resizeEvent(event);
+	QMainWindow::resizeEvent(event);
 
-    updateMDIDialogsPlacement();
+	updateMDIDialogsPlacement();
 }
 
 void MainWindow::registerMDIDialog(ccOverlayDialog* dlg, Qt::Corner pos)
 {
-    //check for existence
-    for (size_t i=0; i<m_mdiDialogs.size(); ++i)
-    {
-        if (m_mdiDialogs[i].dialog == dlg)
-        {
-            //we only update position in this case
-            m_mdiDialogs[i].position = pos;
-            return;
-        }
-    }
+	//check for existence
+	for (size_t i=0; i<m_mdiDialogs.size(); ++i)
+	{
+		if (m_mdiDialogs[i].dialog == dlg)
+		{
+			//we only update position in this case
+			m_mdiDialogs[i].position = pos;
+			return;
+		}
+	}
 
-    //otherwise we add it to DB
-    m_mdiDialogs.push_back(ccMDIDialogs(dlg,pos));
+	//otherwise we add it to DB
+	m_mdiDialogs.push_back(ccMDIDialogs(dlg,pos));
 }
 
 void MainWindow::unregisterMDIDialog(ccOverlayDialog* dlg)
@@ -5903,47 +6128,47 @@ void MainWindow::unregisterMDIDialog(ccOverlayDialog* dlg)
 
 void MainWindow::placeMDIDialog(ccMDIDialogs& mdiDlg)
 {
-    if (!mdiDlg.dialog || !mdiDlg.dialog->isVisible() || !m_mdiArea)
-        return;
+	if (!mdiDlg.dialog || !mdiDlg.dialog->isVisible() || !m_mdiArea)
+		return;
 
-    int dx=0,dy=0;
-    switch (mdiDlg.position)
-    {
-    case Qt::TopLeftCorner:
-        dx = 5;
-        dy = 5;
-        break;
-    case Qt::TopRightCorner:
-        dx = std::max(5,m_mdiArea->width() - mdiDlg.dialog->width() - 5);
-        dy = 5;
-        break;
-    case Qt::BottomLeftCorner:
-        dx = 5;
-        dy = std::max(5,m_mdiArea->height() - mdiDlg.dialog->height() - 5);
-        break;
-    case Qt::BottomRightCorner:
-        dx = std::max(5,m_mdiArea->width() - mdiDlg.dialog->width() - 5);
-        dy = std::max(5,m_mdiArea->height() - mdiDlg.dialog->height() - 5);
-        break;
-    }
+	int dx=0,dy=0;
+	switch (mdiDlg.position)
+	{
+	case Qt::TopLeftCorner:
+		dx = 5;
+		dy = 5;
+		break;
+	case Qt::TopRightCorner:
+		dx = std::max(5,m_mdiArea->width() - mdiDlg.dialog->width() - 5);
+		dy = 5;
+		break;
+	case Qt::BottomLeftCorner:
+		dx = 5;
+		dy = std::max(5,m_mdiArea->height() - mdiDlg.dialog->height() - 5);
+		break;
+	case Qt::BottomRightCorner:
+		dx = std::max(5,m_mdiArea->width() - mdiDlg.dialog->width() - 5);
+		dy = std::max(5,m_mdiArea->height() - mdiDlg.dialog->height() - 5);
+		break;
+	}
 
 	//show();
-   mdiDlg.dialog->move(m_mdiArea->mapToGlobal(QPoint(dx,dy)));
-   mdiDlg.dialog->raise();
+	mdiDlg.dialog->move(m_mdiArea->mapToGlobal(QPoint(dx,dy)));
+	mdiDlg.dialog->raise();
 }
 
 void MainWindow::updateMDIDialogsPlacement()
 {
-    for (size_t i=0; i<m_mdiDialogs.size(); ++i)
-        placeMDIDialog(m_mdiDialogs[i]);
+	for (size_t i=0; i<m_mdiDialogs.size(); ++i)
+		placeMDIDialog(m_mdiDialogs[i]);
 }
 
 void MainWindow::toggleFullScreen(bool state)
 {
-    if (state)
-        showFullScreen();
-    else
-        showNormal();
+	if (state)
+		showFullScreen();
+	else
+		showNormal();
 }
 
 void MainWindow::about()
@@ -5970,69 +6195,69 @@ void MainWindow::about()
 void MainWindow::help()
 {
 	QFile doc(QApplication::applicationDirPath()+QString("/user_guide_CloudCompare.pdf"));
-    if (!doc.open(QIODevice::ReadOnly))
+	if (!doc.open(QIODevice::ReadOnly))
 	{
-        QMessageBox::warning(	this,
+		QMessageBox::warning(	this,
 								QString("User guide not found"),
 								QString("Goto http://www.cloudcompare.org/documentation.html") );
 	}
-    else
-    {
-        QString program = "AcroRd32.exe";
-        QStringList arguments;
-        arguments << "user_guide_CloudCompare.pdf";
-        QProcess *myProcess = new QProcess();
-        myProcess->start(program, arguments);
-    }
+	else
+	{
+		QString program = "AcroRd32.exe";
+		QStringList arguments;
+		arguments << "user_guide_CloudCompare.pdf";
+		QProcess *myProcess = new QProcess();
+		myProcess->start(program, arguments);
+	}
 }
 
 void MainWindow::freezeUI(bool state)
 {
-    toolBarMainTools->setDisabled(state);
-    toolBarSFTools->setDisabled(state);
-    toolBarPluginTools->setDisabled(state);
+	toolBarMainTools->setDisabled(state);
+	toolBarSFTools->setDisabled(state);
+	toolBarPluginTools->setDisabled(state);
 	toolBarGLFilters->setDisabled(state);
 
-    //toolBarView->setDisabled(state);
-    DockableDBTree->setDisabled(state);
-    menubar->setDisabled(state);
+	//toolBarView->setDisabled(state);
+	DockableDBTree->setDisabled(state);
+	menubar->setDisabled(state);
 
-    if (state)
-    {
-        menuEdit->setDisabled(true);
-        menuTools->setDisabled(true);
-    }
-    else
-    {
-        updateMenus();
-    }
+	if (state)
+	{
+		menuEdit->setDisabled(true);
+		menuTools->setDisabled(true);
+	}
+	else
+	{
+		updateMenus();
+	}
 
-    m_uiFrozen = state;
+	m_uiFrozen = state;
 }
 
 void MainWindow::activateRegisterPointPairTool()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0 || selNum > 2)
-    {
-        ccConsole::Error("Select one or two entities (point cloud or mesh)!");
-        return;
-    }
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0 || selNum > 2)
+	{
+		ccConsole::Error("Select one or two entities (point cloud or mesh)!");
+		return;
+	}
 
 	bool lockedVertices1 = false;
 	ccGenericPointCloud* cloud1 = ccHObjectCaster::ToGenericPointCloud(m_selectedEntities[0],&lockedVertices1);
 	bool lockedVertices2 = false;
 	ccGenericPointCloud* cloud2 = (m_selectedEntities.size()>1 ? ccHObjectCaster::ToGenericPointCloud(m_selectedEntities[1],&lockedVertices2) : 0);
-    if (!cloud1 || (m_selectedEntities.size()>1 && !cloud2))
-    {
-        ccConsole::Error("Select point clouds or meshes only!");
-        return;
-    }
+	if (!cloud1 || (m_selectedEntities.size()>1 && !cloud2))
+	{
+		ccConsole::Error("Select point clouds or meshes only!");
+		return;
+	}
 	if (lockedVertices1 || lockedVertices2)
 	{
-		DisplayLockedVerticesWarning();
-        //ccConsole::Error("At least one vertex set is locked (you should select the 'vertices' entity directly!)");
-        return;
+		DisplayLockedVerticesWarning(lockedVertices1 ? m_selectedEntities[0]->getName() : m_selectedEntities[1]->getName(),true);
+		//ccConsole::Error("At least one vertex set is locked (you should select the 'vertices' entity directly!)");
+		return;
 	}
 
 	ccGenericPointCloud* aligned = cloud1;
@@ -6052,14 +6277,14 @@ void MainWindow::activateRegisterPointPairTool()
 	}
 
 	//we disable all windows
-    disableAllBut(0);
+	disableAllBut(0);
 
 	if (!m_pprDlg)
-    {
-        m_pprDlg = new ccPointPairRegistrationDlg(this);
-        connect(m_pprDlg, SIGNAL(processFinished(bool)), this, SLOT(deactivateRegisterPointPairTool(bool)));
-        registerMDIDialog(m_pprDlg,Qt::TopRightCorner);
-    }
+	{
+		m_pprDlg = new ccPointPairRegistrationDlg(this);
+		connect(m_pprDlg, SIGNAL(processFinished(bool)), this, SLOT(deactivateRegisterPointPairTool(bool)));
+		registerMDIDialog(m_pprDlg,Qt::TopRightCorner);
+	}
 
 	ccGLWindow* win = new3DView();
 	if (!win)
@@ -6071,12 +6296,12 @@ void MainWindow::activateRegisterPointPairTool()
 	if (!m_pprDlg->init(win,aligned,reference))
 		deactivateRegisterPointPairTool(false);
 
-    freezeUI(true);
+	freezeUI(true);
 
-    if (!m_pprDlg->start())
-        deactivateRegisterPointPairTool(false);
-    else
-        updateMDIDialogsPlacement();
+	if (!m_pprDlg->start())
+		deactivateRegisterPointPairTool(false);
+	else
+		updateMDIDialogsPlacement();
 }
 
 void MainWindow::deactivateRegisterPointPairTool(bool state)
@@ -6085,7 +6310,7 @@ void MainWindow::deactivateRegisterPointPairTool(bool state)
 		m_pprDlg->clear();
 
 	//we enable all GL windows
-    enableAll();
+	enableAll();
 
 	QList<QMdiSubWindow*> subWindowList = m_mdiArea->subWindowList();
 	if (!subWindowList.isEmpty())
@@ -6093,7 +6318,7 @@ void MainWindow::deactivateRegisterPointPairTool(bool state)
 
 	freezeUI(false);
 
-    updateUI();
+	updateUI();
 
 	ccGLWindow* win = getActiveGLWindow();
 	if (win)
@@ -6102,53 +6327,53 @@ void MainWindow::deactivateRegisterPointPairTool(bool state)
 
 void MainWindow::activateSegmentationMode()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0)
-        return;
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0)
+		return;
 
-    if (!m_gsTool)
-    {
-        m_gsTool = new ccGraphicalSegmentationTool(this);
-        connect(m_gsTool, SIGNAL(processFinished(bool)), this, SLOT(deactivateSegmentationMode(bool)));
+	if (!m_gsTool)
+	{
+		m_gsTool = new ccGraphicalSegmentationTool(this);
+		connect(m_gsTool, SIGNAL(processFinished(bool)), this, SLOT(deactivateSegmentationMode(bool)));
 
-        registerMDIDialog(m_gsTool,Qt::TopRightCorner);
-    }
+		registerMDIDialog(m_gsTool,Qt::TopRightCorner);
+	}
 
-    m_gsTool->linkWith(win);
+	m_gsTool->linkWith(win);
 
-    for (size_t i=0; i<selNum; ++i)
-        m_gsTool->addEntity(m_selectedEntities[i]);
+	for (size_t i=0; i<selNum; ++i)
+		m_gsTool->addEntity(m_selectedEntities[i]);
 
-    if (m_gsTool->getNumberOfValidEntities() == 0)
-    {
-        ccConsole::Error("No segmentable entity in active window!");
-        return;
-    }
+	if (m_gsTool->getNumberOfValidEntities() == 0)
+	{
+		ccConsole::Error("No segmentable entity in active window!");
+		return;
+	}
 
-    freezeUI(true);
-    toolBarView->setDisabled(false);
+	freezeUI(true);
+	toolBarView->setDisabled(false);
 
-    //we disable all other windows
-    disableAllBut(win);
+	//we disable all other windows
+	disableAllBut(win);
 
-    if (!m_gsTool->start())
-        deactivateSegmentationMode(false);
-    else
-        updateMDIDialogsPlacement();
+	if (!m_gsTool->start())
+		deactivateSegmentationMode(false);
+	else
+		updateMDIDialogsPlacement();
 }
 
 void MainWindow::deactivateSegmentationMode(bool state)
 {
 	bool deleteHiddenParts = false;
 
-    //shall we apply segmentation?
-    if (state)
-    {
-        ccHObject* firstResult = 0;
+	//shall we apply segmentation?
+	if (state)
+	{
+		ccHObject* firstResult = 0;
 
 		deleteHiddenParts = m_gsTool->deleteHiddenParts();
 
@@ -6156,10 +6381,10 @@ void MainWindow::deactivateSegmentationMode(bool state)
 		std::set<ccGenericPointCloud*> verticesToReset;
 
 		for (std::set<ccHObject*>::const_iterator p = m_gsTool->entities().begin(); p != m_gsTool->entities().end(); ++p)
-        {
-            ccHObject* entity = *p;
+		{
+			ccHObject* entity = *p;
 
-            if (entity->isKindOf(CC_TYPES::POINT_CLOUD) || entity->isKindOf(CC_TYPES::MESH))
+			if (entity->isKindOf(CC_TYPES::POINT_CLOUD) || entity->isKindOf(CC_TYPES::MESH))
 			{
 				//Special case: labels (do this before temporarily removing 'entity' from DB!)
 				bool lockedVertices;
@@ -6236,6 +6461,36 @@ void MainWindow::deactivateSegmentationMode(bool state)
 						if (entity)
 						{
 							entity->setName(entity->getName()+QString(".remaining"));
+
+							//we also need to check if there is a childrent that is a GBLsensor
+							unsigned n = entity->getChildrenNumber();
+
+							//we put a new sensor here if we find one
+							ccGBLSensor* sensor = 0;
+							for (unsigned i=0; i<n; ++i)
+							{
+								if (entity->getChild(i)->isA(CC_TYPES::GBL_SENSOR))
+								{
+									sensor = ccHObjectCaster::ToGBLSensor(entity->getChild(i));
+									break;
+								}
+							}
+
+							if (sensor)
+							{
+								//we create a copy of that
+								ccGBLSensor * cloned_sensor = new ccGBLSensor(*sensor);
+
+								ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(segmentationResult);
+
+								int errorCode;
+								cloned_sensor->project(cloud,errorCode,true);
+
+								// we need also to do the same for the original cloud
+								sensor->project(ccHObjectCaster::ToGenericPointCloud(entity), errorCode, true);
+
+								cloud->addChild(cloned_sensor);
+							}
 							putObjectBackIntoDBTree(entity,objContext);
 						}
 					}
@@ -6287,7 +6542,7 @@ void MainWindow::deactivateSegmentationMode(bool state)
 					putObjectBackIntoDBTree(entity,objContext);
 				}
 			}
-        }
+		}
 
 		//specific actions
 		{
@@ -6297,165 +6552,165 @@ void MainWindow::deactivateSegmentationMode(bool state)
 			}
 		}
 
-        if (firstResult && m_ccRoot)
-            m_ccRoot->selectEntity(firstResult);
-    }
+		if (firstResult && m_ccRoot)
+			m_ccRoot->selectEntity(firstResult);
+	}
 
-    if (m_gsTool)
+	if (m_gsTool)
 		m_gsTool->removeAllEntities(!deleteHiddenParts);
 
-    //we enable all GL windows
-    enableAll();
+	//we enable all GL windows
+	enableAll();
 
-    freezeUI(false);
+	freezeUI(false);
 
-    updateUI();
+	updateUI();
 
 	ccGLWindow* win = getActiveGLWindow();
-    if (win)
+	if (win)
 		win->redraw();
 }
 
 void MainWindow::activatePointListPickingMode()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
-    //there should be only one point cloud in current selection!
-    if (m_selectedEntities.empty() || m_selectedEntities.size()>1)
-    {
-        ccConsole::Error("Select one and only one entity!");
-        return;
-    }
+	//there should be only one point cloud in current selection!
+	if (m_selectedEntities.empty() || m_selectedEntities.size()>1)
+	{
+		ccConsole::Error("Select one and only one entity!");
+		return;
+	}
 
 	ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_selectedEntities[0]);
 	if (!pc)
-    {
-        ccConsole::Error("Wrong type of entity");
-        return;
-    }
+	{
+		ccConsole::Error("Wrong type of entity");
+		return;
+	}
 
 	if (!pc->isVisible() || !pc->isEnabled())
 	{
-        ccConsole::Error("Points must be visible!");
-        return;
+		ccConsole::Error("Points must be visible!");
+		return;
 	}
 
-    if (!m_plpDlg)
-    {
-        m_plpDlg = new ccPointListPickingDlg(this);
-        connect(m_plpDlg, SIGNAL(processFinished(bool)),  this, SLOT(deactivatePointListPickingMode(bool)));
+	if (!m_plpDlg)
+	{
+		m_plpDlg = new ccPointListPickingDlg(this);
+		connect(m_plpDlg, SIGNAL(processFinished(bool)), this, SLOT(deactivatePointListPickingMode(bool)));
 
-        registerMDIDialog(m_plpDlg,Qt::TopRightCorner);
-    }
+		registerMDIDialog(m_plpDlg,Qt::TopRightCorner);
+	}
 
 	//DGM: we must update marker size spin box value (as it may have changed by the user with the "display dialog")
 	m_plpDlg->markerSizeSpinBox->setValue(win->getDisplayParameters().pickedPointsSize);
 
-    m_plpDlg->linkWith(win);
+	m_plpDlg->linkWith(win);
 	m_plpDlg->linkWithCloud(pc);
 
-    freezeUI(true);
+	freezeUI(true);
 
-    //we disable all other windows
-    disableAllBut(win);
+	//we disable all other windows
+	disableAllBut(win);
 
-    if (!m_plpDlg->start())
-        deactivatePointListPickingMode(false);
-    else
-        updateMDIDialogsPlacement();
+	if (!m_plpDlg->start())
+		deactivatePointListPickingMode(false);
+	else
+		updateMDIDialogsPlacement();
 }
 
 void MainWindow::deactivatePointListPickingMode(bool state)
 {
-    if (m_plpDlg)
+	if (m_plpDlg)
 	{
-        //m_plpDlg->linkWith(0);
+		//m_plpDlg->linkWith(0);
 		m_plpDlg->linkWithCloud(0);
 	}
 
-    //we enable all GL windows
-    enableAll();
+	//we enable all GL windows
+	enableAll();
 
-    freezeUI(false);
+	freezeUI(false);
 
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::activatePointPickingMode()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
 	if (m_ccRoot)
 		m_ccRoot->unselectAllEntities(); //we don't want any entity selected (especially existing labels!)
 
-    if (!m_ppDlg)
-    {
-        m_ppDlg = new ccPointPropertiesDlg(this);
-        connect(m_ppDlg, SIGNAL(processFinished(bool)),	this, SLOT(deactivatePointPickingMode(bool)));
-        connect(m_ppDlg, SIGNAL(newLabel(ccHObject*)),	this, SLOT(handleNewLabel(ccHObject*)));
+	if (!m_ppDlg)
+	{
+		m_ppDlg = new ccPointPropertiesDlg(this);
+		connect(m_ppDlg, SIGNAL(processFinished(bool)),	this, SLOT(deactivatePointPickingMode(bool)));
+		connect(m_ppDlg, SIGNAL(newLabel(ccHObject*)),	this, SLOT(handleNewLabel(ccHObject*)));
 
-        registerMDIDialog(m_ppDlg,Qt::TopRightCorner);
-    }
+		registerMDIDialog(m_ppDlg,Qt::TopRightCorner);
+	}
 
-    m_ppDlg->linkWith(win);
+	m_ppDlg->linkWith(win);
 
-    freezeUI(true);
+	freezeUI(true);
 
-    //we disable all other windows
-    disableAllBut(win);
+	//we disable all other windows
+	disableAllBut(win);
 
-    if (!m_ppDlg->start())
-        deactivatePointPickingMode(false);
-    else
-        updateMDIDialogsPlacement();
+	if (!m_ppDlg->start())
+		deactivatePointPickingMode(false);
+	else
+		updateMDIDialogsPlacement();
 }
 
 void MainWindow::deactivatePointPickingMode(bool state)
 {
-    //if (m_ppDlg)
-    //    m_ppDlg->linkWith(0);
+	//if (m_ppDlg)
+	//	m_ppDlg->linkWith(0);
 
-    //we enable all GL windows
-    enableAll();
+	//we enable all GL windows
+	enableAll();
 
-    freezeUI(false);
+	freezeUI(false);
 
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::activateClippingBoxMode()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0)
-        return;
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0)
+		return;
 
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
-    if (!m_clipTool)
-        m_clipTool = new ccClippingBoxTool(this);
+	if (!m_clipTool)
+		m_clipTool = new ccClippingBoxTool(this);
 	m_clipTool->linkWith(win);
 
 	ccHObject* entity = m_selectedEntities[0];
 	if (!m_clipTool->setAssociatedEntity(entity))
-    {
-        ccConsole::Error("Select a point cloud!");
-        return;
-    }
+	{
+		ccConsole::Error("Select a point cloud!");
+		return;
+	}
 
-    if (m_clipTool->start())
+	if (m_clipTool->start())
 	{
 		//automatically deselect the entity (to avoid seeing its bounding box ;)
 		m_ccRoot->unselectEntity(entity);
 		connect(m_clipTool, SIGNAL(processFinished(bool)), this, SLOT(deactivateClippingBoxMode(bool)));
 		registerMDIDialog(m_clipTool,Qt::TopRightCorner);
 		freezeUI(true);
-        updateMDIDialogsPlacement();
+		updateMDIDialogsPlacement();
 		//deactivate all other GL windows
 		disableAllBut(win);
 	}
@@ -6467,54 +6722,54 @@ void MainWindow::activateClippingBoxMode()
 
 void MainWindow::deactivateClippingBoxMode(bool state)
 {
-    //we reactivate all GL windows
-    enableAll();
+	//we reactivate all GL windows
+	enableAll();
 
-    freezeUI(false);
+	freezeUI(false);
 
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::activateTranslateRotateMode()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0)
-        return;
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0)
+		return;
 
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
-    if (!m_transTool)
-        m_transTool = new ccGraphicalTransformationTool(this);
+	if (!m_transTool)
+		m_transTool = new ccGraphicalTransformationTool(this);
 	assert(m_transTool->getNumberOfValidEntities() == 0);
 	m_transTool->linkWith(win);
 
 	bool rejectedEntities = false;
-    for (size_t i=0; i<selNum;++i)
-    {
-        ccHObject* entity = m_selectedEntities[i];
+	for (size_t i=0; i<selNum;++i)
+	{
+		ccHObject* entity = m_selectedEntities[i];
 		if (!m_transTool->addEntity(entity))
 			rejectedEntities = true;
-    }
-
-    if (m_transTool->getNumberOfValidEntities() == 0)
-    {
-        ccConsole::Error("No entity elligible for manual transformation! (see console)");
-        return;
-    }
-	else if (rejectedEntities)
-	{
-        ccConsole::Error("Some entities were ingored! (see console)");
 	}
 
-    //try to activate "moving mode" in current GL window
-    if (m_transTool->start())
+	if (m_transTool->getNumberOfValidEntities() == 0)
+	{
+		ccConsole::Error("No entity elligible for manual transformation! (see console)");
+		return;
+	}
+	else if (rejectedEntities)
+	{
+		ccConsole::Error("Some entities were ingored! (see console)");
+	}
+
+	//try to activate "moving mode" in current GL window
+	if (m_transTool->start())
 	{
 		connect(m_transTool, SIGNAL(processFinished(bool)), this, SLOT(deactivateTranslateRotateMode(bool)));
 		registerMDIDialog(m_transTool,Qt::TopRightCorner);
 		freezeUI(true);
-        updateMDIDialogsPlacement();
+		updateMDIDialogsPlacement();
 		//deactivate all other GL windows
 		disableAllBut(win);
 	}
@@ -6529,75 +6784,75 @@ void MainWindow::deactivateTranslateRotateMode(bool state)
 	//if (m_transTool)
 	//	m_transTool->close();
 
-    //we reactivate all GL windows
-    enableAll();
+	//we reactivate all GL windows
+	enableAll();
 
-    freezeUI(false);
+	freezeUI(false);
 
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::testFrameRate()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->testFrameRate();
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->testFrameRate();
 }
 
 void MainWindow::setTopView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_TOP_VIEW);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_TOP_VIEW);
 }
 
 void MainWindow::setBottomView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_BOTTOM_VIEW);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_BOTTOM_VIEW);
 }
 
 void MainWindow::setFrontView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_FRONT_VIEW);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_FRONT_VIEW);
 }
 
 void MainWindow::setBackView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_BACK_VIEW);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_BACK_VIEW);
 }
 
 void MainWindow::setLeftView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_LEFT_VIEW);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_LEFT_VIEW);
 }
 
 void MainWindow::setRightView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_RIGHT_VIEW);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_RIGHT_VIEW);
 }
 
 void MainWindow::setIsoView1()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_ISO_VIEW_1);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_ISO_VIEW_1);
 }
 
 void MainWindow::setIsoView2()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setView(CC_ISO_VIEW_2);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setView(CC_ISO_VIEW_2);
 }
 
 void MainWindow::setLightsAndMaterials()
@@ -6612,47 +6867,47 @@ void MainWindow::setLightsAndMaterials()
 
 void MainWindow::doActionRenderToFile()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
-    ccRenderToFileDlg rtfDlg(win->width(),win->height(),this);
+	ccRenderToFileDlg rtfDlg(win->width(),win->height(),this);
 
-    if (rtfDlg.exec())
-    {
-        QApplication::processEvents();
+	if (rtfDlg.exec())
+	{
+		QApplication::processEvents();
 		win->renderToFile(qPrintable(rtfDlg.getFilename()),rtfDlg.getZoom(),rtfDlg.dontScalePoints(),rtfDlg.renderOverlayItems());
-    }
+	}
 }
 
 void MainWindow::doActionEditCamera()
 {
-    //current active MDI area
-    QMdiSubWindow* qWin = m_mdiArea->activeSubWindow();
-    if (!qWin)
-        return;
+	//current active MDI area
+	QMdiSubWindow* qWin = m_mdiArea->activeSubWindow();
+	if (!qWin)
+		return;
 
-    if (!m_cpeDlg)
-    {
-        m_cpeDlg = new ccCameraParamEditDlg(qWin);
+	if (!m_cpeDlg)
+	{
+		m_cpeDlg = new ccCameraParamEditDlg(qWin);
 		//m_cpeDlg->makeFrameless(); //does not work on linux
-        m_cpeDlg->linkWith(qWin);
-        connect(m_mdiArea, SIGNAL(subWindowActivated(QMdiSubWindow*)), m_cpeDlg, SLOT(linkWith(QMdiSubWindow*)));
+		m_cpeDlg->linkWith(qWin);
+		connect(m_mdiArea, SIGNAL(subWindowActivated(QMdiSubWindow*)), m_cpeDlg, SLOT(linkWith(QMdiSubWindow*)));
 
-        registerMDIDialog(m_cpeDlg,Qt::BottomLeftCorner);
-    }
+		registerMDIDialog(m_cpeDlg,Qt::BottomLeftCorner);
+	}
 
-    m_cpeDlg->start();
+	m_cpeDlg->start();
 
-    updateMDIDialogsPlacement();
+	updateMDIDialogsPlacement();
 }
 
 void MainWindow::doActionAdjustZoom()
 {
-    //current active MDI area
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	//current active MDI area
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
 	const ccViewportParameters& params = win->getViewportParameters();
 	if (params.perspectiveView)
@@ -6675,9 +6930,9 @@ void MainWindow::doActionAdjustZoom()
 static unsigned s_viewportIndex = 0;
 void MainWindow::doActionSaveViewportAsCamera()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
-        return;
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
+		return;
 
 	cc2DViewportObject* viewportObject = new cc2DViewportObject(QString("Viewport #%1").arg(++s_viewportIndex));
 	viewportObject->setParameters(win->getViewportParameters());
@@ -6688,19 +6943,19 @@ void MainWindow::doActionSaveViewportAsCamera()
 
 void MainWindow::setGlobalZoom()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->zoomGlobal();
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->zoomGlobal();
 }
 
 void MainWindow::zoomOnSelectedEntities()
 {
-    ccGLWindow* win = 0;
+	ccGLWindow* win = 0;
 
-    ccHObject tempGroup("TempGroup");
-    size_t selNum = m_selectedEntities.size();
-    for (size_t i=0; i<selNum; ++i)
-    {
+	ccHObject tempGroup("TempGroup");
+	size_t selNum = m_selectedEntities.size();
+	for (size_t i=0; i<selNum; ++i)
+	{
 		if (i == 0 || !win)
 		{
 			//take the first valid window as reference
@@ -6719,99 +6974,117 @@ void MainWindow::zoomOnSelectedEntities()
 				return;
 			}
 		}
-    }
+	}
 
-    if (tempGroup.getChildrenNumber() != 0)
-    {
-        ccBBox box = tempGroup.getBB(false, false, win);
-        win->updateConstellationCenterAndZoom(&box);
-    }
+	if (tempGroup.getChildrenNumber() != 0)
+	{
+		ccBBox box = tempGroup.getBB(false, false, win);
+		win->updateConstellationCenterAndZoom(&box);
+	}
 
-    refreshAll();
+	refreshAll();
 }
 
 void MainWindow::setPivotAlwaysOn()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
 		win->setPivotVisibility(ccGLWindow::PIVOT_ALWAYS_SHOW);
-        win->redraw();
+		win->redraw();
 
 		//update pop-up menu 'top' icon
 		if (m_pivotVisibilityPopupButton)
 			m_pivotVisibilityPopupButton->setIcon(actionSetPivotAlwaysOn->icon());
-    }
+	}
 }
 
 void MainWindow::setPivotRotationOnly()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
 		win->setPivotVisibility(ccGLWindow::PIVOT_SHOW_ON_MOVE);
-        win->redraw();
+		win->redraw();
 
 		//update pop-up menu 'top' icon
 		if (m_pivotVisibilityPopupButton)
 			m_pivotVisibilityPopupButton->setIcon(actionSetPivotRotationOnly->icon());
-    }
+	}
 }
 
 void MainWindow::setPivotOff()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
 		win->setPivotVisibility(ccGLWindow::PIVOT_HIDE);
-        win->redraw();
+		win->redraw();
 
 		//update pop-up menu 'top' icon
 		if (m_pivotVisibilityPopupButton)
 			m_pivotVisibilityPopupButton->setIcon(actionSetPivotOff->icon());
-    }
+	}
 }
 
 void MainWindow::setOrthoView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->setPerspectiveState(false,true);
-        win->redraw();
+	setOrthoView(getActiveGLWindow());
+}
+
+void MainWindow::setOrthoView(ccGLWindow* win)
+{
+	if (win)
+	{
+		win->setPerspectiveState(false,true);
+		win->redraw();
 
 		//update pop-up menu 'top' icon
 		if (m_viewModePopupButton)
 			m_viewModePopupButton->setIcon(actionSetOrthoView->icon());
-    }
+		if (m_pivotVisibilityPopupButton)
+			m_pivotVisibilityPopupButton->setEnabled(true);
+	}
 }
 
 void MainWindow::setCenteredPerspectiveView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->setPerspectiveState(true,true);
-        win->redraw();
+	setCenteredPerspectiveView(getActiveGLWindow());
+}
+
+void MainWindow::setCenteredPerspectiveView(ccGLWindow* win)
+{
+	if (win)
+	{
+		win->setPerspectiveState(true,true);
+		win->redraw();
 
 		//update pop-up menu 'top' icon
 		if (m_viewModePopupButton)
 			m_viewModePopupButton->setIcon(actionSetCenteredPerspectiveView->icon());
-    }
+		if (m_pivotVisibilityPopupButton)
+			m_pivotVisibilityPopupButton->setEnabled(true);
+	}
 }
 
 void MainWindow::setViewerPerspectiveView()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->setPerspectiveState(true,false);
-        win->redraw();
+	setViewerPerspectiveView(getActiveGLWindow());
+}
+
+void MainWindow::setViewerPerspectiveView(ccGLWindow* win)
+{
+	if (win)
+	{
+		win->setPerspectiveState(true,false);
+		win->redraw();
 
 		//update pop-up menu 'top' icon
 		if (m_viewModePopupButton)
 			m_viewModePopupButton->setIcon(actionSetViewerPerspectiveView->icon());
-    }
+		if (m_pivotVisibilityPopupButton)
+			m_pivotVisibilityPopupButton->setEnabled(false);
+	}
 }
 
 static ccGLWindow* s_pickingWindow = 0;
@@ -6826,11 +7099,11 @@ void MainWindow::doPickRotationCenter()
 		return;
 	}
 
-    ccGLWindow* win = getActiveGLWindow();
-    if (!win)
+	ccGLWindow* win = getActiveGLWindow();
+	if (!win)
 	{
 		ccConsole::Error("No active 3D view!");
-        return;
+		return;
 	}
 
 	bool objectCentered = true;
@@ -6873,6 +7146,10 @@ void MainWindow::doPickRotationCenter()
 	//	return;
 	//}
 
+	//specific case: we prevent the 'point-pair based alignment' tool to process the picked point!
+	if (m_pprDlg)
+		m_pprDlg->pause(true);
+
 	connect(win, SIGNAL(pointPicked(int, unsigned, int, int)), this, SLOT(processPickedRotationCenter(int, unsigned, int, int)));
 	win->setPickingMode(ccGLWindow::POINT_PICKING);
 	win->displayNewMessage("Pick a point to be used as rotation center (click on icon again to cancel)",ccGLWindow::LOWER_LEFT_MESSAGE,true,3600);
@@ -6899,16 +7176,18 @@ void MainWindow::processPickedRotationCenter(int cloudUniqueID, unsigned pointIn
 				const ccViewportParameters& params = s_pickingWindow->getViewportParameters();
 				if (!params.perspectiveView || params.objectCenteredView)
 				{
-					CCVector3 newPivot = *P;
+					CCVector3d newPivot = CCVector3d::fromArray(P->u);
+					//apply current GL transformation (if any)
+					cloud->getGLTransformation().apply(newPivot);
 					//compute the equivalent camera center
-					CCVector3 dP = params.pivotPoint - newPivot;
-					CCVector3 MdP = dP; params.viewMat.applyRotation(MdP);
-					CCVector3 newCameraPos = params.cameraCenter + MdP - dP;
+					CCVector3d dP = params.pivotPoint - newPivot;
+					CCVector3d MdP = dP; params.viewMat.applyRotation(MdP);
+					CCVector3d newCameraPos = params.cameraCenter + MdP - dP;
 					s_pickingWindow->setCameraPos(newCameraPos);
 					s_pickingWindow->setPivotPoint(newPivot);
 
 					const unsigned& precision = s_pickingWindow->getDisplayParameters().displayedNumPrecision;
-					s_pickingWindow->displayNewMessage(QString(),ccGLWindow::LOWER_LEFT_MESSAGE,false); //clear precedent message
+					s_pickingWindow->displayNewMessage(QString(),ccGLWindow::LOWER_LEFT_MESSAGE,false); //clear previous message
 					s_pickingWindow->displayNewMessage(QString("Point (%1,%2,%3) set as rotation center").arg(P->x,0,'f',precision).arg(P->y,0,'f',precision).arg(P->z,0,'f',precision),ccGLWindow::LOWER_LEFT_MESSAGE,true);
 				}
 				s_pickingWindow->redraw();
@@ -6925,8 +7204,12 @@ void MainWindow::cancelPickRotationCenter()
 	{
 		disconnect(s_pickingWindow, SIGNAL(pointPicked(int, unsigned, int, int)), this, SLOT(processPickedRotationCenter(int, unsigned, int, int)));
 		s_pickingWindow->setPickingMode(ccGLWindow::DEFAULT_PICKING);
-		s_pickingWindow=0;
+		s_pickingWindow = 0;
 	}
+
+	//specific case: we allow the 'point-pair based alignment' tool to process the picked point!
+	if (m_pprDlg)
+		m_pprDlg->pause(false);
 
 	freezeUI(false);
 }
@@ -6965,8 +7248,8 @@ void MainWindow::toggleSelectedEntitiesProp(int prop)
 {
 	ccHObject::Container baseEntities;
 	RemoveSiblings(m_selectedEntities,baseEntities);
-    for (size_t i=0; i<baseEntities.size(); ++i)
-    {
+	for (size_t i=0; i<baseEntities.size(); ++i)
+	{
 		switch(prop)
 		{
 		case 0: //visibility
@@ -6990,10 +7273,10 @@ void MainWindow::toggleSelectedEntitiesProp(int prop)
 		default:
 			assert(false);
 		}
-        baseEntities[i]->prepareDisplayForRefresh_recursive();
-    }
+		baseEntities[i]->prepareDisplayForRefresh_recursive();
+	}
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -7011,9 +7294,7 @@ void MainWindow::showSelectedEntitiesHistogram()
 			if (sf)
 			{
 				ccHistogramWindowDlg* hDlg = new ccHistogramWindowDlg(this);
-
-				const QString& cloudName = cloud->getName();
-				hDlg->setWindowTitle(QString("Histogram [%1]").arg(cloudName));
+				hDlg->setWindowTitle(QString("Histogram [%1]").arg(cloud->getName()));
 
 				ccHistogramWindow* histogram = hDlg->window();
 				{
@@ -7024,8 +7305,10 @@ void MainWindow::showSelectedEntitiesHistogram()
 					numberOfClasses = std::max<unsigned>(4,numberOfClasses);
 					numberOfClasses = std::min<unsigned>(256,numberOfClasses);
 
-					histogram->setInfoStr(QString("%1 (%2 values) ").arg(sf->getName()).arg(numberOfPoints));
+					histogram->setTitle(QString("%1 (%2 values) ").arg(sf->getName()).arg(numberOfPoints));
 					histogram->fromSF(sf,numberOfClasses);
+					histogram->setAxisLabels(sf->getName(),"Count");
+					histogram->refresh();
 				}
 				hDlg->show();
 			}
@@ -7036,7 +7319,7 @@ void MainWindow::showSelectedEntitiesHistogram()
 void MainWindow::doActionCrop()
 {
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 
 	//find candidates
 	std::vector<ccPointCloud*> candidates;
@@ -7112,53 +7395,53 @@ void MainWindow::doActionCrop()
 void MainWindow::doActionClone()
 {
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
+	size_t selNum = selectedEntities.size();
 
 	ccHObject* lastClone = 0;
-    for (size_t i=0; i<selNum; ++i)
-    {
+	for (size_t i=0; i<selNum; ++i)
+	{
 		ccHObject* clone = 0;
-        if (selectedEntities[i]->isKindOf(CC_TYPES::POINT_CLOUD))
-        {
-            clone = ccHObjectCaster::ToGenericPointCloud(selectedEntities[i])->clone();
-            if (!clone)
-            {
-                ccConsole::Error(QString("An error occurred while cloning cloud %1").arg(selectedEntities[i]->getName()));
-            }
-        }
-        else if (selectedEntities[i]->isKindOf(CC_TYPES::PRIMITIVE))
-        {
-            clone = static_cast<ccGenericPrimitive*>(selectedEntities[i])->clone();
-            if (!clone)
-            {
+		if (selectedEntities[i]->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			clone = ccHObjectCaster::ToGenericPointCloud(selectedEntities[i])->clone();
+			if (!clone)
+			{
+				ccConsole::Error(QString("An error occurred while cloning cloud %1").arg(selectedEntities[i]->getName()));
+			}
+		}
+		else if (selectedEntities[i]->isKindOf(CC_TYPES::PRIMITIVE))
+		{
+			clone = static_cast<ccGenericPrimitive*>(selectedEntities[i])->clone();
+			if (!clone)
+			{
 				ccConsole::Error(QString("An error occurred while cloning primitive %1").arg(selectedEntities[i]->getName()));
-            }
-        }
-        else if (selectedEntities[i]->isA(CC_TYPES::MESH))
-        {
-            clone = ccHObjectCaster::ToMesh(selectedEntities[i])->clone();
-            if (!clone)
-            {
+			}
+		}
+		else if (selectedEntities[i]->isA(CC_TYPES::MESH))
+		{
+			clone = ccHObjectCaster::ToMesh(selectedEntities[i])->cloneMesh();
+			if (!clone)
+			{
 				ccConsole::Error(QString("An error occurred while cloning mesh %1").arg(selectedEntities[i]->getName()));
-            }
-        }
+			}
+		}
 		else if (selectedEntities[i]->isA(CC_TYPES::POLY_LINE))
 		{
 			ccPolyline* poly = ccHObjectCaster::ToPolyline(selectedEntities[i]);
 			clone = (poly ? new ccPolyline(*poly) : 0);
-            if (!clone)
-            {
+			if (!clone)
+			{
 				ccConsole::Error(QString("An error occurred while cloning polyline %1").arg(selectedEntities[i]->getName()));
-            }
+			}
 		}
 		else if (selectedEntities[i]->isA(CC_TYPES::FACET))
 		{
 			ccFacet* facet = ccHObjectCaster::ToFacet(selectedEntities[i]);
 			clone = (facet ? facet->clone() : 0);
-            if (!clone)
-            {
+			if (!clone)
+			{
 				ccConsole::Error(QString("An error occurred while cloning facet %1").arg(selectedEntities[i]->getName()));
-            }
+			}
 		}
 		else
 		{
@@ -7171,24 +7454,24 @@ void MainWindow::doActionClone()
 			addToDB(clone);
 			lastClone = clone;
 		}
-    }
+	}
 
 	if (lastClone && m_ccRoot)
 		m_ccRoot->selectEntity(lastClone->getUniqueID());
 
-    updateUI();
+	updateUI();
 }
 
 static double s_constantSFValue = 0.0;
 void MainWindow::doActionAddConstantSF()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 1)
-    {
+	size_t selNum = m_selectedEntities.size();
+	if (selNum != 1)
+	{
 		if (selNum > 1)
 			ccConsole::Error("Select only one point cloud or mesh!");
-        return;
-    }
+		return;
+	}
 
 	ccHObject* ent = m_selectedEntities[0];
 
@@ -7200,7 +7483,7 @@ void MainWindow::doActionAddConstantSF()
 		return;
 	if (lockedVertices && !ent->isAncestorOf(cloud))
 	{
-		DisplayLockedVerticesWarning();
+		DisplayLockedVerticesWarning(ent->getName(),true);
 		return;
 	}
 
@@ -7227,7 +7510,7 @@ void MainWindow::doActionAddConstantSF()
 		return;
 	}
 
-	ScalarType sfValue = static_cast<ScalarType>(QInputDialog::getDouble(this,"Add constant value", "value", s_constantSFValue, -DBL_MAX, DBL_MAX, 8, &ok));
+	ScalarType sfValue = static_cast<ScalarType>(QInputDialog::getDouble(this,"Add constant value", "value", s_constantSFValue, -1.0e9, 1.0e9, 8, &ok));
 	if (!ok)
 		return;
 
@@ -7277,7 +7560,7 @@ QString GetFirstAvailableSFName(ccPointCloud* cloud, const QString& baseName)
 void MainWindow::doActionScalarFieldFromColor()
 {
 	//candidates
-    std::set<ccPointCloud*> clouds;
+	std::set<ccPointCloud*> clouds;
 	{
 		for (size_t i=0; i<m_selectedEntities.size(); ++i)
 		{
@@ -7288,23 +7571,23 @@ void MainWindow::doActionScalarFieldFromColor()
 		}
 	}
 
-    if (clouds.empty())
-        return;
+	if (clouds.empty())
+		return;
 
-    ccScalarFieldFromColorDlg dialog(this);
-    if (!dialog.exec())
-        return;
+	ccScalarFieldFromColorDlg dialog(this);
+	if (!dialog.exec())
+		return;
 
-    bool exportR = dialog.getRStatus();
-    bool exportG = dialog.getGStatus();
-    bool exportB = dialog.getBStatus();
-    bool exportC = dialog.getCompositeStatus();
+	bool exportR = dialog.getRStatus();
+	bool exportG = dialog.getGStatus();
+	bool exportB = dialog.getBStatus();
+	bool exportC = dialog.getCompositeStatus();
 
 	for (std::set<ccPointCloud*>::const_iterator it = clouds.begin(); it != clouds.end(); ++it)
-    {
+	{
 		ccPointCloud* cloud = *it;
 
-        std::vector<ccScalarField*> fields(4);
+		std::vector<ccScalarField*> fields(4);
 		fields[0] = (exportR ? new ccScalarField(qPrintable(GetFirstAvailableSFName(cloud,"R"))) : 0);
 		fields[1] = (exportG ? new ccScalarField(qPrintable(GetFirstAvailableSFName(cloud,"G"))) : 0);
 		fields[2] = (exportB ? new ccScalarField(qPrintable(GetFirstAvailableSFName(cloud,"B"))) : 0);
@@ -7384,137 +7667,38 @@ void MainWindow::doActionScalarFieldFromColor()
 	}
 
 	refreshAll();
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::doActionScalarFieldArithmetic()
 {
-    assert(!m_selectedEntities.empty());
+	assert(!m_selectedEntities.empty());
 
-    ccHObject* entity = m_selectedEntities[0];
+	ccHObject* entity = m_selectedEntities[0];
 	bool lockedVertices;
 	ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(entity,&lockedVertices);
 	if (lockedVertices)
 	{
-		DisplayLockedVerticesWarning();
+		DisplayLockedVerticesWarning(entity->getName(),true);
 		return;
 	}
-    if (!cloud)
-        return;
-
-    ccScalarFieldArithmeticDlg sfaDlg(cloud,this);
-
-    if (!sfaDlg.exec())
-        return;
-
-    int sf1Idx = sfaDlg.getSF1Index();
-    int sf2Idx = sfaDlg.getSF2Index();
-    ccScalarFieldArithmeticDlg::Operation op = sfaDlg.getOperation();
-
-    if (sf1Idx < 0 || sf2Idx < 0)
-        return;
-
-    CCLib::ScalarField* sf1 = cloud->getScalarField(sf1Idx);
-    CCLib::ScalarField* sf2 = cloud->getScalarField(sf2Idx);
-
-    if (!sf1 || !sf2)
-        return;
-
-    QString opStr;
-    switch (op)
-    {
-    case ccScalarFieldArithmeticDlg::PLUS:
-        opStr = "+";
-        break;
-    case ccScalarFieldArithmeticDlg::MINUS:
-        opStr = "-";
-        break;
-    case ccScalarFieldArithmeticDlg::MULTIPLY:
-        opStr = "*";
-        break;
-    case ccScalarFieldArithmeticDlg::DIVIDE:
-        opStr = "/";
-        break;
-    }
-    QString sfName = QString("(SF#%1").arg(sf1Idx)+opStr+QString("SF#%1)").arg(sf2Idx);
-
-	int sfIdx = cloud->getScalarFieldIndexByName(qPrintable(sfName));
-	if (sfIdx >= 0)
-	{
-		if (sfIdx == sf1Idx || sfIdx == sf2Idx)
-		{
-			ccConsole::Error(QString("Resulting scalar field will have the same name\nas one of the operand (%1)! Rename it first...").arg(sfName));
-			return;
-		}
-
-		if (QMessageBox::warning(	this,
-									"Same scalar field name",
-									"Resulting scalar field already exists! Overwrite it?",
-									QMessageBox::Ok | QMessageBox::Cancel,
-									QMessageBox::Ok ) != QMessageBox::Ok)
-		{
-			return;
-		}
-
-		cloud->deleteScalarField(sfIdx);
-	}
-
-    sfIdx = cloud->addScalarField(qPrintable(sfName));
-    if (sfIdx < 0)
-    {
-        ccConsole::Error("Failed to create destination scalar field! (not enough memory?)");
-        return;
-    }
-    CCLib::ScalarField* sfDest = cloud->getScalarField(sfIdx);
-
-	unsigned valCount = sf1->currentSize();
-    if (!sfDest->resize(valCount))
-	{
-		ccConsole::Error("Not enough memory!");
-		sfDest->release();
+	if (!cloud)
 		return;
+
+	ccScalarFieldArithmeticsDlg sfaDlg(cloud,this);
+
+	if (!sfaDlg.exec())
+		return;
+
+	if (!sfaDlg.apply(cloud))
+	{
+		ccConsole::Error("An error occurred (see Console for more details)");
 	}
 
-    assert(valCount == sf2->currentSize() && valCount == sfDest->currentSize());
+	cloud->showSF(true);
+	cloud->prepareDisplayForRefresh_recursive();
 
-    for (unsigned i=0; i<valCount; ++i)
-    {
-		ScalarType val = NAN_VALUE;
-
-        //we must handle 'invalid' values
-		const ScalarType& val1 = sf1->getValue(i);
-		if (ccScalarField::ValidValue(val1))
-        {
-            const ScalarType& val2 = sf2->getValue(i);
-            if (ccScalarField::ValidValue(val2))
-            {
-                switch (op)
-                {
-                case ccScalarFieldArithmeticDlg::PLUS:
-                    val = val1 + val2;
-                    break;
-                case ccScalarFieldArithmeticDlg::MINUS:
-                    val = val1 - val2;
-                    break;
-                case ccScalarFieldArithmeticDlg::MULTIPLY:
-                    val = val1 * val2;
-                    break;
-                case ccScalarFieldArithmeticDlg::DIVIDE:
-                    val = val1 / val2;
-                    break;
-                }
-            }
-        }
-
-		sfDest->setValue(i,val);
-    }
-
-    sfDest->computeMinAndMax();
-    cloud->setCurrentDisplayedScalarField(sfIdx);
-	cloud->showSF(sfIdx >= 0);
-    cloud->prepareDisplayForRefresh_recursive();
-
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -7532,42 +7716,42 @@ static double s_polygonMaxEdgeLength = 0;
 void MainWindow::doComputePlaneOrientation(bool fitFacet)
 {
 	ccHObject::Container selectedEntities = m_selectedEntities;
-    size_t selNum = selectedEntities.size();
-    if (selNum < 1)
-        return;
+	size_t selNum = selectedEntities.size();
+	if (selNum < 1)
+		return;
 
 	double maxEdgeLength = 0;
 	if (fitFacet)
 	{
 		bool ok = true;
-		maxEdgeLength = QInputDialog::getDouble(this,"Fit facet", "Max edge length (0 = no limit)", s_polygonMaxEdgeLength, 0, DBL_MAX, 8, &ok);
+		maxEdgeLength = QInputDialog::getDouble(this,"Fit facet", "Max edge length (0 = no limit)", s_polygonMaxEdgeLength, 0, 1.0e9, 8, &ok);
 		if (!ok)
 			return;
 		s_polygonMaxEdgeLength = maxEdgeLength;
 	}
 
-    for (size_t i=0; i<selNum; ++i)
-    {
-        ccHObject* ent = selectedEntities[i];
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = selectedEntities[i];
 
-        CCLib::GenericIndexedCloudPersist* cloud = 0;
+		CCLib::GenericIndexedCloudPersist* cloud = 0;
 
-        if (ent->isKindOf(CC_TYPES::POLY_LINE))
-        {
-             ccPolyline * pline = ccHObjectCaster::ToPolyline(ent);
-             cloud = static_cast<CCLib::GenericIndexedCloudPersist*>(pline);
-        }
+		if (ent->isKindOf(CC_TYPES::POLY_LINE))
+		{
+			ccPolyline * pline = ccHObjectCaster::ToPolyline(ent);
+			cloud = static_cast<CCLib::GenericIndexedCloudPersist*>(pline);
+		}
 		else
 		{
-            ccGenericPointCloud* gencloud = ccHObjectCaster::ToGenericPointCloud(ent);
+			ccGenericPointCloud* gencloud = ccHObjectCaster::ToGenericPointCloud(ent);
 			if (gencloud)
 			{
 				cloud = static_cast<CCLib::GenericIndexedCloudPersist*>(gencloud);
 			}
 		}
 
-        if (cloud)
-        {
+		if (cloud)
+		{
 			double rms = 0.0;
 			CCVector3 C,N;
 
@@ -7598,9 +7782,9 @@ void MainWindow::doComputePlaneOrientation(bool fitFacet)
 			//as all information appears in Console...
 			forceConsoleDisplay();
 
-            if (plane)
+			if (plane)
 			{
-                ccConsole::Print(QString("[Orientation] Entity '%1'").arg(ent->getName()));
+				ccConsole::Print(QString("[Orientation] Entity '%1'").arg(ent->getName()));
 				ccConsole::Print("\t- plane fitting RMS: %f",rms);
 
 				//We always consider the normal with a positive 'Z' by default!
@@ -7629,14 +7813,14 @@ void MainWindow::doComputePlaneOrientation(bool fitFacet)
 				plane->setVisible(true);
 				plane->setSelectionBehavior(ccHObject::SELECTION_FIT_BBOX);
 
-                ent->addChild(plane);
+				ent->addChild(plane);
 				plane->setDisplay(ent->getDisplay());
-                plane->prepareDisplayForRefresh_recursive();
+				plane->prepareDisplayForRefresh_recursive();
 				addToDB(plane);
 			}
 			else
 			{
-                ccConsole::Warning(QString("Failed to fit a plane/facet on entity '%1'").arg(ent->getName()));
+				ccConsole::Warning(QString("Failed to fit a plane/facet on entity '%1'").arg(ent->getName()));
 			}
 		}
 	}
@@ -7659,7 +7843,7 @@ void MainWindow::doComputeApproximateDensity()
 {
 	if (!ApplyCCLibAlgortihm(CCLIB_ALGO_APPROX_DENSITY,m_selectedEntities,this))
 		return;
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -7667,39 +7851,39 @@ void MainWindow::doComputeAccurateDensity()
 {
 	if (!ApplyCCLibAlgortihm(CCLIB_ALGO_ACCURATE_DENSITY,m_selectedEntities,this))
 		return;
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doComputeCurvature()
 {
-    if (!ApplyCCLibAlgortihm(CCLIB_ALGO_CURVATURE,m_selectedEntities,this))
+	if (!ApplyCCLibAlgortihm(CCLIB_ALGO_CURVATURE,m_selectedEntities,this))
 		return;
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionSFGradient()
 {
-    if (!ApplyCCLibAlgortihm(CCLIB_ALGO_SF_GRADIENT,m_selectedEntities,this))
+	if (!ApplyCCLibAlgortihm(CCLIB_ALGO_SF_GRADIENT,m_selectedEntities,this))
 		return;
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doComputeRoughness()
 {
-    if (!ApplyCCLibAlgortihm(CCLIB_ALGO_ROUGHNESS,m_selectedEntities,this))
+	if (!ApplyCCLibAlgortihm(CCLIB_ALGO_ROUGHNESS,m_selectedEntities,this))
 		return;
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doSphericalNeighbourhoodExtractionTest()
 {
-    if (!ApplyCCLibAlgortihm(CCLIB_SPHERICAL_NEIGHBOURHOOD_EXTRACTION_TEST,m_selectedEntities,this))
+	if (!ApplyCCLibAlgortihm(CCLIB_SPHERICAL_NEIGHBOURHOOD_EXTRACTION_TEST,m_selectedEntities,this))
 		return;
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
@@ -7802,13 +7986,13 @@ void MainWindow::doCylindricalNeighbourhoodExtractionTest()
 
 	addToDB(cloud);
 
-    refreshAll();
+	refreshAll();
 	updateUI();
 }
 
 void MainWindow::doActionExportCloudsInfo()
 {
-    size_t selNum = m_selectedEntities.size();
+	size_t selNum = m_selectedEntities.size();
 
 	//look for clouds
 	std::vector<ccPointCloud*> clouds;
@@ -7832,10 +8016,10 @@ void MainWindow::doActionExportCloudsInfo()
 		return;
 	}
 
-    //persistent settings
-    QSettings settings;
-    settings.beginGroup("SaveFile");
-    QString currentPath = settings.value("currentPath",QApplication::applicationDirPath()).toString();
+	//persistent settings
+	QSettings settings;
+	settings.beginGroup(s_psSaveFile);
+	QString currentPath = settings.value(s_psCurrentPath,QApplication::applicationDirPath()).toString();
 
 	QString outputFilename = QFileDialog::getSaveFileName(this, "Select output file", currentPath, "*.csv");
 	if (outputFilename.isEmpty())
@@ -7915,112 +8099,112 @@ void MainWindow::doActionExportCloudsInfo()
 
 bool MainWindow::ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container& entities, QWidget *parent/*=0*/, void** additionalParameters/*=0*/)
 {
-    size_t selNum = entities.size();
-    if (selNum < 1)
-        return false;
+	size_t selNum = entities.size();
+	if (selNum < 1)
+		return false;
 
-    //generic parameters
-    QString sfName;
+	//generic parameters
+	QString sfName;
 
-    //computeDensity parameters
-    PointCoordinateType densityKernelSize = PC_ONE;
+	//computeDensity parameters
+	PointCoordinateType densityKernelSize = PC_ONE;
 
 	//curvature parameters
 	PointCoordinateType curvKernelSize = -PC_ONE;
 	CCLib::Neighbourhood::CC_CURVATURE_TYPE curvType = CCLib::Neighbourhood::GAUSSIAN_CURV;
 
-    //computeScalarFieldGradient parameters
-    bool euclidian = false;
+	//computeScalarFieldGradient parameters
+	bool euclidian = false;
 
-    //computeRoughness parameters
-    PointCoordinateType roughnessKernelSize = PC_ONE;
+	//computeRoughness parameters
+	PointCoordinateType roughnessKernelSize = PC_ONE;
 
-    switch (algo)
-    {
-        case CCLIB_ALGO_APPROX_DENSITY:
+	switch (algo)
+	{
+	case CCLIB_ALGO_APPROX_DENSITY:
+		{
+			sfName = CC_LOCAL_DENSITY_APPROX_FIELD_NAME;
+		}
+		break;
+
+	case CCLIB_ALGO_ACCURATE_DENSITY:
+		{
+			//parameters already provided?
+			if (additionalParameters)
 			{
-				sfName = CC_LOCAL_DENSITY_APPROX_FIELD_NAME;
+				densityKernelSize = *static_cast<PointCoordinateType*>(additionalParameters[0]);
 			}
-			break;
-
-        case CCLIB_ALGO_ACCURATE_DENSITY:
+			else //ask the user!
 			{
-				//parameters already provided?
-				if (additionalParameters)
+				densityKernelSize = GetDefaultCloudKernelSize(entities)/4;
+				if (densityKernelSize < 0)
 				{
-					densityKernelSize = *static_cast<PointCoordinateType*>(additionalParameters[0]);
+					ccConsole::Error("Invalid kernel size!");
+					return false;
 				}
-				else //ask the user!
-				{
-					densityKernelSize = GetDefaultCloudKernelSize(entities)/4;
-					if (densityKernelSize < 0)
-					{
-						ccConsole::Error("Invalid kernel size!");
-						return false;
-					}
-					bool ok;
-					double val = QInputDialog::getDouble(parent,"Accurate density","Radius",static_cast<double>(densityKernelSize),DBL_MIN,DBL_MAX,8,&ok);
-					if (!ok)
-						return false;
-					densityKernelSize = static_cast<PointCoordinateType>(val);
-				}
-
-				sfName = QString("%1 (r=%2)").arg(CC_LOCAL_DENSITY_FIELD_NAME).arg(densityKernelSize);
+				bool ok;
+				double val = QInputDialog::getDouble(parent,"Accurate density","Radius",static_cast<double>(densityKernelSize),DBL_MIN,1.0e9,8,&ok);
+				if (!ok)
+					return false;
+				densityKernelSize = static_cast<PointCoordinateType>(val);
 			}
-			break;
 
-		case CCLIB_ALGO_CURVATURE:
+			sfName = QString("%1 (r=%2)").arg(CC_LOCAL_DENSITY_FIELD_NAME).arg(densityKernelSize);
+		}
+		break;
+
+	case CCLIB_ALGO_CURVATURE:
+		{
+			//parameters already provided?
+			if (additionalParameters)
 			{
-				//parameters already provided?
-				if (additionalParameters)
-				{
-					curvType = *static_cast<CCLib::Neighbourhood::CC_CURVATURE_TYPE*>(additionalParameters[0]);
-					curvKernelSize = *static_cast<PointCoordinateType*>(additionalParameters[1]);
-				}
-				else //ask the user!
-				{
-					curvKernelSize = GetDefaultCloudKernelSize(entities);
-					if (curvKernelSize < 0)
-					{
-						ccConsole::Error("Invalid kernel size!");
-						return false;
-					}
-					ccCurvatureDlg curvDlg(0);
-					if (selNum == 1)
-						curvDlg.setKernelSize(curvKernelSize);
-					if (!curvDlg.exec())
-						return false;
-
-					curvType = curvDlg.getCurvatureType();
-					curvKernelSize = static_cast<PointCoordinateType>(curvDlg.getKernelSize());
-				}
-
-				sfName = QString("%1 (%2)").arg(curvType == CCLib::Neighbourhood::MEAN_CURV ? CC_MEAN_CURVATURE_FIELD_NAME : CC_GAUSSIAN_CURVATURE_FIELD_NAME).arg(curvKernelSize);
+				curvType = *static_cast<CCLib::Neighbourhood::CC_CURVATURE_TYPE*>(additionalParameters[0]);
+				curvKernelSize = *static_cast<PointCoordinateType*>(additionalParameters[1]);
 			}
-            break;
-
-        case CCLIB_ALGO_SF_GRADIENT:
+			else //ask the user!
 			{
-				sfName = CC_GRADIENT_NORMS_FIELD_NAME;
-				//parameters already provided?
-				if (additionalParameters)
+				curvKernelSize = GetDefaultCloudKernelSize(entities);
+				if (curvKernelSize < 0)
 				{
-					euclidian = *static_cast<bool*>(additionalParameters[0]);
+					ccConsole::Error("Invalid kernel size!");
+					return false;
 				}
-				else //ask the user!
-				{
-					euclidian = ( QMessageBox::question(parent,
-														"Gradient",
-														"Is the scalar field composed of (euclidian) distances?",
-														QMessageBox::Yes | QMessageBox::No,
-														QMessageBox::No ) == QMessageBox::Yes );
-				}
-			}
-            break;
+				ccCurvatureDlg curvDlg(0);
+				if (selNum == 1)
+					curvDlg.setKernelSize(curvKernelSize);
+				if (!curvDlg.exec())
+					return false;
 
-        case CCLIB_ALGO_ROUGHNESS:
+				curvType = curvDlg.getCurvatureType();
+				curvKernelSize = static_cast<PointCoordinateType>(curvDlg.getKernelSize());
+			}
+
+			sfName = QString("%1 (%2)").arg(curvType == CCLib::Neighbourhood::MEAN_CURV ? CC_MEAN_CURVATURE_FIELD_NAME : CC_GAUSSIAN_CURVATURE_FIELD_NAME).arg(curvKernelSize);
+		}
+		break;
+
+	case CCLIB_ALGO_SF_GRADIENT:
+		{
+			sfName = CC_GRADIENT_NORMS_FIELD_NAME;
+			//parameters already provided?
+			if (additionalParameters)
+			{
+				euclidian = *static_cast<bool*>(additionalParameters[0]);
+			}
+			else //ask the user!
+			{
+				euclidian = (	QMessageBox::question(parent,
+								"Gradient",
+								"Is the scalar field composed of (euclidian) distances?",
+								QMessageBox::Yes | QMessageBox::No,
+								QMessageBox::No ) == QMessageBox::Yes );
+			}
+		}
+		break;
+
+	case CCLIB_ALGO_ROUGHNESS:
 		case CCLIB_SPHERICAL_NEIGHBOURHOOD_EXTRACTION_TEST: //for tests: we'll use the roughness kernel for SNE
-            {
+			{
 				//parameters already provided?
 				if (additionalParameters)
 				{
@@ -8035,95 +8219,95 @@ bool MainWindow::ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container
 						return false;
 					}
 					bool ok;
-					double val = QInputDialog::getDouble(parent, "Subdivide mesh", "Kernel size:", static_cast<double>(roughnessKernelSize), DBL_MIN, DBL_MAX, 8, &ok);
+					double val = QInputDialog::getDouble(parent, "Subdivide mesh", "Kernel size:", static_cast<double>(roughnessKernelSize), DBL_MIN, 1.0e9, 8, &ok);
 					if (!ok)
 						return false;
 					roughnessKernelSize = static_cast<PointCoordinateType>(val);
 				}
 
 				sfName = QString(CC_ROUGHNESS_FIELD_NAME)+QString("(%1)").arg(roughnessKernelSize);
-            }
-            break;
+			}
+			break;
 
 		default:
-            assert(false);
-            return false;
-    }
+			assert(false);
+			return false;
+	}
 
-    for (size_t i=0; i<selNum; ++i)
-    {
-        //is the ith selected data is elligible for processing?
-        ccGenericPointCloud* cloud =0;
-        switch(algo)
-        {
-            case CCLIB_ALGO_SF_GRADIENT:
-                //for scalar field gradient, we can apply it directly on meshes
-				bool lockedVertices;
-				cloud = ccHObjectCaster::ToGenericPointCloud(entities[i],&lockedVertices);
-				if (lockedVertices)
+	for (size_t i=0; i<selNum; ++i)
+	{
+		//is the ith selected data is elligible for processing?
+		ccGenericPointCloud* cloud = 0;
+		switch(algo)
+		{
+		case CCLIB_ALGO_SF_GRADIENT:
+			//for scalar field gradient, we can apply it directly on meshes
+			bool lockedVertices;
+			cloud = ccHObjectCaster::ToGenericPointCloud(entities[i],&lockedVertices);
+			if (lockedVertices)
+			{
+				DisplayLockedVerticesWarning(entities[i]->getName(),selNum == 1);
+				cloud = 0;
+			}
+			if (cloud)
+			{
+				//but we need an already displayed SF!
+				if (cloud->isA(CC_TYPES::POINT_CLOUD))
 				{
-					DisplayLockedVerticesWarning();
-					cloud = 0;
+					ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+					//on met en lecture (OUT) le champ scalaire actuellement affiche
+					int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
+					if (outSfIdx < 0)
+					{
+						cloud = 0;
+					}
+					else
+					{
+						pc->setCurrentOutScalarField(outSfIdx);
+						sfName = QString("%1(%2)").arg(CC_GRADIENT_NORMS_FIELD_NAME).arg(pc->getScalarFieldName(outSfIdx));
+					}
 				}
-                if (cloud)
-                {
-                    //but we need an already displayed SF!
-                    if (cloud->isA(CC_TYPES::POINT_CLOUD))
-                    {
-                        ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
-                        //on met en lecture (OUT) le champ scalaire actuellement affiche
-                        int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
-                        if (outSfIdx < 0)
-                        {
-                            cloud = 0;
-                        }
-                        else
-                        {
-                            pc->setCurrentOutScalarField(outSfIdx);
-                            sfName = QString("%1(%2)").arg(CC_GRADIENT_NORMS_FIELD_NAME).arg(pc->getScalarFieldName(outSfIdx));
-                        }
-                    }
-                    else //if (!cloud->hasDisplayedScalarField()) //TODO: displayed but not necessarily set as OUTPUT!
-                    {
-                        cloud=0;
-                    }
-                }
-                break;
+				else //if (!cloud->hasDisplayedScalarField()) //TODO: displayed but not necessarily set as OUTPUT!
+				{
+					cloud=0;
+				}
+			}
+			break;
 
 			//by default, we apply processings on clouds only
-            default:
-                if (entities[i]->isKindOf(CC_TYPES::POINT_CLOUD))
-					cloud = ccHObjectCaster::ToGenericPointCloud(entities[i]);
-                break;
-        }
+		default:
+			if (entities[i]->isKindOf(CC_TYPES::POINT_CLOUD))
+				cloud = ccHObjectCaster::ToGenericPointCloud(entities[i]);
+			break;
+		}
 
-        if (cloud)
-        {
-            ccPointCloud* pc = 0;
-            int sfIdx = -1;
-            if (cloud->isA(CC_TYPES::POINT_CLOUD))
-            {
-                pc = static_cast<ccPointCloud*>(cloud);
+		if (cloud)
+		{
+			ccPointCloud* pc = 0;
+			int sfIdx = -1;
+			if (cloud->isA(CC_TYPES::POINT_CLOUD))
+			{
+				pc = static_cast<ccPointCloud*>(cloud);
 
-                sfIdx = pc->getScalarFieldIndexByName(qPrintable(sfName));
-                if (sfIdx < 0)
-                    sfIdx = pc->addScalarField(qPrintable(sfName));
-                if (sfIdx >= 0)
-                    pc->setCurrentInScalarField(sfIdx);
-                else
-                {
-                    ccConsole::Error(QString("Failed to create scalar field on cloud '%1' (not enough memory?)").arg(pc->getName()));
-                    continue;
-                }
-            }
+				sfIdx = pc->getScalarFieldIndexByName(qPrintable(sfName));
+				if (sfIdx < 0)
+					sfIdx = pc->addScalarField(qPrintable(sfName));
+				if (sfIdx >= 0)
+					pc->setCurrentInScalarField(sfIdx);
+				else
+				{
+					ccConsole::Error(QString("Failed to create scalar field on cloud '%1' (not enough memory?)").arg(pc->getName()));
+					continue;
+				}
+			}
 
 			ccProgressDialog pDlg(true,parent);
 
-            ccOctree* octree = cloud->getOctree();
-            if (!octree)
+			ccOctree* octree = cloud->getOctree();
+			if (!octree)
 			{
 				pDlg.show();
-                octree = cloud->computeOctree(&pDlg);
+				octree = cloud->computeOctree(&pDlg);
 				if (!octree)
 				{
 					ccConsole::Error(QString("Couldn't compute octree for cloud '%1'!").arg(cloud->getName()));
@@ -8131,59 +8315,59 @@ bool MainWindow::ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container
 				}
 			}
 
-            int result = 0;
+			int result = 0;
 			QElapsedTimer eTimer;
 			eTimer.start();
-            switch(algo)
-            {
-                case CCLIB_ALGO_APPROX_DENSITY:
-                    result = CCLib::GeometricalAnalysisTools::computeLocalDensityApprox(cloud,
-																						&pDlg,
-																						octree);
-                    break;
-
-				case CCLIB_ALGO_ACCURATE_DENSITY:
-                    result = CCLib::GeometricalAnalysisTools::computeLocalDensity(	cloud,
-																					densityKernelSize,
+			switch(algo)
+			{
+			case CCLIB_ALGO_APPROX_DENSITY:
+				result = CCLib::GeometricalAnalysisTools::computeLocalDensityApprox(cloud,
 																					&pDlg,
 																					octree);
-                    break;
+				break;
 
-				case CCLIB_ALGO_CURVATURE:
-                    result = CCLib::GeometricalAnalysisTools::computeCurvature(	cloud,
-                                                                                curvType,
-                                                                                curvKernelSize,
-                                                                                &pDlg,
-                                                                                octree);
-                    break;
+			case CCLIB_ALGO_ACCURATE_DENSITY:
+				result = CCLib::GeometricalAnalysisTools::computeLocalDensity(	cloud,
+																				densityKernelSize,
+																				&pDlg,
+																				octree);
+				break;
 
-				case CCLIB_ALGO_SF_GRADIENT:
-                    result = CCLib::ScalarFieldTools::computeScalarFieldGradient(	cloud,
-																					euclidian,
-																					false,
-																					&pDlg,
-																					octree);
+			case CCLIB_ALGO_CURVATURE:
+				result = CCLib::GeometricalAnalysisTools::computeCurvature(	cloud,
+																			curvType,
+																			curvKernelSize,
+																			&pDlg,
+																			octree);
+				break;
 
-					//rename output scalar field
-                    if (result == 0)
-                    {
-                        int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
-                        assert(outSfIdx >= 0);
-                        sfName = QString("%1.gradient").arg(pc->getScalarFieldName(outSfIdx));
-                        pc->renameScalarField(outSfIdx,qPrintable(sfName));
-                    }
-                    //*/
-                    break;
+			case CCLIB_ALGO_SF_GRADIENT:
+				result = CCLib::ScalarFieldTools::computeScalarFieldGradient(	cloud,
+																				euclidian,
+																				false,
+																				&pDlg,
+																				octree);
 
-				case CCLIB_ALGO_ROUGHNESS:
-                    result = CCLib::GeometricalAnalysisTools::computeRoughness(cloud,
-                                                                                roughnessKernelSize,
-                                                                                &pDlg,
-                                                                                octree);
-                    break;
+				//rename output scalar field
+				if (result == 0)
+				{
+					int outSfIdx = pc->getCurrentDisplayedScalarFieldIndex();
+					assert(outSfIdx >= 0);
+					sfName = QString("%1.gradient").arg(pc->getScalarFieldName(outSfIdx));
+					pc->renameScalarField(outSfIdx,qPrintable(sfName));
+				}
+				//*/
+				break;
+
+			case CCLIB_ALGO_ROUGHNESS:
+				result = CCLib::GeometricalAnalysisTools::computeRoughness(	cloud,
+																			roughnessKernelSize,
+																			&pDlg,
+																			octree);
+				break;
 
 				//TEST
-				case CCLIB_SPHERICAL_NEIGHBOURHOOD_EXTRACTION_TEST:
+			case CCLIB_SPHERICAL_NEIGHBOURHOOD_EXTRACTION_TEST:
 				{
 					unsigned count = cloud->size();
 					cloud->enableScalarField();
@@ -8213,138 +8397,138 @@ bool MainWindow::ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container
 				}
 				break;
 
-                default:
-                    //missed something?
-                    assert(false);
-            }
+			default:
+				//missed something?
+				assert(false);
+			}
 			qint64 elapsedTime_ms = eTimer.elapsed();
 
-            if (result == 0)
-            {
-                if (pc && sfIdx >= 0)
-                {
-                    pc->setCurrentDisplayedScalarField(sfIdx);
+			if (result == 0)
+			{
+				if (pc && sfIdx >= 0)
+				{
+					pc->setCurrentDisplayedScalarField(sfIdx);
 					pc->showSF(sfIdx >= 0);
-                    pc->getCurrentInScalarField()->computeMinAndMax();
-                }
-                cloud->prepareDisplayForRefresh();
+					pc->getCurrentInScalarField()->computeMinAndMax();
+				}
+				cloud->prepareDisplayForRefresh();
 				ccConsole::Print("[Algortihm] Timing: %3.2f s.",static_cast<double>(elapsedTime_ms)/1.0e3);
-            }
-            else
-            {
-                ccConsole::Warning(QString("Failed to apply processing to cloud '%1'").arg(cloud->getName()));
-                if (pc && sfIdx >= 0)
-                {
-                    pc->deleteScalarField(sfIdx);
-                    sfIdx = -1;
-                }
-            }
-        }
-    }
+			}
+			else
+			{
+				ccConsole::Warning(QString("Failed to apply processing to cloud '%1'").arg(cloud->getName()));
+				if (pc && sfIdx >= 0)
+				{
+					pc->deleteScalarField(sfIdx);
+					sfIdx = -1;
+				}
+			}
+		}
+	}
 
 	return true;
 }
 
 void MainWindow::doActionCloudCloudDist()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 2)
-    {
-        ccConsole::Error("Select 2 point clouds!");
-        return;
-    }
+	size_t selNum = m_selectedEntities.size();
+	if (selNum != 2)
+	{
+		ccConsole::Error("Select 2 point clouds!");
+		return;
+	}
 
-    if (!m_selectedEntities[0]->isKindOf(CC_TYPES::POINT_CLOUD) ||
-            !m_selectedEntities[1]->isKindOf(CC_TYPES::POINT_CLOUD))
-    {
-        ccConsole::Error("Select 2 point clouds!");
-        return;
-    }
+	if (!m_selectedEntities[0]->isKindOf(CC_TYPES::POINT_CLOUD) ||
+		!m_selectedEntities[1]->isKindOf(CC_TYPES::POINT_CLOUD))
+	{
+		ccConsole::Error("Select 2 point clouds!");
+		return;
+	}
 
-    ccOrderChoiceDlg dlg(	m_selectedEntities[0], "Compared",
+	ccOrderChoiceDlg dlg(	m_selectedEntities[0], "Compared",
 							m_selectedEntities[1], "Reference",
 							this );
-    if (!dlg.exec())
-        return;
+	if (!dlg.exec())
+		return;
 
-    ccGenericPointCloud* compCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getFirstEntity());
-    ccGenericPointCloud* refCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getSecondEntity());
+	ccGenericPointCloud* compCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getFirstEntity());
+	ccGenericPointCloud* refCloud = ccHObjectCaster::ToGenericPointCloud(dlg.getSecondEntity());
 
-    //assert(!m_compDlg);
+	//assert(!m_compDlg);
 	if (m_compDlg)
 		delete m_compDlg;
-    m_compDlg = new ccComparisonDlg(compCloud, refCloud, ccComparisonDlg::CLOUDCLOUD_DIST, this);
-    connect(m_compDlg, SIGNAL(finished(int)), this, SLOT(deactivateComparisonMode(int)));
-    m_compDlg->show();
-    //cDlg.setModal(false);
-    //cDlg.exec();
-    freezeUI(true);
+	m_compDlg = new ccComparisonDlg(compCloud, refCloud, ccComparisonDlg::CLOUDCLOUD_DIST, this);
+	connect(m_compDlg, SIGNAL(finished(int)), this, SLOT(deactivateComparisonMode(int)));
+	m_compDlg->show();
+	//cDlg.setModal(false);
+	//cDlg.exec();
+	freezeUI(true);
 }
 
 void MainWindow::doActionCloudMeshDist()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum != 2)
-    {
-        ccConsole::Error("Select 2 entities!");
-        return;
-    }
+	size_t selNum = m_selectedEntities.size();
+	if (selNum != 2)
+	{
+		ccConsole::Error("Select 2 entities!");
+		return;
+	}
 
-    bool isMesh[2] = {false,false};
-    unsigned meshNum = 0;
-    unsigned cloudNum = 0;
-    for (unsigned i=0; i<2; ++i)
-    {
-        if (m_selectedEntities[i]->isKindOf(CC_TYPES::MESH))
-        {
-            ++meshNum;
-            isMesh[i] = true;
-        }
-        else if (m_selectedEntities[i]->isKindOf(CC_TYPES::POINT_CLOUD))
-        {
-            ++cloudNum;
-        }
-    }
+	bool isMesh[2] = {false,false};
+	unsigned meshNum = 0;
+	unsigned cloudNum = 0;
+	for (unsigned i=0; i<2; ++i)
+	{
+		if (m_selectedEntities[i]->isKindOf(CC_TYPES::MESH))
+		{
+			++meshNum;
+			isMesh[i] = true;
+		}
+		else if (m_selectedEntities[i]->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			++cloudNum;
+		}
+	}
 
-    if (meshNum == 0)
-    {
-        ccConsole::Error("Select at least one mesh!");
-        return;
-    }
-    else if (meshNum+cloudNum < 2)
-    {
-        ccConsole::Error("Select one mesh and one cloud or two meshes!");
-        return;
-    }
+	if (meshNum == 0)
+	{
+		ccConsole::Error("Select at least one mesh!");
+		return;
+	}
+	else if (meshNum+cloudNum < 2)
+	{
+		ccConsole::Error("Select one mesh and one cloud or two meshes!");
+		return;
+	}
 
-    ccHObject* compEnt = 0;
-    ccGenericMesh* refMesh = 0;
+	ccHObject* compEnt = 0;
+	ccGenericMesh* refMesh = 0;
 
-    if (meshNum == 1)
-    {
-        compEnt = m_selectedEntities[isMesh[0] ? 1 : 0];
-        refMesh = ccHObjectCaster::ToGenericMesh(m_selectedEntities[isMesh[0] ? 0 : 1]);
-    }
-    else
-    {
-        ccOrderChoiceDlg dlg(	m_selectedEntities[0], "Compared",
+	if (meshNum == 1)
+	{
+		compEnt = m_selectedEntities[isMesh[0] ? 1 : 0];
+		refMesh = ccHObjectCaster::ToGenericMesh(m_selectedEntities[isMesh[0] ? 0 : 1]);
+	}
+	else
+	{
+		ccOrderChoiceDlg dlg(	m_selectedEntities[0], "Compared",
 								m_selectedEntities[1], "Reference",
 								this );
-        if (!dlg.exec())
-            return;
+		if (!dlg.exec())
+			return;
 
-        compEnt = dlg.getFirstEntity();
-        refMesh = ccHObjectCaster::ToGenericMesh(dlg.getSecondEntity());
-    }
+		compEnt = dlg.getFirstEntity();
+		refMesh = ccHObjectCaster::ToGenericMesh(dlg.getSecondEntity());
+	}
 
-    //assert(!m_compDlg);
+	//assert(!m_compDlg);
 	if (m_compDlg)
 		delete m_compDlg;
-    m_compDlg = new ccComparisonDlg(compEnt, refMesh, ccComparisonDlg::CLOUDMESH_DIST, this);
-    connect(m_compDlg, SIGNAL(finished(int)), this, SLOT(deactivateComparisonMode(int)));
-    m_compDlg->show();
+	m_compDlg = new ccComparisonDlg(compEnt, refMesh, ccComparisonDlg::CLOUDMESH_DIST, this);
+	connect(m_compDlg, SIGNAL(finished(int)), this, SLOT(deactivateComparisonMode(int)));
+	m_compDlg->show();
 
-    freezeUI(true);
+	freezeUI(true);
 }
 
 void MainWindow::deactivateComparisonMode(int)
@@ -8353,72 +8537,74 @@ void MainWindow::deactivateComparisonMode(int)
 	//which prevent us from deleting the dialog right away...
 	//(it seems that QT has not yet finished the dialog closing
 	//when the 'finished' signal is sent).
-    //if(m_compDlg)
-    //    delete m_compDlg;
-    //m_compDlg = 0;
+	//if(m_compDlg)
+	//	delete m_compDlg;
+	//m_compDlg = 0;
 
-    freezeUI(false);
+	freezeUI(false);
 
-    updateUI();
+	updateUI();
 }
 
 void MainWindow::toggleActiveWindowSunLight()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->toggleSunLight();
-        win->redraw();
-    }
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
+		win->toggleSunLight();
+		win->redraw();
+	}
 }
 
 void MainWindow::toggleActiveWindowCustomLight()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->toggleCustomLight();
-        win->redraw();
-    }
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
+		win->toggleCustomLight();
+		win->redraw();
+	}
 }
 
 void MainWindow::toggleActiveWindowCenteredPerspective()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->togglePerspective(true);
-        win->redraw();
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
+		win->togglePerspective(true);
+		win->redraw();
 		updateViewModePopUpMenu(win);
-    }
+		updatePivotVisibilityPopUpMenu(win);
+	}
 }
 
 void MainWindow::toggleActiveWindowViewerBasedPerspective()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->togglePerspective(false);
-        win->redraw();
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
+		win->togglePerspective(false);
+		win->redraw();
 		updateViewModePopUpMenu(win);
-    }
+		updatePivotVisibilityPopUpMenu(win);
+	}
 }
 
 void MainWindow::doActionDeleteShader()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-        win->setShader(0);
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+		win->setShader(0);
 }
 
 void MainWindow::doDisableGLFilter()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    if (win)
-    {
-        win->setGlFilter(0);
-        win->redraw();
-    }
+	ccGLWindow* win = getActiveGLWindow();
+	if (win)
+	{
+		win->setGlFilter(0);
+		win->redraw();
+	}
 }
 
 void MainWindow::removeFromDB(ccHObject* obj, bool autoDelete/*=true*/)
@@ -8459,39 +8645,28 @@ void MainWindow::addToDB(	ccHObject* obj,
 		CCVector3 center = bBox.getCenter();
 		PointCoordinateType diag = bBox.getDiagNorm();
 
-		double P[3] = {center[0],center[1],center[2]};
+		CCVector3d P = CCVector3d::fromArray(center.u);
 		CCVector3d Pshift(0,0,0);
 		double scale = 1.0;
-		bool applyAll = false;
-		bool shiftAlreadyEnabled = false;
 		//here we must test that coordinates are not too big whatever the case because OpenGL
-		//really don't like big ones (even if we work with GLdoubles).
-		if (ccCoordinatesShiftManager::Handle(P,diag,true,shiftAlreadyEnabled,Pshift,&scale,applyAll))
+		//really doesn't like big ones (even if we work with GLdoubles :( ).
+		if (ccCoordinatesShiftManager::Handle(P,diag,true,false,Pshift,&scale))
 		{
-			//apply global shift
-			if (Pshift.norm2() > 0)
-			{
-				ccGLMatrix mat;
-				mat.toIdentity();
-				mat.data()[12] = static_cast<float>(Pshift.x);
-				mat.data()[13] = static_cast<float>(Pshift.y);
-				mat.data()[14] = static_cast<float>(Pshift.z);
-				obj->applyGLTransformation_recursive(&mat);
-				ccConsole::Warning(QString("Entity '%1' has been translated: (%2,%3,%4) [original position will be restored when saving]").arg(obj->getName()).arg(Pshift.x,0,'f',2).arg(Pshift.y,0,'f',2).arg(Pshift.z,0,'f',2));
-			}
+			bool needRescale = (scale != 1.0);
+			bool needShift = (Pshift.norm2() > 0);
 
-			//apply global scale
-			if (scale != 1.0)
+			if (needRescale || needShift)
 			{
 				ccGLMatrix mat;
 				mat.toIdentity();
 				mat.data()[0] = mat.data()[5] = mat.data()[10] = static_cast<float>(scale);
+				mat.setTranslation(Pshift);
 				obj->applyGLTransformation_recursive(&mat);
-				ccConsole::Warning(QString("Entity '%1' has been rescaled: X%2 [original scale will be restored when saving]").arg(obj->getName()).arg(scale,0,'f',6));
+				ccConsole::Warning(QString("Entity '%1' has been translated: (%2,%3,%4) and rescaled of a factor %5 [original position will be restored when saving]").arg(obj->getName()).arg(Pshift.x,0,'f',2).arg(Pshift.y,0,'f',2).arg(Pshift.z,0,'f',2).arg(scale,0,'f',6));
 			}
 
 			//update 'global shift' and 'global scale' for ALL clouds recursively
-			//FIXME: why don't we do that all the time?!
+			//FIXME: why don't we do that all the time by the way?!
 			ccHObject::Container children;
 			children.push_back(obj);
 			while (!children.empty())
@@ -8528,9 +8703,9 @@ void MainWindow::addToDB(	ccHObject* obj,
 
 	//we can now set destination display (if none already)
 	if (!obj->getDisplay())
-    {
+	{
 		ccGLWindow* activeWin = getActiveGLWindow();
-        if (!activeWin)
+		if (!activeWin)
 		{
 			//no active GL window?!
 			return;
@@ -8566,8 +8741,6 @@ void MainWindow::addToDB(const QStringList& filenames, CC_FILE_TYPES fType, ccGL
 
 	//the same for 'addToDB' (if the first one is not supported, or if the scale remains too big)
 	CCVector3d addCoordinatesShift(0,0,0);
-	bool addCoordinatesTransEnabled = false;
-	double addCoordinatesScale = 1.0;
 
 	for (int i=0; i<filenames.size(); ++i)
 	{
@@ -8625,90 +8798,90 @@ void MainWindow::closeAll()
 
 void MainWindow::loadFile()
 {
-    QSettings settings;
-    settings.beginGroup("LoadFile");
-    QString currentPath = settings.value("currentPath",QApplication::applicationDirPath()).toString();
-    int currentOpenDlgFilter = settings.value("selectedFilter",BIN).toInt();
+	QSettings settings;
+	settings.beginGroup(s_psLoadFile);
+	QString currentPath = settings.value(s_psCurrentPath,QApplication::applicationDirPath()).toString();
+	int currentOpenDlgFilter = settings.value(s_psSelectedFilter,BIN).toInt();
 
-    //  Add all available file extension filters to a single QString.
-    //  Each filter entry is separated by double semicolon ";;".
-    QString filters;
-    filters.append(QString(CC_FILE_TYPE_FILTERS[UNKNOWN_FILE]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[BIN]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[ASCII]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[PTX]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[PLY]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[OBJ]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[VTK]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[STL]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[OFF]) + ";;");
+	// Add all available file extension filters to a single QString.
+	// Each filter entry is separated by double semicolon ";;".
+	QString filters;
+	filters.append(QString(CC_FILE_TYPE_FILTERS[UNKNOWN_FILE]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[BIN]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[ASCII]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[PTX]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[PLY]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[OBJ]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[VTK]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[STL]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[OFF]) + ";;");
 #ifdef CC_FBX_SUPPORT
-    filters.append(QString(CC_FILE_TYPE_FILTERS[FBX]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[FBX]) + ";;");
 #endif
-    filters.append(QString(CC_FILE_TYPE_FILTERS[PCD]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[PCD]) + ";;");
 #ifdef CC_X3D_SUPPORT
-    filters.append(QString(CC_FILE_TYPE_FILTERS[X3D]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[X3D]) + ";;");
 #endif
 
 #ifdef CC_LAS_SUPPORT
-    filters.append(QString(CC_FILE_TYPE_FILTERS[LAS]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[LAS]) + ";;");
 #endif
 #ifdef CC_E57_SUPPORT
-    filters.append(QString(CC_FILE_TYPE_FILTERS[E57]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[E57]) + ";;");
 #endif
 #ifdef CC_DXF_SUPPORT
 	filters.append(QString(CC_FILE_TYPE_FILTERS[DXF]) + ";;");
 #endif
 #ifdef CC_PDMS_SUPPORT
-    filters.append(QString(CC_FILE_TYPE_FILTERS[PDMS]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[PDMS]) + ";;");
 #endif
 #ifdef CC_GDAL_SUPPORT
-    filters.append(QString(CC_FILE_TYPE_FILTERS[RASTER]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[RASTER]) + ";;");
 #endif
-    filters.append(QString(CC_FILE_TYPE_FILTERS[SOI]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[PN]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[PV]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[POV]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[ICM]) + ";;");
-    filters.append(QString(CC_FILE_TYPE_FILTERS[BUNDLER])/*+ ";;"*/);
+	filters.append(QString(CC_FILE_TYPE_FILTERS[SOI]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[PN]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[PV]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[POV]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[ICM]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[BUNDLER])/*+ ";;"*/);
 
-    //currently selected filter
-    QString selectedFilter = CC_FILE_TYPE_FILTERS[currentOpenDlgFilter];
+	//currently selected filter
+	QString selectedFilter = CC_FILE_TYPE_FILTERS[currentOpenDlgFilter];
 
-    //file choosing dialog
-    QStringList selectedFiles = QFileDialog::getOpenFileNames(this,
-                                tr("Open file(s)"),
-                                currentPath,
-                                filters,
-                                &selectedFilter
+	//file choosing dialog
+	QStringList selectedFiles = QFileDialog::getOpenFileNames(	this,
+																tr("Open file(s)"),
+																currentPath,
+																filters,
+																&selectedFilter
 #ifdef _DEBUG
-								,QFileDialog::DontUseNativeDialog
+																,QFileDialog::DontUseNativeDialog
 #endif
-								);
-    if (selectedFiles.isEmpty())
-        return;
+															);
+	if (selectedFiles.isEmpty())
+		return;
 
-    CC_FILE_TYPES fType = UNKNOWN_FILE;
-    for (unsigned i=0;i<static_cast<unsigned>(FILE_TYPES_COUNT);++i)
-    {
-        if (selectedFilter == QString(CC_FILE_TYPE_FILTERS[i]))
-        {
-            fType = CC_FILE_TYPES_ENUMS[i];
-            break;
-        }
-    }
+	CC_FILE_TYPES fType = UNKNOWN_FILE;
+	for (unsigned i=0;i<static_cast<unsigned>(FILE_TYPES_COUNT);++i)
+	{
+		if (selectedFilter == QString(CC_FILE_TYPE_FILTERS[i]))
+		{
+			fType = CC_FILE_TYPES_ENUMS[i];
+			break;
+		}
+	}
 
 	//load files
 	addToDB(selectedFiles,fType);
 
-    //we update current file path
-    currentPath = QFileInfo(selectedFiles[0]).absolutePath();
-    currentOpenDlgFilter = fType;
+	//we update current file path
+	currentPath = QFileInfo(selectedFiles[0]).absolutePath();
+	currentOpenDlgFilter = fType;
 
 	//save last loading location
-    settings.setValue("currentPath",currentPath);
-    settings.setValue("selectedFilter",currentOpenDlgFilter);
-    settings.endGroup();
+	settings.setValue(s_psCurrentPath,currentPath);
+	settings.setValue(s_psSelectedFilter,currentOpenDlgFilter);
+	settings.endGroup();
 }
 
 //Helper: check for a filename validity
@@ -8725,16 +8898,16 @@ static bool IsValidFileName(QString filename)
 
 void MainWindow::saveFile()
 {
-    size_t selNum = m_selectedEntities.size();
-    if (selNum == 0)
-        return;
+	size_t selNum = m_selectedEntities.size();
+	if (selNum == 0)
+		return;
 
-    //persistent settings
-    QSettings settings;
-    settings.beginGroup("SaveFile");
-    QString currentPath = settings.value("currentPath",QApplication::applicationDirPath()).toString();
-    int currentCloudSaveDlgFilter = settings.value("selectedFilterCloud",BIN).toInt();
-    int currentMeshSaveDlgFilter = settings.value("selectedFilterMesh",PLY).toInt();
+	//persistent settings
+	QSettings settings;
+	settings.beginGroup(s_psSaveFile);
+	QString currentPath = settings.value(s_psCurrentPath,QApplication::applicationDirPath()).toString();
+	int currentCloudSaveDlgFilter = settings.value(s_psSelectedFilterCloud,BIN).toInt();
+	int currentMeshSaveDlgFilter = settings.value(s_psSelectedFilterMesh,PLY).toInt();
 
 	ccHObject clouds("clouds");
 	ccHObject meshes("meshes");
@@ -8745,13 +8918,13 @@ void MainWindow::saveFile()
 	ccHObject::Container entitiesToSave;
 	entitiesToSave.insert(entitiesToSave.begin(),m_selectedEntities.begin(),m_selectedEntities.end());
 	while (!entitiesToSave.empty())
-    {
+	{
 		ccHObject* child = entitiesToSave.back();
 		entitiesToSave.pop_back();
 
-        if (child->isA(CC_TYPES::HIERARCHY_OBJECT))
-        {
-            for (unsigned j=0;j<child->getChildrenNumber();++j)
+		if (child->isA(CC_TYPES::HIERARCHY_OBJECT))
+		{
+			for (unsigned j=0;j<child->getChildrenNumber();++j)
 				entitiesToSave.push_back(child->getChild(j));
 		}
 		else
@@ -8776,7 +8949,7 @@ void MainWindow::saveFile()
 			//we don't want double insertions if the user has clicked both the father and child
 			if (!dest->find(child->getUniqueID()))
 				dest->addChild(child,ccHObject::DP_NONE);
-        }
+		}
 	}
 
 	bool hasCloud = (clouds.getChildrenNumber() != 0);
@@ -8797,15 +8970,15 @@ void MainWindow::saveFile()
 		return;
 	}
 
-    //we set up the right file filters, depending on the selected
-    //entities shared type (cloud, mesh, etc.).
-    QString filters;
+	//we set up the right file filters, depending on the selected
+	//entities shared type (cloud, mesh, etc.).
+	QString filters;
 
 	//From now on, BIN format handles about anyhting!
-    filters.append(QString(CC_FILE_TYPE_FILTERS[BIN]) + ";;");
+	filters.append(QString(CC_FILE_TYPE_FILTERS[BIN]) + ";;");
 
 	ccHObject* toSave = 0;
-    QString selectedFilter = CC_FILE_TYPE_FILTERS[BIN];
+	QString selectedFilter = CC_FILE_TYPE_FILTERS[BIN];
 
 	//if we only have one type of entity selected, then we can let the user choose specific formats
 	if (stdSaveTypes == 1)
@@ -8816,19 +8989,19 @@ void MainWindow::saveFile()
 			selectedFilter = CC_FILE_TYPE_FILTERS[currentCloudSaveDlgFilter];
 
 			//add cloud output file filters
-            filters.append(QString(CC_FILE_TYPE_FILTERS[ASCII]) + ";;");
-	#ifdef CC_E57_SUPPORT
-            filters.append(QString(CC_FILE_TYPE_FILTERS[E57]) + ";;");
-	#endif
+			filters.append(QString(CC_FILE_TYPE_FILTERS[ASCII]) + ";;");
+#ifdef CC_E57_SUPPORT
+			filters.append(QString(CC_FILE_TYPE_FILTERS[E57]) + ";;");
+#endif
 			if (clouds.getChildrenNumber() == 1)
 			{
-                filters.append(QString(CC_FILE_TYPE_FILTERS[PLY]) + ";;");
-                filters.append(QString(CC_FILE_TYPE_FILTERS[VTK]) + ";;");
-	#ifdef CC_LAS_SUPPORT
-                filters.append(QString(CC_FILE_TYPE_FILTERS[LAS]) + ";;");
-	#endif
-                filters.append(QString(CC_FILE_TYPE_FILTERS[PN]) + ";;");
-                filters.append(QString(CC_FILE_TYPE_FILTERS[PV]) + ";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[PLY]) + ";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[VTK]) + ";;");
+#ifdef CC_LAS_SUPPORT
+				filters.append(QString(CC_FILE_TYPE_FILTERS[LAS]) + ";;");
+#endif
+				filters.append(QString(CC_FILE_TYPE_FILTERS[PN]) + ";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[PV]) + ";;");
 			}
 			//TODO: POV files handling!
 			//filters.append(CC_FILE_TYPE_FILTERS[POV]);
@@ -8842,15 +9015,15 @@ void MainWindow::saveFile()
 				selectedFilter = CC_FILE_TYPE_FILTERS[currentMeshSaveDlgFilter];
 
 				//add meshes output file filters
-                filters.append(QString(CC_FILE_TYPE_FILTERS[OBJ])+";;");
-                filters.append(QString(CC_FILE_TYPE_FILTERS[PLY])+";;");
-                filters.append(QString(CC_FILE_TYPE_FILTERS[VTK])+";;");
-                filters.append(QString(CC_FILE_TYPE_FILTERS[STL])+";;");
-                filters.append(QString(CC_FILE_TYPE_FILTERS[OFF])+";;");
-		#ifdef CC_X3D_SUPPORT
-                filters.append(QString(CC_FILE_TYPE_FILTERS[X3D])+";;");
-		#endif
-                filters.append(QString(CC_FILE_TYPE_FILTERS[MA])+";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[OBJ])+";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[PLY])+";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[VTK])+";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[STL])+";;");
+				filters.append(QString(CC_FILE_TYPE_FILTERS[OFF])+";;");
+#ifdef CC_X3D_SUPPORT
+				filters.append(QString(CC_FILE_TYPE_FILTERS[X3D])+";;");
+#endif
+				filters.append(QString(CC_FILE_TYPE_FILTERS[MA])+";;");
 			}
 #ifdef CC_FBX_SUPPORT
 			filters.append(QString(CC_FILE_TYPE_FILTERS[FBX]) + ";;");
@@ -8878,13 +9051,13 @@ void MainWindow::saveFile()
 				QList<QByteArray> formats = QImageWriter::supportedImageFormats();
 				//we convert this list into a proper "filters" string
 				for (int i=0; i<formats.size(); ++i)
-                    filters.append(QString("%1 image (*.%2);;").arg(QString(formats[i].data()).toUpper()).arg(formats[i].data()));
+					filters.append(QString("%1 image (*.%2);;").arg(QString(formats[i].data()).toUpper()).arg(formats[i].data()));
 			}
 		}
 	}
 
-    QString dir = currentPath+QString("/");
-    if (selNum == 1)
+	QString dir = currentPath+QString("/");
+	if (selNum == 1)
 	{
 		//hierarchy objects have generally as name: 'filename.ext (fullpath)'
 		//so we must only take the first part! (otherwise this type of name
@@ -8909,17 +9082,17 @@ void MainWindow::saveFile()
 		dir += defaultFileName;
 	}
 
-    QString selectedFilename = QFileDialog::getSaveFileName(this,
-                               tr("Save file"),
-                               dir,
-                               filters,
-                               &selectedFilter);
+	QString selectedFilename = QFileDialog::getSaveFileName(this,
+															tr("Save file"),
+															dir,
+															filters,
+															&selectedFilter);
 
-    if (selectedFilename.isEmpty())
-        return;
+	if (selectedFilename.isEmpty())
+		return;
 
 	//ignored items
-    if (hasOther)
+	if (hasOther)
 	{
 		ccConsole::Warning("[MainWindow::saveFile] The following selected entites won't be saved:");
 		for (unsigned i=0;i<other.getChildrenNumber();++i)
@@ -8981,16 +9154,16 @@ void MainWindow::saveFile()
 			else if (hasMesh)
 				currentMeshSaveDlgFilter = fType;
 
-			result = FileIOFilter::SaveToFile(toSave->getChildrenNumber() > 1 ? toSave : toSave->getChild(0),
-											   qPrintable(selectedFilename),
-											   fType);
+			result = FileIOFilter::SaveToFile(	toSave->getChildrenNumber() > 1 ? toSave : toSave->getChild(0),
+												qPrintable(selectedFilename),
+												fType);
 		}
 		else if (hasPolylines)
 		{
 #ifdef CC_DXF_SUPPORT
-			result = FileIOFilter::SaveToFile(toSave,
-											   qPrintable(selectedFilename),
-											   DXF);
+			result = FileIOFilter::SaveToFile(	toSave,
+												qPrintable(selectedFilename),
+												DXF);
 #endif
 		}
 		else if (hasImage)
@@ -9011,13 +9184,13 @@ void MainWindow::saveFile()
 		ccLog::Print(QString("[I/O] File '%1' saved successfully").arg(selectedFilename));
 	}
 
-    //we update current file path
-    currentPath = QFileInfo(selectedFilename).absolutePath();
+	//we update current file path
+	currentPath = QFileInfo(selectedFilename).absolutePath();
 
-    settings.setValue("currentPath",currentPath);
-    settings.setValue("selectedFilterCloud",static_cast<int>(currentCloudSaveDlgFilter));
-    settings.setValue("selectedFilterMesh",static_cast<int>(currentMeshSaveDlgFilter));
-    settings.endGroup();
+	settings.setValue(s_psCurrentPath,currentPath);
+	settings.setValue(s_psSelectedFilterCloud,static_cast<int>(currentCloudSaveDlgFilter));
+	settings.setValue(s_psSelectedFilterMesh,static_cast<int>(currentMeshSaveDlgFilter));
+	settings.endGroup();
 }
 
 void MainWindow::on3DViewActivated(QMdiSubWindow* mdiWin)
@@ -9027,14 +9200,6 @@ void MainWindow::on3DViewActivated(QMdiSubWindow* mdiWin)
 	{
 		updateViewModePopUpMenu(win);
 		updatePivotVisibilityPopUpMenu(win);
-
-
-	}
-	else
-	{
-		if (m_viewModePopupButton)
-		{
-		}
 	}
 }
 
@@ -9110,126 +9275,126 @@ void MainWindow::updatePivotVisibilityPopUpMenu(ccGLWindow* win)
 
 void MainWindow::updateMenus()
 {
-    ccGLWindow* win = getActiveGLWindow();
-    bool hasMdiChild = (win != 0);
-    bool hasSelectedEntities = (m_ccRoot && m_ccRoot->countSelectedEntities()>0);
+	ccGLWindow* win = getActiveGLWindow();
+	bool hasMdiChild = (win != 0);
+	bool hasSelectedEntities = (m_ccRoot && m_ccRoot->countSelectedEntities()>0);
 
-    //General Menu
-    menuEdit->setEnabled(true/*hasSelectedEntities*/);
-    menuTools->setEnabled(true/*hasSelectedEntities*/);
+	//General Menu
+	menuEdit->setEnabled(true/*hasSelectedEntities*/);
+	menuTools->setEnabled(true/*hasSelectedEntities*/);
 
-    //3D Views Menu
-    actionClose3DView->setEnabled(hasMdiChild);
-    actionCloseAll3DViews->setEnabled(hasMdiChild);
-    actionTile3DViews->setEnabled(hasMdiChild);
-    actionCascade3DViews->setEnabled(hasMdiChild);
-    actionNext3DView->setEnabled(hasMdiChild);
-    actionPrevious3DView->setEnabled(hasMdiChild);
+	//3D Views Menu
+	actionClose3DView->setEnabled(hasMdiChild);
+	actionCloseAll3DViews->setEnabled(hasMdiChild);
+	actionTile3DViews->setEnabled(hasMdiChild);
+	actionCascade3DViews->setEnabled(hasMdiChild);
+	actionNext3DView->setEnabled(hasMdiChild);
+	actionPrevious3DView->setEnabled(hasMdiChild);
 
-    //Shaders & Filters display Menu
-    bool shadersEnabled = (win ? win->areShadersEnabled() : false);
-    actionLoadShader->setEnabled(shadersEnabled);
-    actionDeleteShader->setEnabled(shadersEnabled);
+	//Shaders & Filters display Menu
+	bool shadersEnabled = (win ? win->areShadersEnabled() : false);
+	actionLoadShader->setEnabled(shadersEnabled);
+	actionDeleteShader->setEnabled(shadersEnabled);
 
-    bool filtersEnabled = (win ? win->areGLFiltersEnabled() : false);
-    actionNoFilter->setEnabled(filtersEnabled);
+	bool filtersEnabled = (win ? win->areGLFiltersEnabled() : false);
+	actionNoFilter->setEnabled(filtersEnabled);
 
-    //View Menu
-    toolBarView->setEnabled(hasMdiChild);
+	//View Menu
+	toolBarView->setEnabled(hasMdiChild);
 
-    //oher actions
-    actionSegment->setEnabled(hasMdiChild && hasSelectedEntities);
-    actionTranslateRotate->setEnabled(hasMdiChild && hasSelectedEntities);
+	//oher actions
+	actionSegment->setEnabled(hasMdiChild && hasSelectedEntities);
+	actionTranslateRotate->setEnabled(hasMdiChild && hasSelectedEntities);
 	actionPointPicking->setEnabled(hasMdiChild);
-    //actionPointListPicking->setEnabled(hasMdiChild);
-    actionTestFrameRate->setEnabled(hasMdiChild);
-    actionRenderToFile->setEnabled(hasMdiChild);
-    actionToggleSunLight->setEnabled(hasMdiChild);
-    actionToggleCustomLight->setEnabled(hasMdiChild);
-    actionToggleCenteredPerspective->setEnabled(hasMdiChild);
-    actionToggleViewerBasedPerspective->setEnabled(hasMdiChild);
+	//actionPointListPicking->setEnabled(hasMdiChild);
+	actionTestFrameRate->setEnabled(hasMdiChild);
+	actionRenderToFile->setEnabled(hasMdiChild);
+	actionToggleSunLight->setEnabled(hasMdiChild);
+	actionToggleCustomLight->setEnabled(hasMdiChild);
+	actionToggleCenteredPerspective->setEnabled(hasMdiChild);
+	actionToggleViewerBasedPerspective->setEnabled(hasMdiChild);
 
-    //plugins
+	//plugins
 	foreach (QAction* act, m_glFilterActions.actions())
 		act->setEnabled(hasMdiChild);
 }
 
 void MainWindow::update3DViewsMenu()
 {
-    menu3DViews->clear();
-    menu3DViews->addAction(actionNew3DView);
-    menu3DViews->addSeparator();
-    menu3DViews->addAction(actionClose3DView);
-    menu3DViews->addAction(actionCloseAll3DViews);
-    menu3DViews->addSeparator();
-    menu3DViews->addAction(actionTile3DViews);
-    menu3DViews->addAction(actionCascade3DViews);
-    menu3DViews->addSeparator();
-    menu3DViews->addAction(actionNext3DView);
-    menu3DViews->addAction(actionPrevious3DView);
+	menu3DViews->clear();
+	menu3DViews->addAction(actionNew3DView);
+	menu3DViews->addSeparator();
+	menu3DViews->addAction(actionClose3DView);
+	menu3DViews->addAction(actionCloseAll3DViews);
+	menu3DViews->addSeparator();
+	menu3DViews->addAction(actionTile3DViews);
+	menu3DViews->addAction(actionCascade3DViews);
+	menu3DViews->addSeparator();
+	menu3DViews->addAction(actionNext3DView);
+	menu3DViews->addAction(actionPrevious3DView);
 
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    if (!windows.isEmpty())
-    {
-        //Dynamic Separator
-        QAction* separator = new QAction(this);
-        separator->setSeparator(true);
-        menu3DViews->addAction(separator);
+	QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	if (!windows.isEmpty())
+	{
+		//Dynamic Separator
+		QAction* separator = new QAction(this);
+		separator->setSeparator(true);
+		menu3DViews->addAction(separator);
 
-        for (int i=0; i<windows.size(); ++i)
-        {
-            QWidget *child = windows.at(i)->widget();
+		for (int i=0; i<windows.size(); ++i)
+		{
+			QWidget *child = windows.at(i)->widget();
 
-            QString text = QString("&%1 %2").arg(i + 1).arg(child->windowTitle());
-            QAction *action  = menu3DViews->addAction(text);
-            action->setCheckable(true);
-            action ->setChecked(child == getActiveGLWindow());
-            connect(action, SIGNAL(triggered()), m_windowMapper, SLOT(map()));
-            m_windowMapper->setMapping(action, windows.at(i));
-        }
-    }
+			QString text = QString("&%1 %2").arg(i + 1).arg(child->windowTitle());
+			QAction *action = menu3DViews->addAction(text);
+			action->setCheckable(true);
+			action ->setChecked(child == getActiveGLWindow());
+			connect(action, SIGNAL(triggered()), m_windowMapper, SLOT(map()));
+			m_windowMapper->setMapping(action, windows.at(i));
+		}
+	}
 }
 
 void MainWindow::setActiveSubWindow(QWidget *window)
 {
-    if (!window || !m_mdiArea)
-        return;
-    m_mdiArea->setActiveSubWindow(qobject_cast<QMdiSubWindow *>(window));
+	if (!window || !m_mdiArea)
+		return;
+	m_mdiArea->setActiveSubWindow(qobject_cast<QMdiSubWindow *>(window));
 }
 
 void MainWindow::redrawAll()
 {
-    QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-        static_cast<ccGLWindow*>(windows.at(i)->widget())->redraw();
+	QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+		static_cast<ccGLWindow*>(windows.at(i)->widget())->redraw();
 }
 
 void MainWindow::refreshAll()
 {
-    QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-        static_cast<ccGLWindow*>(windows.at(i)->widget())->refresh();
+	QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+		static_cast<ccGLWindow*>(windows.at(i)->widget())->refresh();
 }
 
 void MainWindow::updateUI()
 {
-    updateUIWithSelection();
+	updateUIWithSelection();
 	updateMenus();
-    if (m_ccRoot)
-        m_ccRoot->updatePropertiesView();
+	if (m_ccRoot)
+		m_ccRoot->updatePropertiesView();
 }
 
 void MainWindow::updateUIWithSelection()
 {
-    dbTreeSelectionInfo selInfo;
+	dbTreeSelectionInfo selInfo;
 
-    m_selectedEntities.clear();
+	m_selectedEntities.clear();
 
 	if (m_ccRoot)
 		m_ccRoot->getSelectedEntities(m_selectedEntities,CC_TYPES::OBJECT,&selInfo);
-    //expandDBTreeWithSelection(m_selectedEntities);
+	//expandDBTreeWithSelection(m_selectedEntities);
 
-    enableUIItems(selInfo);
+	enableUIItems(selInfo);
 }
 
 void MainWindow::expandDBTreeWithSelection(ccHObject::Container& selection)
@@ -9238,149 +9403,151 @@ void MainWindow::expandDBTreeWithSelection(ccHObject::Container& selection)
 		return;
 
 	size_t selNum = selection.size();
-    for (size_t i=0; i<selNum; ++i)
+	for (size_t i=0; i<selNum; ++i)
 		m_ccRoot->expandElement(selection[i],true);
 }
 
 void MainWindow::enableAll()
 {
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-        windows.at(i)->setEnabled(true);
+	QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+		windows.at(i)->setEnabled(true);
 }
 
 void MainWindow::disableAll()
 {
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-        windows.at(i)->setEnabled(false);
+	QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+		windows.at(i)->setEnabled(false);
 }
 
 void MainWindow::disableAllBut(ccGLWindow* win)
 {
-    //we disable all other windows
-    QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-        if (static_cast<ccGLWindow*>(windows.at(i)->widget()) != win)
-            windows.at(i)->setEnabled(false);
+	//we disable all other windows
+	QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+		if (static_cast<ccGLWindow*>(windows.at(i)->widget()) != win)
+			windows.at(i)->setEnabled(false);
 }
 
 void MainWindow::enableUIItems(dbTreeSelectionInfo& selInfo)
 {
-    //>0
-    bool atLeastOneEntity = (selInfo.selCount>0);
-    bool atLeastOneCloud = (selInfo.cloudCount>0);
-    bool atLeastOneMesh = (selInfo.meshCount>0);
-    //bool atLeastOneOctree = (selInfo.octreeCount>0);
-    bool atLeastOneNormal = (selInfo.normalsCount>0);
-    bool atLeastOneColor = (selInfo.colorCount>0);
-    bool atLeastOneSF = (selInfo.sfCount>0);
-    //bool atLeastOneSensor = (selInfo.sensorCount>0);
-    bool atLeastOneGDBSensor = (selInfo.gblSensorCount>0);
-    bool atLeastOneCameraSensor = (selInfo.cameraSensorCount>0);
-    bool activeWindow = (getActiveGLWindow() != 0);
+	//>0
+	bool atLeastOneEntity = (selInfo.selCount>0);
+	bool atLeastOneCloud = (selInfo.cloudCount>0);
+	bool atLeastOneMesh = (selInfo.meshCount>0);
+	//bool atLeastOneOctree = (selInfo.octreeCount>0);
+	bool atLeastOneNormal = (selInfo.normalsCount>0);
+	bool atLeastOneColor = (selInfo.colorCount>0);
+	bool atLeastOneSF = (selInfo.sfCount>0);
+	//bool atLeastOneSensor = (selInfo.sensorCount>0);
+	bool atLeastOneGBLSensor = (selInfo.gblSensorCount>0);
+	bool atLeastOneCameraSensor = (selInfo.cameraSensorCount>0);
+	bool activeWindow = (getActiveGLWindow() != 0);
 
-    //menuEdit->setEnabled(atLeastOneEntity);
-    //menuTools->setEnabled(atLeastOneEntity);
-    menuCreateSensor->setEnabled(atLeastOneCloud);
-    menuGroundBasedLidar->setEnabled(atLeastOneGDBSensor);
-    menuCameraSensor->setEnabled(atLeastOneCameraSensor);
+	//menuEdit->setEnabled(atLeastOneEntity);
+	//menuTools->setEnabled(atLeastOneEntity);
+	menuCreateSensor->setEnabled(atLeastOneCloud);
+	menuGroundBasedLidar->setEnabled(atLeastOneGBLSensor);
+	menuCameraSensor->setEnabled(atLeastOneCameraSensor);
 
-    actionZoomAndCenter->setEnabled(atLeastOneEntity && activeWindow);
-    actionSave->setEnabled(atLeastOneEntity);
-    actionClone->setEnabled(atLeastOneEntity);
-    actionDelete->setEnabled(atLeastOneEntity);
+	actionZoomAndCenter->setEnabled(atLeastOneEntity && activeWindow);
+	actionSave->setEnabled(atLeastOneEntity);
+	actionClone->setEnabled(atLeastOneEntity);
+	actionDelete->setEnabled(atLeastOneEntity);
 	actionExportCoordToSF->setEnabled(atLeastOneEntity);
-    actionSegment->setEnabled(atLeastOneEntity && activeWindow);
-    actionTranslateRotate->setEnabled(atLeastOneEntity && activeWindow);
-    actionShowDepthBuffer->setEnabled(atLeastOneGDBSensor);
-    actionExportDepthBuffer->setEnabled(atLeastOneGDBSensor);
-    actionResampleWithOctree->setEnabled(atLeastOneCloud);
-    actionApplyScale->setEnabled(atLeastOneCloud || atLeastOneMesh);
-    actionApplyTransformation->setEnabled(atLeastOneEntity);
-    actionComputeOctree->setEnabled(atLeastOneCloud || atLeastOneMesh);
-    actionComputeNormals->setEnabled(atLeastOneCloud || atLeastOneMesh);
-    actionSetColorGradient->setEnabled(atLeastOneCloud || atLeastOneMesh);
+	actionSegment->setEnabled(atLeastOneEntity && activeWindow);
+	actionTranslateRotate->setEnabled(atLeastOneEntity && activeWindow);
+	actionShowDepthBuffer->setEnabled(atLeastOneGBLSensor);
+	actionExportDepthBuffer->setEnabled(atLeastOneGBLSensor);
+	actionResampleWithOctree->setEnabled(atLeastOneCloud);
+	actionApplyScale->setEnabled(atLeastOneCloud || atLeastOneMesh);
+	actionApplyTransformation->setEnabled(atLeastOneEntity);
+	actionComputeOctree->setEnabled(atLeastOneCloud || atLeastOneMesh);
+	actionComputeNormals->setEnabled(atLeastOneCloud || atLeastOneMesh);
+	actionSetColorGradient->setEnabled(atLeastOneCloud || atLeastOneMesh);
+	actionChangeColorLevels->setEnabled(atLeastOneCloud || atLeastOneMesh);
+	actionEditGlobalShiftAndScale->setEnabled(atLeastOneCloud || atLeastOneMesh);
 	actionCrop->setEnabled(atLeastOneCloud || atLeastOneMesh);
-    actionSetUniqueColor->setEnabled(atLeastOneEntity/*atLeastOneCloud || atLeastOneMesh*/); //DGM: we can set color to a group now!
-    actionColorize->setEnabled(atLeastOneEntity/*atLeastOneCloud || atLeastOneMesh*/); //DGM: we can set color to a group now!
-    actionScalarFieldFromColor->setEnabled(atLeastOneEntity && atLeastOneColor);
-    actionComputeMeshAA->setEnabled(atLeastOneCloud);
-    actionComputeMeshLS->setEnabled(atLeastOneCloud);
-    //actionComputeQuadric3D->setEnabled(atLeastOneCloud);
-    actionComputeBestFitBB->setEnabled(atLeastOneEntity);
-    actionApproximateDensity->setEnabled(atLeastOneCloud);
-    actionAccurateDensity->setEnabled(atLeastOneCloud);
-    actionCurvature->setEnabled(atLeastOneCloud);
-    actionRoughness->setEnabled(atLeastOneCloud);
+	actionSetUniqueColor->setEnabled(atLeastOneEntity/*atLeastOneCloud || atLeastOneMesh*/); //DGM: we can set color to a group now!
+	actionColorize->setEnabled(atLeastOneEntity/*atLeastOneCloud || atLeastOneMesh*/); //DGM: we can set color to a group now!
+	actionScalarFieldFromColor->setEnabled(atLeastOneEntity && atLeastOneColor);
+	actionComputeMeshAA->setEnabled(atLeastOneCloud);
+	actionComputeMeshLS->setEnabled(atLeastOneCloud);
+	//actionComputeQuadric3D->setEnabled(atLeastOneCloud);
+	actionComputeBestFitBB->setEnabled(atLeastOneEntity);
+	actionApproximateDensity->setEnabled(atLeastOneCloud);
+	actionAccurateDensity->setEnabled(atLeastOneCloud);
+	actionCurvature->setEnabled(atLeastOneCloud);
+	actionRoughness->setEnabled(atLeastOneCloud);
 	actionRemoveDuplicatePoints->setEnabled(atLeastOneCloud);
-    actionFitPlane->setEnabled(atLeastOneEntity);
-    actionFitFacet->setEnabled(atLeastOneEntity);
+	actionFitPlane->setEnabled(atLeastOneEntity);
+	actionFitFacet->setEnabled(atLeastOneEntity);
 	actionFitQuadric->setEnabled(atLeastOneCloud);
-    actionSubsample->setEnabled(atLeastOneCloud);
+	actionSubsample->setEnabled(atLeastOneCloud);
 
 	actionSNETest->setEnabled(atLeastOneCloud);
 	actionExportCloudsInfo->setEnabled(atLeastOneCloud);
 
-    actionFilterByValue->setEnabled(atLeastOneSF);
-    actionConvertToRGB->setEnabled(atLeastOneSF);
+	actionFilterByValue->setEnabled(atLeastOneSF);
+	actionConvertToRGB->setEnabled(atLeastOneSF);
+	actionConvertToRandomRGB->setEnabled(atLeastOneSF);
 	actionRenameSF->setEnabled(atLeastOneSF);
 	actionAddIdField->setEnabled(atLeastOneCloud);
-    actionComputeStatParams->setEnabled(atLeastOneSF);
-    actionShowHistogram->setEnabled(atLeastOneSF);
-    actionGaussianFilter->setEnabled(atLeastOneSF);
-    actionBilateralFilter->setEnabled(atLeastOneSF);
-    actionDeleteScalarField->setEnabled(atLeastOneSF);
-    actionDeleteAllSF->setEnabled(atLeastOneSF);
-    actionMultiplySF->setEnabled(/*TODO: atLeastOneSF*/false);
-    actionSFGradient->setEnabled(atLeastOneSF);
+	actionComputeStatParams->setEnabled(atLeastOneSF);
+	actionShowHistogram->setEnabled(atLeastOneSF);
+	actionGaussianFilter->setEnabled(atLeastOneSF);
+	actionBilateralFilter->setEnabled(atLeastOneSF);
+	actionDeleteScalarField->setEnabled(atLeastOneSF);
+	actionDeleteAllSF->setEnabled(atLeastOneSF);
+	actionMultiplySF->setEnabled(/*TODO: atLeastOneSF*/false);
+	actionSFGradient->setEnabled(atLeastOneSF);
 	actionSetSFAsCoord->setEnabled(atLeastOneSF && atLeastOneCloud);
 
-    actionSamplePoints->setEnabled(atLeastOneMesh);
-    actionMeasureMeshSurface->setEnabled(atLeastOneMesh);
+	actionSamplePoints->setEnabled(atLeastOneMesh);
+	actionMeasureMeshSurface->setEnabled(atLeastOneMesh);
 	actionSmoothMeshLaplacian->setEnabled(atLeastOneMesh);
 	actionConvertTextureToColor->setEnabled(atLeastOneMesh);
 	actionSubdivideMesh->setEnabled(atLeastOneMesh);
 	actionDistanceToBestFitQuadric3D->setEnabled(atLeastOneCloud);
 
-    menuMeshScalarField->setEnabled(atLeastOneSF && atLeastOneMesh);
-    //actionSmoothMeshSF->setEnabled(atLeastOneSF && atLeastOneMesh);
-    //actionEnhanceMeshSF->setEnabled(atLeastOneSF && atLeastOneMesh);
+	menuMeshScalarField->setEnabled(atLeastOneSF && atLeastOneMesh);
+	//actionSmoothMeshSF->setEnabled(atLeastOneSF && atLeastOneMesh);
+	//actionEnhanceMeshSF->setEnabled(atLeastOneSF && atLeastOneMesh);
 
-    actionOrientNormalsMST->setEnabled(atLeastOneCloud && atLeastOneNormal);
-    actionOrientNormalsFM->setEnabled(atLeastOneCloud && atLeastOneNormal);
-    actionClearNormals->setEnabled(atLeastOneNormal);
-    actionInvertNormals->setEnabled(atLeastOneNormal);
-    actionConvertNormalToHSV->setEnabled(atLeastOneNormal);
+	actionOrientNormalsMST->setEnabled(atLeastOneCloud && atLeastOneNormal);
+	actionOrientNormalsFM->setEnabled(atLeastOneCloud && atLeastOneNormal);
+	actionClearNormals->setEnabled(atLeastOneNormal);
+	actionInvertNormals->setEnabled(atLeastOneNormal);
+	actionConvertNormalToHSV->setEnabled(atLeastOneNormal);
 	actionConvertNormalToDipDir->setEnabled(atLeastOneNormal);
-    actionClearColor->setEnabled(atLeastOneColor);
+	actionClearColor->setEnabled(atLeastOneColor);
 
-    // == 1
-    bool exactlyOneEntity = (selInfo.selCount == 1);
-    bool exactlyOneCloud = (selInfo.cloudCount == 1);
-    bool exactlyOneMesh = (selInfo.meshCount == 1);
-    bool exactlyOneSF = (selInfo.sfCount == 1);
-    bool exactlyOneSensor = (selInfo.sensorCount == 1);
+	// == 1
+	bool exactlyOneEntity = (selInfo.selCount == 1);
+	bool exactlyOneCloud = (selInfo.cloudCount == 1);
+	bool exactlyOneMesh = (selInfo.meshCount == 1);
+	bool exactlyOneSF = (selInfo.sfCount == 1);
+	bool exactlyOneSensor = (selInfo.sensorCount == 1);
 	bool exactlyOneCameraSensor = (selInfo.cameraSensorCount == 1);
 
-    actionModifySensor->setEnabled(exactlyOneSensor);
-    actionComputeDistancesFromSensor->setEnabled(exactlyOneSensor);
-    actionComputeScatteringAngles->setEnabled(exactlyOneSensor);
+	actionModifySensor->setEnabled(exactlyOneSensor);
+	actionComputeDistancesFromSensor->setEnabled(atLeastOneCameraSensor || atLeastOneGBLSensor);
+	actionComputeScatteringAngles->setEnabled(exactlyOneSensor);
 	actionViewFromSensor->setEnabled(exactlyOneSensor);
-    actionCreateGBLSensor->setEnabled(atLeastOneCloud);
+	actionCreateGBLSensor->setEnabled(atLeastOneCloud);
 	actionCreateCameraSensor->setEnabled(atLeastOneCloud);
 	actionProjectUncertainty->setEnabled(exactlyOneCameraSensor);
 	actionCheckPointsInsideFrustrum->setEnabled(exactlyOneCameraSensor);
-    actionLabelConnectedComponents->setEnabled(atLeastOneCloud);
-    actionUnroll->setEnabled(exactlyOneEntity);
-    actionStatisticalTest->setEnabled(exactlyOneEntity && exactlyOneSF);
+	actionLabelConnectedComponents->setEnabled(atLeastOneCloud);
+	actionUnroll->setEnabled(exactlyOneEntity);
+	actionStatisticalTest->setEnabled(exactlyOneEntity && exactlyOneSF);
 	actionAddConstantSF->setEnabled(exactlyOneCloud || exactlyOneMesh);
-	actionEditGlobalShift->setEnabled(exactlyOneCloud || exactlyOneMesh);
 	actionEditGlobalScale->setEnabled(exactlyOneCloud || exactlyOneMesh);
 	actionComputeKdTree->setEnabled(exactlyOneCloud || exactlyOneMesh);
 
 	actionKMeans->setEnabled(/*TODO: exactlyOneEntity && exactlyOneSF*/false);
-    actionFrontPropagation->setEnabled(/*TODO: exactlyOneEntity && exactlyOneSF*/false);
+	actionFrontPropagation->setEnabled(/*TODO: exactlyOneEntity && exactlyOneSF*/false);
 
 	actionFindBiggestInnerRectangle->setEnabled(exactlyOneCloud);
 
@@ -9391,166 +9558,166 @@ void MainWindow::enableUIItems(dbTreeSelectionInfo& selInfo)
 	actionPointListPicking->setEnabled(exactlyOneEntity);
 
 	// == 2
-    bool exactlyTwoEntities = (selInfo.selCount == 2);
-    bool exactlyTwoClouds = (selInfo.cloudCount == 2);
-    //bool exactlyTwoSF = (selInfo.sfCount == 2);
+	bool exactlyTwoEntities = (selInfo.selCount == 2);
+	bool exactlyTwoClouds = (selInfo.cloudCount == 2);
+	//bool exactlyTwoSF = (selInfo.sfCount == 2);
 
-    actionRegister->setEnabled(exactlyTwoEntities);
+	actionRegister->setEnabled(exactlyTwoEntities);
 	actionInterpolateColors->setEnabled(exactlyTwoEntities && atLeastOneColor);
 	actionPointPairsAlign->setEnabled(exactlyOneEntity || exactlyTwoEntities);
-    actionAlign->setEnabled(exactlyTwoEntities); //Aurelien BEY le 13/11/2008
-    actionCloudCloudDist->setEnabled(exactlyTwoClouds);
-    actionCloudMeshDist->setEnabled(exactlyTwoEntities && atLeastOneMesh);
-    actionCPS->setEnabled(exactlyTwoClouds);
-    actionScalarFieldArithmetic->setEnabled(exactlyOneEntity && atLeastOneSF);
+	actionAlign->setEnabled(exactlyTwoEntities); //Aurelien BEY le 13/11/2008
+	actionCloudCloudDist->setEnabled(exactlyTwoClouds);
+	actionCloudMeshDist->setEnabled(exactlyTwoEntities && atLeastOneMesh);
+	actionCPS->setEnabled(exactlyTwoClouds);
+	actionScalarFieldArithmetic->setEnabled(exactlyOneEntity && atLeastOneSF);
 
-    //>1
-    bool atLeastTwoEntities = (selInfo.selCount>1);
+	//>1
+	bool atLeastTwoEntities = (selInfo.selCount>1);
 
-    actionMerge->setEnabled(atLeastTwoEntities);
-    actionMatchBBCenters->setEnabled(atLeastTwoEntities);
+	actionMerge->setEnabled(atLeastTwoEntities);
+	actionMatchBBCenters->setEnabled(atLeastTwoEntities);
 
-    //standard plugins
+	//standard plugins
 	foreach (ccStdPluginInterface* plugin, m_stdPlugins)
 		plugin->onNewSelection(m_selectedEntities);
 }
 
 void MainWindow::echoMouseWheelRotate(float wheelDelta_deg)
 {
-    if (checkBoxCameraLink->checkState() != Qt::Checked)
-        return;
+	if (checkBoxCameraLink->checkState() != Qt::Checked)
+		return;
 
-    ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
+	ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
 	if (!sendingWindow)
 		return;
 
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-    {
-        ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
+	QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+	{
+		ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
 		if (child != sendingWindow)
-        {
+		{
 			child->blockSignals(true);
 			child->onWheelEvent(wheelDelta_deg);
 			child->blockSignals(false);
-            child->redraw();
-        }
-    }
+			child->redraw();
+		}
+	}
 }
 
 void MainWindow::echoCameraDisplaced(float ddx, float ddy)
 {
-    if (checkBoxCameraLink->checkState() != Qt::Checked)
-        return;
+	if (checkBoxCameraLink->checkState() != Qt::Checked)
+		return;
 
-    ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
+	ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
 	if (!sendingWindow)
 		return;
 
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-    {
-        ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
-        if (child != sendingWindow)
-        {
+	QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+	{
+		ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
+		if (child != sendingWindow)
+		{
 			child->blockSignals(true);
 			child->moveCamera(ddx,ddy,0.0f);
 			child->blockSignals(false);
-            child->redraw();
-        }
-    }
+			child->redraw();
+		}
+	}
 }
 
-void MainWindow::echoBaseViewMatRotation(const ccGLMatrix& rotMat)
+void MainWindow::echoBaseViewMatRotation(const ccGLMatrixd& rotMat)
 {
-    if (checkBoxCameraLink->checkState() != Qt::Checked)
-        return;
+	if (checkBoxCameraLink->checkState() != Qt::Checked)
+		return;
 
-    ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
+	ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
 	if (!sendingWindow)
 		return;
 
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-    {
-        ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
-        if (child != sendingWindow)
-        {
+	QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	for (int i=0; i<windows.size(); ++i)
+	{
+		ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
+		if (child != sendingWindow)
+		{
 			child->blockSignals(true);
-            child->rotateBaseViewMat(rotMat);
+			child->rotateBaseViewMat(rotMat);
 			child->blockSignals(false);
-            child->redraw();
-        }
-    }
+			child->redraw();
+		}
+	}
 }
 
- void MainWindow::echoCameraPosChanged(const CCVector3& P)
+ void MainWindow::echoCameraPosChanged(const CCVector3d& P)
  {
-    if (checkBoxCameraLink->checkState() != Qt::Checked)
-        return;
+	 if (checkBoxCameraLink->checkState() != Qt::Checked)
+		 return;
 
-    ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
-	if (!sendingWindow)
-		return;
+	 ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
+	 if (!sendingWindow)
+		 return;
 
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-    {
-        ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
-        if (child != sendingWindow)
-        {
-			child->blockSignals(true);
-			child->setCameraPos(P);
-			child->blockSignals(false);
-            child->redraw();
-        }
-    }
+	 QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	 for (int i=0; i<windows.size(); ++i)
+	 {
+		 ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
+		 if (child != sendingWindow)
+		 {
+			 child->blockSignals(true);
+			 child->setCameraPos(P);
+			 child->blockSignals(false);
+			 child->redraw();
+		 }
+	 }
  }
 
- void MainWindow::echoPivotPointChanged(const CCVector3& P)
+ void MainWindow::echoPivotPointChanged(const CCVector3d& P)
  {
-    if (checkBoxCameraLink->checkState() != Qt::Checked)
-        return;
+	 if (checkBoxCameraLink->checkState() != Qt::Checked)
+		 return;
 
-    ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
-	if (!sendingWindow)
-		return;
+	 ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
+	 if (!sendingWindow)
+		 return;
 
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-    {
-        ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
-        if (child != sendingWindow)
-        {
-			child->blockSignals(true);
-			child->setPivotPoint(P);
-			child->blockSignals(false);
-            child->redraw();
-        }
-    }
+	 QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	 for (int i=0; i<windows.size(); ++i)
+	 {
+		 ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
+		 if (child != sendingWindow)
+		 {
+			 child->blockSignals(true);
+			 child->setPivotPoint(P);
+			 child->blockSignals(false);
+			 child->redraw();
+		 }
+	 }
  }
 
  void MainWindow::echoPixelSizeChanged(float pixelSize)
  {
-    if (checkBoxCameraLink->checkState() != Qt::Checked)
-        return;
+	 if (checkBoxCameraLink->checkState() != Qt::Checked)
+		 return;
 
-    ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
-	if (!sendingWindow)
-		return;
+	 ccGLWindow* sendingWindow = dynamic_cast<ccGLWindow*>(sender());
+	 if (!sendingWindow)
+		 return;
 
-    QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
-    for (int i=0; i<windows.size(); ++i)
-    {
-        ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
-        if (child != sendingWindow)
-        {
-			child->blockSignals(true);
-			child->setPixelSize(pixelSize);
-			child->blockSignals(false);
-            child->redraw();
-        }
-    }
+	 QList<QMdiSubWindow *> windows = m_mdiArea->subWindowList();
+	 for (int i=0; i<windows.size(); ++i)
+	 {
+		 ccGLWindow *child = static_cast<ccGLWindow*>(windows.at(i)->widget());
+		 if (child != sendingWindow)
+		 {
+			 child->blockSignals(true);
+			 child->setPixelSize(pixelSize);
+			 child->blockSignals(false);
+			 child->redraw();
+		 }
+	 }
  }
 
 void MainWindow::dispToConsole(QString message, ConsoleMessageLevel level/*=STD_CONSOLE_MESSAGE*/)
@@ -9561,7 +9728,7 @@ void MainWindow::dispToConsole(QString message, ConsoleMessageLevel level/*=STD_
 		ccConsole::Print(message);
 		break;
 	case WRN_CONSOLE_MESSAGE:
-        ccConsole::Warning(message);
+		ccConsole::Warning(message);
 		break;
 	case ERR_CONSOLE_MESSAGE:
 		ccConsole::Error(message);
@@ -9571,81 +9738,81 @@ void MainWindow::dispToConsole(QString message, ConsoleMessageLevel level/*=STD_
 
 void MainWindow::doActionLoadShader() //TODO
 {
-    ccConsole::Error("Not yet implemented! Sorry ...");
+	ccConsole::Error("Not yet implemented! Sorry ...");
 }
 
-void MainWindow::doActionKMeans()  //TODO
+void MainWindow::doActionKMeans()//TODO
 {
-    ccConsole::Error("Not yet implemented! Sorry ...");
+	ccConsole::Error("Not yet implemented! Sorry ...");
 }
 
 void MainWindow::doActionFrontPropagation() //TODO
 {
-    ccConsole::Error("Not yet implemented! Sorry ...");
+	ccConsole::Error("Not yet implemented! Sorry ...");
 }
 
 /************** STATIC METHODS ******************/
 
 MainWindow* MainWindow::TheInstance()
 {
-    if (!s_instance)
-        s_instance = new MainWindow();
-    return s_instance;
+	if (!s_instance)
+		s_instance = new MainWindow();
+	return s_instance;
 }
 
 void MainWindow::DestroyInstance()
 {
-    if (s_instance)
-        delete s_instance;
-    s_instance=0;
+	if (s_instance)
+		delete s_instance;
+	s_instance=0;
 }
 
 void MainWindow::GetGLWindows(std::vector<ccGLWindow*>& glWindows)
 {
-    QList<QMdiSubWindow*> windows = TheInstance()->m_mdiArea->subWindowList();
-    int winNum = windows.size();
+	QList<QMdiSubWindow*> windows = TheInstance()->m_mdiArea->subWindowList();
+	int winNum = windows.size();
 
-    if (winNum == 0)
-        return;
+	if (winNum == 0)
+		return;
 
-    glWindows.clear();
-    glWindows.reserve(winNum);
+	glWindows.clear();
+	glWindows.reserve(winNum);
 
-    for (int i=0; i<winNum; ++i)
-        glWindows.push_back(static_cast<ccGLWindow*>(windows.at(i)->widget()));
+	for (int i=0; i<winNum; ++i)
+		glWindows.push_back(static_cast<ccGLWindow*>(windows.at(i)->widget()));
 }
 
 ccGLWindow* MainWindow::GetActiveGLWindow()
 {
-    return TheInstance()->getActiveGLWindow();
+	return TheInstance()->getActiveGLWindow();
 }
 
 ccGLWindow* MainWindow::GetGLWindow(const QString& title)
 {
-    QList<QMdiSubWindow *> windows = TheInstance()->m_mdiArea->subWindowList();
-    int winNum = windows.size();
+	QList<QMdiSubWindow *> windows = TheInstance()->m_mdiArea->subWindowList();
+	int winNum = windows.size();
 
-    if (winNum == 0)
-        return 0;
+	if (winNum == 0)
+		return 0;
 
-    for (int i=0; i<winNum; ++i)
-    {
-        ccGLWindow* win = static_cast<ccGLWindow*>(windows.at(i)->widget());
-        if (win->windowTitle() == title)
-            return win;
-    }
+	for (int i=0; i<winNum; ++i)
+	{
+		ccGLWindow* win = static_cast<ccGLWindow*>(windows.at(i)->widget());
+		if (win->windowTitle() == title)
+			return win;
+	}
 
-    return 0;
+	return 0;
 }
 
 void MainWindow::RefreshAllGLWindow()
 {
-    TheInstance()->refreshAll();
+	TheInstance()->refreshAll();
 }
 
 void MainWindow::UpdateUI()
 {
-    TheInstance()->updateUI();
+	TheInstance()->updateUI();
 }
 
 ccDBRoot* MainWindow::db()

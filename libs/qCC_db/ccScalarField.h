@@ -22,6 +22,7 @@
 #include <ScalarField.h>
 
 //qCC_db
+#include "qCC_db.h"
 #include "ccSerializableObject.h"
 #include "ccColorScale.h"
 
@@ -31,26 +32,19 @@
 //! A scalar field associated to display-related parameters
 /** Extends the CCLib::ScalarField object.
 **/
-
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db.h"
-
 class QCC_DB_LIB_API ccScalarField : public CCLib::ScalarField, public ccSerializableObject
-#else
-class ccScalarField : public CCLib::ScalarField, public ccSerializableObject
-#endif
 {
 public:
 
 	//! Default constructor
 	/** \param name scalar field name
-    **/
+	**/
 	ccScalarField(const char* name = 0);
 
 	/*** Scalar values display handling ***/
 
-	//! Range structure
-	struct Range
+	//! Scalar field range structure
+	class QCC_DB_LIB_API Range
 	{
 	public:
 
@@ -124,9 +118,9 @@ public:
 	inline const Range& logSaturationRange() const { return m_logSaturationRange; }
 
 	//! Sets the minimum displayed value
-	inline void setMinDisplayed(ScalarType val) { m_displayRange.setStart(val); }
+	void setMinDisplayed(ScalarType val);
 	//! Sets the maximum displayed value
-	inline void setMaxDisplayed(ScalarType val) { m_displayRange.setStop(val); }
+	void setMaxDisplayed(ScalarType val);
 	//! Sets the value at which to start color gradient
 	void setSaturationStart(ScalarType val);
 	//! Sets the value at which to stop color gradient
@@ -145,13 +139,13 @@ public:
 	inline const colorType* getValueColor(unsigned index) const { return getColor(getValue(index)); }
 
 	//! Sets whether NaN/out of displayed range values should be displayed in grey or hidden
-	inline void showNaNValuesInGrey(bool state) { m_showNaNValuesInGrey = state; }
+	void showNaNValuesInGrey(bool state);
 
 	//! Returns whether NaN values are displayed in grey or hidden
 	inline bool areNaNValuesShownInGrey() const { return m_showNaNValuesInGrey; }
 
 	//! Sets whether 0 should always appear in associated color ramp or not
-	inline void alwaysShowZero(bool state) { m_alwaysShowZero = state; }
+	void alwaysShowZero(bool state);
 
 	//! Returns whether 0 should always appear in associated color ramp or not
 	inline bool isZeroAlwaysShown() const { return m_alwaysShowZero; }
@@ -185,7 +179,7 @@ public:
 	inline unsigned getColorRampSteps() const { return m_colorRampSteps; }
 
 	//! Sets number of color ramp steps used for display
-    void setColorRampSteps(unsigned steps);
+	void setColorRampSteps(unsigned steps);
 
 	//! Simple histogram structure
 	struct Histogram : std::vector<unsigned>
@@ -199,6 +193,17 @@ public:
 
 	//! Returns associated histogram values (for display)
 	const Histogram& getHistogram() const { return m_histogram; }
+
+	//! Returns whether the scalar field in its current configuration MAY have 'hidden' values or not
+	/** 'Hidden' values are typically NaN values or values outside of the 'displayed' intervale
+		while those values are not displayed in grey (see ccScalarField::showNaNValuesInGrey).
+	**/
+	bool mayHaveHiddenValues() const;
+
+	//! Sets modification flag state
+	void setModificationFlag(bool state) { m_modified = state; }
+	//! Returns modification flag state
+	bool getModificationFlag() const { return m_modified; }
 
 	//inherited from ccSerializableObject
 	virtual bool isSerializable() const { return true; }
@@ -256,6 +261,12 @@ protected:
 
 	//! Associated histogram values (for display)
 	Histogram m_histogram;
+
+	//! Modification flag
+	/** Any modification to the scalar field values or parameters
+		will turn this flag on.
+	**/
+	bool m_modified;
 };
 
 #endif //CC_DB_SCALAR_FIELD_HEADER

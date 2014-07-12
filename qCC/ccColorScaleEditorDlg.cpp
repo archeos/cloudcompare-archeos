@@ -47,7 +47,7 @@ ccColorScaleEditorDialog::ccColorScaleEditorDialog(ccColorScalesManager* manager
 {
 	assert(m_manager);
 
-    setupUi(this);
+	setupUi(this);
 
 	colorScaleEditorFrame->setLayout(new QHBoxLayout());
 	colorScaleEditorFrame->layout()->setContentsMargins(0,0,0,0);
@@ -92,7 +92,7 @@ ccColorScaleEditorDialog::~ccColorScaleEditorDialog()
 void ccColorScaleEditorDialog::setAssociatedScalarField(ccScalarField* sf)
 {
 	m_associatedSF = sf;
-	if (m_associatedSF && !m_colorScale || m_colorScale->isRelative()) //we only update those values if the current scale is not absolute!
+	if (m_associatedSF && (!m_colorScale || m_colorScale->isRelative())) //we only update those values if the current scale is not absolute!
 	{
 		m_minAbsoluteVal = m_associatedSF->getMin();
 		m_maxAbsoluteVal = m_associatedSF->getMax();
@@ -261,7 +261,7 @@ void ccColorScaleEditorDialog::setScaleModeToRelative(bool isRelative)
 	if (isRelative)
 		valueDoubleSpinBox->setRange(0.0,100.0); //between 0 and 100%
 	else
-		valueDoubleSpinBox->setRange(-DBL_MAX,DBL_MAX);
+		valueDoubleSpinBox->setRange(-1.0e9,1.0e9);
 	valueDoubleSpinBox->blockSignals(false);
 
 	//update selected slider frame
@@ -299,7 +299,7 @@ void ccColorScaleEditorDialog::onStepModified(int index)
 	const ColorScaleElementSlider* slider = m_scaleWidget->getStep(index);
 	assert(slider);
 
-    ccDisplayOptionsDlg::SetButtonColor(colorToolButton,slider->getColor());
+	ccDisplayOptionsDlg::SetButtonColor(colorToolButton,slider->getColor());
 	if (m_colorScale)
 	{
 		const double relativePos = slider->getRelativePos();
@@ -363,11 +363,11 @@ void ccColorScaleEditorDialog::changeSelectedStepColor()
 	assert(slider);
 
 	QColor newCol = QColorDialog::getColor(slider->getColor(), this);
-    if (newCol.isValid())
-    {
+	if (newCol.isValid())
+	{
 		//eventually onStepModified will be called (and thus m_modified will be updated)
 		m_scaleWidget->setStepColor(selectedIndex,newCol);
-    }
+	}
 }
 
 void ccColorScaleEditorDialog::changeSelectedStepValue(double value)

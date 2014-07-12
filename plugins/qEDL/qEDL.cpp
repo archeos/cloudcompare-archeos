@@ -15,19 +15,24 @@
 //#                                                                        #
 //##########################################################################
 
+//first so as to be sure to include 'glew.h' before 'gl.h'
+#include "ccEDLFilter.h"
+
+//Qt
 #include <QtGui>
 
 #include "qEDL.h"
-#include "ccEDLFilter.h"
 
 QIcon qEDL::getIcon() const
 {
-    return QIcon(QString::fromUtf8(":/CC/plugin/qEDL/cc_edl.png"));
+	return QIcon(QString::fromUtf8(":/CC/plugin/qEDL/cc_edl.png"));
 }
 
 ccGlFilter* qEDL::getFilter()
 {
-    return new ccEDLFilter();
+	return new ccEDLFilter();
 }
 
+#ifndef CC_QT5
 Q_EXPORT_PLUGIN2(qEDL,qEDL);
+#endif

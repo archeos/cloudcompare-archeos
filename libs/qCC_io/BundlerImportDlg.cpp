@@ -15,28 +15,33 @@
 //#                                                                        #
 //##########################################################################
 
+#include "BundlerImportDlg.h"
+
+//Qt
 #include <QLineEdit>
 #include <QDoubleSpinBox>
 #include <QToolButton>
 #include <QPushButton>
 #include <QFileDialog>
 #include <QSettings>
+#include <QMessageBox>
 
+//system
 #include <stdio.h>
 #include <assert.h>
-
-#include "BundlerImportDlg.h"
 
 BundlerImportDlg::BundlerImportDlg(QWidget* parent)
 	: QDialog(parent)
 {
-    setupUi(this);
+	setupUi(this);
+
+	applyTransfoMatrixTextEdit->setVisible(false);
 
 	initFromPersistentSettings();
 
-    connect(buttonBox, SIGNAL(accepted()), this, SLOT(acceptAndSaveSettings()));
-    connect(browseImageListFileToolButton, SIGNAL(clicked()), this, SLOT(browseImageListFilename()));
-    connect(browseAltKeypointsFileToolButton, SIGNAL(clicked()), this, SLOT(browseAltKeypointsFilename	()));
+	connect(buttonBox, SIGNAL(accepted()), this, SLOT(acceptAndSaveSettings()));
+	connect(browseImageListFileToolButton, SIGNAL(clicked()), this, SLOT(browseImageListFilename()));
+	connect(browseAltKeypointsFileToolButton, SIGNAL(clicked()), this, SLOT(browseAltKeypointsFilename	()));
 }
 
 BundlerImportDlg::~BundlerImportDlg()
@@ -45,11 +50,11 @@ BundlerImportDlg::~BundlerImportDlg()
 
 void BundlerImportDlg::initFromPersistentSettings()
 {
-    QSettings settings;
-    settings.beginGroup("BundlerImport");
+	QSettings settings;
+	settings.beginGroup("BundlerImport");
 
 	//read parameters
-    double scaleFactor		= settings.value("scaleFactor", imageScaleDoubleSpinBox->value()).toDouble();
+	double scaleFactor		= settings.value("scaleFactor", imageScaleDoubleSpinBox->value()).toDouble();
 	bool orthoRectifyAsCloud= settings.value("orthoRectifyAsClouds", orthoRectifyAsCloudCheckBox->isChecked()).toBool();
 	bool orthoRectifyAsImage= settings.value("orthoRectifyAsImages", orthoRectifyAsImageCheckBox->isChecked()).toBool();
 	bool undistortImages	= settings.value("undistortImages", undistortImagesCheckBox->isChecked()).toBool();
@@ -77,11 +82,23 @@ void BundlerImportDlg::initFromPersistentSettings()
 
 void BundlerImportDlg::acceptAndSaveSettings()
 {
-    QSettings settings;
-    settings.beginGroup("BundlerImport");
+	//check matrix validity
+	if (applyTransfoMatrixCheckBox->isChecked())
+	{
+		bool success;
+		ccGLMatrixd::FromString(applyTransfoMatrixTextEdit->toPlainText(),success);
+		if (!success)
+		{
+			QMessageBox::critical(this,"Invalid matrix","Invalid input 4x4 matrix!");
+			return;
+		}
+	}
+
+	QSettings settings;
+	settings.beginGroup("BundlerImport");
 
 	//write parameters
-    settings.setValue("scaleFactor", imageScaleDoubleSpinBox->value());
+	settings.setValue("scaleFactor", imageScaleDoubleSpinBox->value());
 	settings.setValue("orthoRectifyAsClouds", orthoRectifyAsCloudCheckBox->isChecked());
 	settings.setValue("orthoRectifyAsImages", orthoRectifyAsImageCheckBox->isChecked());
 	settings.setValue("undistortImages", undistortImagesCheckBox->isChecked());
@@ -92,7 +109,9 @@ void BundlerImportDlg::acceptAndSaveSettings()
 	settings.setValue("importKeypoints", importKeypointsCheckBox->isChecked());
 	settings.setValue("dtmVerticesCount", dtmVerticesSpinBox->value());
 
-    settings.endGroup();
+	settings.endGroup();
+
+	accept();
 }
 
 bool BundlerImportDlg::useAlternativeKeypoints() const
@@ -210,4 +229,15 @@ double BundlerImportDlg::getScaleFactor() const
 unsigned BundlerImportDlg::getDTMVerticesCount() const
 {
 	return dtmVerticesSpinBox->value();
+}
+
+bool BundlerImportDlg::getOptionalTransfoMatrix(ccGLMatrix& mat)
+{
+	if (!applyTransfoMatrixCheckBox->isChecked())
+		return false;
+
+	bool success;
+	mat = ccGLMatrix::FromString(applyTransfoMatrixTextEdit->toPlainText(),success);
+
+	return success;
 }

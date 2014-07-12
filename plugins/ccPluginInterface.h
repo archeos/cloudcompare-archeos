@@ -22,6 +22,17 @@
 #include <QString>
 #include <QIcon>
 
+//Qt versop,
+#include <qglobal.h>
+#ifndef CC_QT5
+	#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+		#define CC_QT5
+	#endif
+#endif
+
+
+class ccExternalFactory;
+
 //! Plugin type
 enum  CC_PLUGIN_TYPE {  CC_STD_PLUGIN               = 0,
                         CC_GL_FILTER_PLUGIN         = 1,
@@ -49,7 +60,15 @@ public:
 	//! Returns icon
 	/** Should be reimplemented if necessary
 	**/
-	virtual QIcon getIcon() const { return QIcon(); }
+    virtual QIcon getIcon() const { return QIcon(); }
+
+    //! Returns the plugin's custom object factory (if any)
+    /** Plugins may provide a factory to build custom objects.
+		This allows qCC_db to properly code and decode the custom
+		objects stream in BIN files. Custom objects must inherit the
+		ccCustomHObject or ccCustomLeafObject interfaces.
+	**/
+	virtual ccExternalFactory* getCustomObjectsFactory() const { return 0; }
 };
 
 Q_DECLARE_INTERFACE(ccPluginInterface,

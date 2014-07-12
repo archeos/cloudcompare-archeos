@@ -11,14 +11,14 @@
 //#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
 //#  GNU General Public License for more details.                          #
 //#                                                                        #
-//#               COPYRIGHT: Luca Penasa                                   #
+//#                        COPYRIGHT: Luca Penasa                          #
 //#                                                                        #
 //##########################################################################
 //
 #ifndef Q_PCL_PLUGIN_HEADER
 #define Q_PCL_PLUGIN_HEADER
 
-#include "../ccStdPluginInterface.h"
+#include "ccStdPluginInterface.h"
 
 //Qt
 #include <QObject>
@@ -33,6 +33,9 @@ class qPCL : public QObject, public ccStdPluginInterface
 {
 	Q_OBJECT
 	Q_INTERFACES(ccStdPluginInterface)
+#ifdef CC_QT5
+	Q_PLUGIN_METADATA(IID "cccorp.cloudcompare.plugin.qPCL")
+#endif
 
 public:
 
@@ -49,7 +52,7 @@ public:
 
 	//inherited from ccStdPluginInterface
 	virtual void onNewSelection(const ccHObject::Container& selectedEntities);
-    virtual void getActions(QActionGroup& group);
+	virtual void getActions(QActionGroup& group);
 
 	//! Adds a filter
 	int addFilter(BaseFilter* filter);

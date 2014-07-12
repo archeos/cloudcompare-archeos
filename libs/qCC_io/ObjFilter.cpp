@@ -41,7 +41,7 @@
 //System
 #include <string.h>
 
-CC_FILE_ERROR ObjFilter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR ObjFilter::saveToFile(ccHObject* entity, QString filename)
 {
 	if (!entity)
 		return CC_FERR_BAD_ARGUMENT;
@@ -57,7 +57,7 @@ CC_FILE_ERROR ObjFilter::saveToFile(ccHObject* entity, const char* filename)
 	}
 
 	//try to open file for saving
-	FILE* theFile = fopen(filename,"wb");
+	FILE* theFile = fopen(qPrintable(filename),"wb");
 	if (!theFile)
 		return CC_FERR_WRITING;
 
@@ -68,7 +68,7 @@ CC_FILE_ERROR ObjFilter::saveToFile(ccHObject* entity, const char* filename)
 	return result;
 }
 
-CC_FILE_ERROR ObjFilter::saveToFile(ccGenericMesh* mesh, FILE *theFile, const char* filename)
+CC_FILE_ERROR ObjFilter::saveToFile(ccGenericMesh* mesh, FILE *theFile, QString filename)
 {
 	assert(theFile && mesh && mesh->size()!=0);
 	unsigned numberOfTriangles = mesh->size();
@@ -341,9 +341,9 @@ struct facetElement
 	}
 };
 
-CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR ObjFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
 {
-	ccLog::Print("[OBJ] %s",filename);
+	ccLog::Print(QString("[OBJ] ") + filename);
 
 	//open file
 	QFile file(filename);
@@ -374,7 +374,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 	}
 
 	//groups (starting index + name)
-    std::vector<std::pair<unsigned,QString> > groups;
+	std::vector<std::pair<unsigned,QString> > groups;
 
 	//materials
 	ccMaterialSet* materials = 0;
@@ -450,7 +450,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 				break;
 			}
 
-			double Pd[3] = { tokens[1].toDouble(), tokens[2].toDouble(), tokens[3].toDouble() };
+			CCVector3d Pd( tokens[1].toDouble(), tokens[2].toDouble(), tokens[3].toDouble() );
 
 			//first point: check for 'big' coordinates
 			if (pointsRead == 0)
@@ -460,7 +460,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 					Pshift = *coordinatesShift;
 				bool applyAll = false;
 				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 				{
 					vertices->setGlobalShift(Pshift);
 					ccLog::Warning("[OBJ] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
@@ -475,10 +475,7 @@ CC_FILE_ERROR ObjFilter::loadFile(const char* filename, ccHObject& container, bo
 			}
 
 			//shifted point
-			CCVector3 P(static_cast<PointCoordinateType>(Pd[0] + Pshift.x),
-						static_cast<PointCoordinateType>(Pd[1] + Pshift.y),
-						static_cast<PointCoordinateType>(Pd[2] + Pshift.z));
-
+			CCVector3 P = CCVector3::fromArray((Pd + Pshift).u);
 			vertices->addPoint(P);
 			++pointsRead;
 		}

@@ -18,11 +18,8 @@
 #ifndef CC_GEOM_HEADER
 #define CC_GEOM_HEADER
 
-#ifdef _MSC_VER
-//To get rid of the really annoying warnings about template class exportation
-#pragma warning( disable: 4251 )
-#endif
-
+//Local
+#include "CCCoreLib.h"
 #include "CCTypes.h"
 
 //system
@@ -106,7 +103,7 @@ public:
 	//! Returns vector norm
 	inline Type norm() const { return sqrt(norm2()); }
 	//! Returns vector norm (forces double precision output)
-	inline Type normd() const { return sqrt(norm2d()); }
+	inline double normd() const { return sqrt(norm2d()); }
 	//! Sets vector norm to unity
 	inline void normalize() { Type n = norm2(); if (n>0) *this /= sqrt(n); }
 	//! Returns a normalized vector which is orthogonal to this one

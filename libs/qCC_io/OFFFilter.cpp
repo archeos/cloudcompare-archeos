@@ -41,7 +41,7 @@
 //System
 #include <string.h>
 
-CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, const char* filename)
+CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, QString filename)
 {
 	if (!entity)
 		return CC_FERR_BAD_ARGUMENT;
@@ -69,16 +69,16 @@ CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, const char* filename)
 
 	QTextStream stream(&fp);
 	stream.setRealNumberPrecision(12); //TODO: ask the user?
-    
-    //header: "OFF"
-    stream << "OFF" << endl;
-    
-    //2nd line: vertices count / faces count / edges count
-    unsigned vertCount = vertices->size();
-    unsigned triCount = mesh->size();
-    stream << vertCount << ' ' << triCount << ' ' << 0 << endl;
-    
-    //save vertices
+
+	//header: "OFF"
+	stream << "OFF" << endl;
+
+	//2nd line: vertices count / faces count / edges count
+	unsigned vertCount = vertices->size();
+	unsigned triCount = mesh->size();
+	stream << vertCount << ' ' << triCount << ' ' << 0 << endl;
+
+	//save vertices
 	{
 		for (unsigned i=0; i<vertCount; ++i)
 		{
@@ -87,15 +87,15 @@ CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, const char* filename)
 			stream << Pglobal.x << ' ' << Pglobal.y << ' ' << Pglobal.z << endl;
 		}
 	}
-    
-    //save triangles
+
+	//save triangles
 	{
 		for (unsigned i=0; i<triCount; ++i)
 		{
 			const CCLib::TriangleSummitsIndexes* tsi = mesh->getTriangleIndexes(i);
 			stream << "3 " << tsi->i1 << ' ' << tsi->i2 << ' ' << tsi->i3 << endl;
 		}
-    }
+	}
 
 	return CC_FERR_NO_ERROR;
 }
@@ -117,7 +117,7 @@ static QString GetNextLine(QTextStream& stream)
 	return currentLine;
 }
 
-CC_FILE_ERROR OFFFilter::loadFile(const char* filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
 {
 	//try to open file
 	QFile fp(filename);
@@ -182,15 +182,15 @@ CC_FILE_ERROR OFFFilter::loadFile(const char* filename, ccHObject& container, bo
 			}
 
 			//read vertex
-			double Pd[3];
+			CCVector3d Pd(0,0,0);
 			{
 				bool vertexIsOk = false;
-				Pd[0] = tokens[0].toDouble(&vertexIsOk);
+				Pd.x = tokens[0].toDouble(&vertexIsOk);
 				if (vertexIsOk)
 				{
-					Pd[1] = tokens[1].toDouble(&vertexIsOk);
+					Pd.y = tokens[1].toDouble(&vertexIsOk);
 					if (vertexIsOk)
-						Pd[2] = tokens[2].toDouble(&vertexIsOk);
+						Pd.z = tokens[2].toDouble(&vertexIsOk);
 				}
 				if (!vertexIsOk)
 				{
@@ -207,7 +207,7 @@ CC_FILE_ERROR OFFFilter::loadFile(const char* filename, ccHObject& container, bo
 					Pshift = *coordinatesShift;
 				bool applyAll = false;
 				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,applyAll))
+					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
 				{
 					vertices->setGlobalShift(Pshift);
 					ccLog::Warning("[OFF] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
@@ -221,10 +221,7 @@ CC_FILE_ERROR OFFFilter::loadFile(const char* filename, ccHObject& container, bo
 				}
 			}
 
-			CCVector3 P(static_cast<PointCoordinateType>(Pd[0] + Pshift.x),
-						static_cast<PointCoordinateType>(Pd[1] + Pshift.y),
-						static_cast<PointCoordinateType>(Pd[2] + Pshift.z));
-
+			CCVector3 P = CCVector3::fromArray((Pd + Pshift).u);
 			vertices->addPoint(P);
 		}
 	}

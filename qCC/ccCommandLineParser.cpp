@@ -13,6 +13,7 @@
 #include <ccPlane.h>
 #include <ccNormalVectors.h>
 #include <ccPolyline.h>
+#include <ccScalarField.h>
 
 //qCC_io
 #include <BundlerFilter.h>
@@ -38,6 +39,7 @@
 
 static const char COMMAND_SILENT_MODE[]						= "SILENT";
 static const char COMMAND_OPEN[]							= "O";				//+file name
+static const char COMMAND_OPEN_SKIP_LINES[]					= "SKIP";			//+number of lines to skip
 static const char COMMAND_SUBSAMPLE[]						= "SS";				//+ method (RANDOM/SPATIAL/OCTREE) + parameter (resp. point count / spatial step / octree level)
 static const char COMMAND_CURVATURE[]						= "CURV";			//+ curvature type (MEAN/GAUSS) +
 static const char COMMAND_DENSITY[]							= "DENSITY";		//+ sphere radius
@@ -161,8 +163,8 @@ ccCommandLineParser::ccCommandLineParser()
 
 ccCommandLineParser::~ccCommandLineParser()
 {
-    removeClouds();
-    removeMeshes();
+	removeClouds();
+	removeMeshes();
 }
 
 static void Print(const QString& message)
@@ -302,7 +304,7 @@ QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QStrin
 	}
 
 	//Print(QString("--> result saved to file '%1'").arg(outputFilename)); //DGM: message already logged by FileIOFilter::SaveToFile (or BinFilter?)
-    return QString();
+	return QString();
 }
 
 bool ccCommandLineParser::commandLoad(QStringList& arguments)
@@ -310,6 +312,39 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 	Print("[LOADING]");
 	if (arguments.empty())
 		return Error(QString("Missing parameter: filename after \"-%1\"").arg(COMMAND_OPEN));
+
+	//optional parameters
+	int skipLines = 0;
+	while (!arguments.empty())
+	{
+		QString argument = arguments.front();
+		if (IsCommand(argument,COMMAND_OPEN_SKIP_LINES))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+
+			if (arguments.empty())
+				return Error(QString(QString("Missing parameter: number of lines after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+
+			bool ok;
+			skipLines = arguments.takeFirst().toInt(&ok);
+			if (!ok)
+				return Error(QString(QString("Invalid parameter: number of lines after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+			
+			Print(QString("Will skip %1 lines").arg(skipLines));
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	if (skipLines > 0)
+	{
+		QSharedPointer<AsciiOpenDlg> openDialog = AsciiFilter::GetOpenDialog();
+		assert(openDialog);
+		openDialog->setSkippedLines(skipLines);
+	}
 
 	//open specified file
 	QString filename(arguments.takeFirst());
@@ -1396,6 +1431,8 @@ bool ccCommandLineParser::commandBundler(QStringList& arguments)
 	BundlerFilter().loadFileExtended(	qPrintable(bundlerFilename),
 										tempContainer,
 										false,
+										0,
+										0,
 										altKeypointsFilename,
 										undistortImages,
 										generateColoredDTM,
@@ -1627,7 +1664,7 @@ bool ccCommandLineParser::commandStatTest(QStringList& arguments, ccProgressDial
 	Print("[STATISTICAL TEST]");
 
 	//distribution
-    CCLib::GenericDistribution* distrib = 0;
+	CCLib::GenericDistribution* distrib = 0;
 	{
 		if (arguments.empty())
 			return Error(QString("Missing parameter: distribution type after \"-%1\" (GAUSS/WEIBULL)").arg(COMMAND_STAT_TEST));
@@ -1696,7 +1733,7 @@ bool ccCommandLineParser::commandStatTest(QStringList& arguments, ccProgressDial
 		bool conversionOk = false;
 		pValue = arguments.takeFirst().toDouble(&conversionOk);
 		if (!conversionOk)
-			return Error(QString("Invalid parameter:  p-value after distribution"));
+			return Error(QString("Invalid parameter: p-value after distribution"));
 	}
 
 	//kNN
@@ -1893,6 +1930,7 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 									adjustScale,
 									false,
 									false,
+									CCLib::ICPRegistrationTools::SKIP_NONE,
 									parent ))
 	{
 		ccHObject* data = dataAndModel[0]->getEntity();
