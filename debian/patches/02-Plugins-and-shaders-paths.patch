@@ -30,7 +30,7 @@ Subject: Plugins and shaders paths
  #else
  	//plugins are in bin/plugins
 -	QString pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
-+	QString pluginsPath = "/usr/lib/cloudcompare/plugins/ccViewer;
++	QString pluginsPath = "/usr/lib/cloudcompare/plugins/ccViewer";
  #endif
  
  	ccLog::Print(QString("Plugins lookup dir.: %1").arg(pluginsPath));

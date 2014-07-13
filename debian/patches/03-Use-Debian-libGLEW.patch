@@ -19,7 +19,7 @@ Subject: Use debian libGLEW
  endif()
  
 -include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
-+#include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
++# include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
@@ -28,7 +28,7 @@ Subject: Use debian libGLEW
  endif()
  
 -target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
-+# target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
++target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
@@ -39,7 +39,7 @@ Subject: Use debian libGLEW
  endif()
  
 -target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
-+# target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
++target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
@@ -59,7 +59,7 @@ Subject: Use debian libGLEW
  add_library( ${PROJECT_NAME} STATIC ${header_list} ${source_list} )
  
 -target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
-+# target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
++target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
  if ( USE_QT5 )
@@ -79,7 +79,7 @@ Subject: Use debian libGLEW
  
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
 -target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
-+# target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
++target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
@@ -99,7 +99,7 @@ Subject: Use debian libGLEW
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
 -target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
-+# target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
++target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
@@ -114,3 +114,23 @@ Subject: Use debian libGLEW
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
+--- a/plugins/CMakePluginTpl.cmake
++++ b/plugins/CMakePluginTpl.cmake
+@@ -3,7 +3,7 @@
+ include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
+ include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
+ include_directories( ${CloudComparePlugins_SOURCE_DIR} )
+-include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
++# include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
+ include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
+ include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
+ include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
+@@ -60,7 +60,7 @@ else()
+ 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE QT_NO_DEBUG)
+ endif()
+ 
+-target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
++target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
+ target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
+ target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
+ target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
