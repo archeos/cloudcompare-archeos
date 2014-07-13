@@ -1,5 +1,5 @@
 01-Aux-file-copy-not-handled-at-cmake-level.patch
-02-Dynamic-directories.patch
+02-Plugins-and-shaders-paths.patch
 03-Use-Debian-libGLEW.patch
 04-Fix-local-decimal-separator.patch
 05-Use-package-directory-for-libs.patch

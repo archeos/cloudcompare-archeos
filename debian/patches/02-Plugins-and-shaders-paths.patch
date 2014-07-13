@@ -1,0 +1,36 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Mon, 14 Jan 2013 21:15:12 +0100
+Subject: Plugins and shaders paths
+--- a/libs/qCC_glWindow/ccGLWindow.cpp
++++ b/libs/qCC_glWindow/ccGLWindow.cpp
+@@ -3669,7 +3669,7 @@ QString ccGLWindow::getShadersPath()
+ 	path.remove( "MacOS" );
+ 	return path + "Shaders";
+ #else
+-	return QApplication::applicationDirPath() + "/shaders";
++	return "/usr/share/cloudcompare/shaders";
+ #endif
+ }
+ 
+--- a/qCC/mainwindow.cpp
++++ b/qCC/mainwindow.cpp
+@@ -374,7 +374,7 @@ void MainWindow::loadPlugins()
+ 	m_pluginsPath = path + "Plugins/ccPlugins";
+ #else
+ 	//plugins are in bin/plugins
+-	m_pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
++	m_pluginsPath = "/usr/lib/cloudcompare/plugins/cloudcompare";
+ #endif
+ 
+ 	ccConsole::Print(QString("Plugins lookup dir.: %1").arg(m_pluginsPath));
+--- a/ccViewer/ccviewer.cpp
++++ b/ccViewer/ccviewer.cpp
+@@ -188,7 +188,7 @@ void ccViewer::loadPlugins()
+ 	QString pluginsPath = path + "Plugins/ccViewerPlugins";
+ #else
+ 	//plugins are in bin/plugins
+-	QString pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
++	QString pluginsPath = "/usr/lib/cloudcompare/plugins/ccViewer;
+ #endif
+ 
+ 	ccLog::Print(QString("Plugins lookup dir.: %1").arg(pluginsPath));
