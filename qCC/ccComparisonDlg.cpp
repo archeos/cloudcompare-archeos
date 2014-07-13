@@ -49,7 +49,11 @@
 
 const uchar DEFAULT_OCTREE_LEVEL = 7;
 
-ccComparisonDlg::ccComparisonDlg(ccHObject* compEntity, ccHObject* refEntity, CC_COMPARISON_TYPE cpType, QWidget* parent/* = 0*/, bool noDisplay/*=false*/)
+ccComparisonDlg::ccComparisonDlg(	ccHObject* compEntity,
+									ccHObject* refEntity,
+									CC_COMPARISON_TYPE cpType,
+									QWidget* parent/*=0*/,
+									bool noDisplay/*=false*/)
 	: QDialog(parent)
 	, Ui::ComparisonDialog()
 	, m_compEnt(compEntity)
@@ -63,7 +67,6 @@ ccComparisonDlg::ccComparisonDlg(ccHObject* compEntity, ccHObject* refEntity, CC
 	, m_currentSFIsDistance(false)
 	, m_noDisplay(noDisplay)
 {
-
 	setupUi(this);
 	setWindowFlags(Qt::Tool);
 
@@ -98,7 +101,7 @@ ccComparisonDlg::ccComparisonDlg(ccHObject* compEntity, ccHObject* refEntity, CC
 
 	assert(compEntity);
 	ccBBox compEntBBox = compEntity->getBB();
-	maxSearchDistSpinBox->setValue((double)compEntBBox.getDiagNorm());
+	maxSearchDistSpinBox->setValue(static_cast<double>(compEntBBox.getDiagNorm()));
 
 	if (m_refMesh)
 	{
@@ -109,7 +112,7 @@ ccComparisonDlg::ccComparisonDlg(ccHObject* compEntity, ccHObject* refEntity, CC
 	else
 	{
 		split3DCheckBox->setEnabled(true);
-		lmRadiusDoubleSpinBox->setValue((double)compEntBBox.getDiagNorm()/200.0);
+		lmRadiusDoubleSpinBox->setValue(static_cast<double>(compEntBBox.getDiagNorm())/200.0);
 	}
 
 	//compute approximate results and unlock GUI
@@ -127,15 +130,15 @@ bool ccComparisonDlg::prepareEntitiesForComparison()
 		return false;
 
 	//compared entity
-	if (!m_compEnt->isA(CC_POINT_CLOUD)) //TODO --> pas possible avec des GenericPointCloud ? :(
+	if (!m_compEnt->isA(CC_TYPES::POINT_CLOUD)) //TODO --> pas possible avec des GenericPointCloud ? :(
 	{
-		if (m_compType == CLOUDCLOUD_DIST || (m_compType == CLOUDMESH_DIST && !m_compEnt->isKindOf(CC_MESH)))
+		if (m_compType == CLOUDCLOUD_DIST || (m_compType == CLOUDMESH_DIST && !m_compEnt->isKindOf(CC_TYPES::MESH)))
 		{
 			ccLog::Error("Dialog initialization error! (bad entity type)");
 			return false;
 		}
 		ccGenericMesh* compMesh = ccHObjectCaster::ToGenericMesh(m_compEnt);
-		if (!compMesh->getAssociatedCloud()->isA(CC_POINT_CLOUD)) //TODO
+		if (!compMesh->getAssociatedCloud()->isA(CC_TYPES::POINT_CLOUD)) //TODO
 		{
 			ccLog::Error("Dialog initialization error! (bad entity type - works only with real point clouds [todo])");
 			return false;
@@ -146,18 +149,19 @@ bool ccComparisonDlg::prepareEntitiesForComparison()
 	{
 		m_compCloud = static_cast<ccPointCloud*>(m_compEnt);
 	}
-	m_compOctree = static_cast<CCLib::DgmOctree*>(m_compCloud->getOctree());
-	int oldSfIdx = m_compCloud->getCurrentDisplayedScalarFieldIndex();
-	if (oldSfIdx>=0)
-		m_oldSfName = QString(m_compCloud->getScalarFieldName(oldSfIdx));
 
-	//on a toujours besoin du premier octree
+	//whatever the case, we always need the compared cloud's octree
+	m_compOctree = static_cast<CCLib::DgmOctree*>(m_compCloud->getOctree());
 	if (!m_compOctree)
 		m_compOctree = new CCLib::DgmOctree(m_compCloud);
+	//backup currently displayed SF (on compared cloud)
+	int oldSfIdx = m_compCloud->getCurrentDisplayedScalarFieldIndex();
+	if (oldSfIdx >= 0)
+		m_oldSfName = QString(m_compCloud->getScalarFieldName(oldSfIdx));
 
 	//reference entity
-	if ((m_compType == CLOUDMESH_DIST && !m_refEnt->isKindOf(CC_MESH))
-		|| (m_compType == CLOUDCLOUD_DIST && !m_refEnt->isA(CC_POINT_CLOUD)))
+	if ((m_compType == CLOUDMESH_DIST && !m_refEnt->isKindOf(CC_TYPES::MESH))
+		|| (m_compType == CLOUDCLOUD_DIST && !m_refEnt->isA(CC_TYPES::POINT_CLOUD)))
 	{
 		ccLog::Error("Dialog initialization error! (bad entity type)");
 		return false;
@@ -172,8 +176,9 @@ bool ccComparisonDlg::prepareEntitiesForComparison()
 	else /*if (m_compType == CLOUDCLOUD_DIST)*/
 	{
 		m_refCloud = ccHObjectCaster::ToGenericPointCloud(m_refEnt);
+
+		//for computing cloud/cloud distances we need also the reference cloud's octree
 		m_refOctree = static_cast<CCLib::DgmOctree*>(m_refCloud->getOctree());
-		//on a besoin du deuxieme octree uniquement dans le cas de la distance nuage/nuage
 		if (!m_refOctree)
 			m_refOctree = new CCLib::DgmOctree(m_refCloud);
 	}
@@ -228,14 +233,14 @@ void ccComparisonDlg::clean()
 {
 	if (m_compOctree && m_compCloud)
 	{
-		if (!m_compCloud->getOctree())
+		if (m_compCloud->getOctree() != m_compOctree)
 			delete m_compOctree;
 		m_compOctree = 0;
 	}
 
 	if (m_refOctree && m_refCloud)
 	{
-		if (!m_refCloud->getOctree())
+		if (m_refCloud->getOctree() != m_refOctree)
 			delete m_refOctree;
 		m_refOctree = 0;
 	}
@@ -280,15 +285,15 @@ int ccComparisonDlg::computeApproxResults()
 	int approxResult = -1;
 
 	histoButton->setEnabled(false);
-	approxGroupBox->setEnabled(false);
+	preciseResultsTabWidget->widget(2)->setEnabled(false);
 
 	if (!isValid())
 		return approxResult;
 
 	int sfIdx = m_compCloud->getScalarFieldIndexByName(CC_TEMP_CHAMFER_DISTANCES_DEFAULT_SF_NAME);
-	if (sfIdx<0)
-		sfIdx=m_compCloud->addScalarField(CC_TEMP_CHAMFER_DISTANCES_DEFAULT_SF_NAME);
-	if (sfIdx<0)
+	if (sfIdx < 0)
+		sfIdx = m_compCloud->addScalarField(CC_TEMP_CHAMFER_DISTANCES_DEFAULT_SF_NAME);
+	if (sfIdx < 0)
 	{
 		ccLog::Error("Failed to allocate a new scalar field for computing distances! Try to free some memory ...");
 		return approxResult;
@@ -299,22 +304,22 @@ int ccComparisonDlg::computeApproxResults()
 	assert(sf);
 
 	//Preparation des octrees
-	ccProgressDialog progressCb(true,this);
+	ccProgressDialog progressDlg(true,this);
 
 	QElapsedTimer eTimer;
 	eTimer.start();
 	switch(m_compType)
 	{
 	case CLOUDCLOUD_DIST: //hausdroff
-		approxResult = CCLib::DistanceComputationTools::computeChamferDistanceBetweenTwoClouds(CHAMFER_345,m_compCloud,m_refCloud,DEFAULT_OCTREE_LEVEL,&progressCb,m_compOctree,m_refOctree);
+		approxResult = CCLib::DistanceComputationTools::computeChamferDistanceBetweenTwoClouds(CHAMFER_345,m_compCloud,m_refCloud,DEFAULT_OCTREE_LEVEL,&progressDlg,m_compOctree,m_refOctree);
 		break;
 	case CLOUDMESH_DIST: //cloud-mesh
-		approxResult = CCLib::DistanceComputationTools::computePointCloud2MeshDistance(m_compCloud,m_refMesh,DEFAULT_OCTREE_LEVEL,-1.0,true,false,false,false,&progressCb,m_compOctree);
+		approxResult = CCLib::DistanceComputationTools::computePointCloud2MeshDistance(m_compCloud,m_refMesh,DEFAULT_OCTREE_LEVEL,-1.0,true,false,false,false,&progressDlg,m_compOctree);
 		break;
 	}
 	qint64 elapsedTime_ms = eTimer.elapsed();
 
-	progressCb.stop();
+	progressDlg.stop();
 
 	int guessedBestOctreeLevel = -1;
 
@@ -379,7 +384,7 @@ int ccComparisonDlg::computeApproxResults()
 			approxStats->setRowHeight(i,20);
 
 		//on active les elements d'interface correspondant
-		approxGroupBox->setEnabled(true);
+		preciseResultsTabWidget->widget(2)->setEnabled(true);
 		histoButton->setEnabled(true);
 
 		//m.a.j. affichage
@@ -433,7 +438,7 @@ int ccComparisonDlg::determineBestOctreeLevel(double maxSearchDist)
 	double timings[CCLib::DgmOctree::MAX_OCTREE_LEVEL];
 	memset(timings,0,sizeof(double)*CCLib::DgmOctree::MAX_OCTREE_LEVEL);
 
-	//Pour le cas où la reference est un maillage
+	//Pour le cas oÃ¹ la reference est un maillage
 	double meanTriangleSurface = 1.0;
 	CCLib::GenericIndexedMesh* mesh = 0;
 	if (!m_refOctree)
@@ -574,22 +579,20 @@ bool ccComparisonDlg::compute()
 
 	//does the cloud has already a temporary scalar field that we can use?
 	int sfIdx = m_compCloud->getScalarFieldIndexByName(CC_TEMP_CHAMFER_DISTANCES_DEFAULT_SF_NAME);
-	if (sfIdx<0)
+	if (sfIdx < 0)
 		sfIdx = m_compCloud->getScalarFieldIndexByName(CC_TEMP_DISTANCES_DEFAULT_SF_NAME);
-	if (sfIdx>=0)
+	if (sfIdx >= 0)
 	{
 		CCLib::ScalarField* sf = m_compCloud->getScalarField(sfIdx);
 		assert(sf);
-
 		//we recycle an existing scalar field, we must rename it
 		sf->setName(CC_TEMP_DISTANCES_DEFAULT_SF_NAME);
 	}
-
-	//do we need to create a new scalar field?
-	if (sfIdx<0)
+	else
 	{
+		//we need to create a new scalar field
 		sfIdx = m_compCloud->addScalarField(CC_TEMP_DISTANCES_DEFAULT_SF_NAME);
-		if (sfIdx<0)
+		if (sfIdx < 0)
 		{
 			ccLog::Error("Couldn't allocate a new scalar field for computing distances! Try to free some memory ...");
 			return false;
@@ -606,7 +609,7 @@ bool ccComparisonDlg::compute()
 	bool multiThread = multiThreadedCheckBox->isChecked();
 
 	int result = -1;
-	ccProgressDialog progressCb(true,this);
+	ccProgressDialog progressDlg(true,this);
 
 	//for 3D splitting (cloud-cloud dist. only)
 	CCLib::ReferenceCloud* CPSet=0;
@@ -642,7 +645,7 @@ bool ccComparisonDlg::compute()
 		result = CCLib::DistanceComputationTools::computeHausdorffDistance(m_compCloud,
 			m_refCloud,
 			params,
-			&progressCb,
+			&progressDlg,
 			m_compOctree,
 			m_refOctree);
 		break;
@@ -660,13 +663,13 @@ bool ccComparisonDlg::compute()
 																					signedDistances,
 																					flipNormals,
 																					multiThread,
-																					&progressCb,
+																					&progressDlg,
 																					m_compOctree);
 		break;
 	}
 	qint64 elapsedTime_ms = eTimer.elapsed();
 
-	progressCb.stop();
+	progressDlg.stop();
 
 	if (result >= 0)
 	{
@@ -753,7 +756,8 @@ bool ccComparisonDlg::compute()
 					int sfExit = m_compCloud->getScalarFieldIndexByName(sfDims[j]->getName());
 					if (sfExit >= 0)
 						m_compCloud->deleteScalarField(sfExit);
-					m_compCloud->addScalarField(sfDims[j]);
+					sfExit = m_compCloud->addScalarField(sfDims[j]);
+					assert(sfExit >= 0);
 				}
 				ccLog::Warning("[ComputeDistances] Result has been split along each dimension (check the 3 other scalar fields with '_X', '_Y' and '_Z' suffix!)");
 			}
@@ -776,7 +780,6 @@ bool ccComparisonDlg::compute()
 		sfIdx = -1;
 	}
 
-	//m.a.j. affichage
 	updateDisplay(sfIdx >= 0, false);
 
 	if (CPSet)
@@ -799,8 +802,9 @@ void ccComparisonDlg::showHisto()
 	hDlg->setWindowTitle(QString("Histogram [%1]").arg(m_compCloud->getName()));
 	{
 		ccHistogramWindow* histogram = hDlg->window();
-		histogram->setInfoStr(QString("Approximate distances (%1 values)").arg(m_compCloud->size()));
-		histogram->fromSF(sf,8);
+		histogram->setTitle(QString("Approximate distances (%1 values)").arg(m_compCloud->size()));
+		histogram->fromSF(sf,8,false);
+		histogram->setAxisLabels("Approximate distances","Count");
 	}
 	hDlg->resize(400,300);
 	hDlg->show();

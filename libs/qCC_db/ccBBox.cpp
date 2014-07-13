@@ -21,44 +21,37 @@
 #include "ccBBox.h"
 
 ccBBox::ccBBox()
-{
-    clear();
-}
+	: m_bbMin(0,0,0)
+	, m_bbMax(0,0,0)
+	, m_valid(false)
+{}
 
-ccBBox::ccBBox(const CCVector3 &bbMinCorner, const CCVector3 &bbMaxCorner)
-	: bbMin(bbMinCorner)
-	, bbMax(bbMaxCorner)
-	, valid(true)
-{
-}
+ccBBox::ccBBox(const CCVector3& bbMinCorner, const CCVector3& bbMaxCorner)
+	: m_bbMin(bbMinCorner)
+	, m_bbMax(bbMaxCorner)
+	, m_valid(true)
+{}
 
 ccBBox::ccBBox(const ccBBox& aBox)
-	: bbMin(aBox.bbMin)
-	, bbMax(aBox.bbMax)
-	, valid(aBox.valid)
-{
-}
+	: m_bbMin(aBox.m_bbMin)
+	, m_bbMax(aBox.m_bbMax)
+	, m_valid(aBox.m_valid)
+{}
 
 void ccBBox::clear()
 {
-    bbMin.x = bbMin.y = bbMin.z = 0.0;
-    bbMax.x = bbMax.y = bbMax.z = 0.0;
-    valid = false;
+	m_bbMin = m_bbMax = CCVector3(0,0,0);
+	m_valid = false;
 }
 
 CCVector3 ccBBox::getCenter() const
 {
-	return (bbMax+bbMin)*0.5;
+	return (m_bbMax + m_bbMin) * static_cast<PointCoordinateType>(0.5);
 }
 
 CCVector3 ccBBox::getDiagVec() const
 {
-    return bbMax-bbMin;
-}
-
-PointCoordinateType ccBBox::getDiagNorm() const
-{
-	return getDiagVec().norm();
+	return (m_bbMax - m_bbMin);
 }
 
 PointCoordinateType ccBBox::getMinBoxDim() const
@@ -75,231 +68,219 @@ PointCoordinateType ccBBox::getMaxBoxDim() const
 	return std::max(V.x,std::max(V.y,V.z));
 }
 
-void ccBBox::setValidity(bool state)
-{
-    valid = state;
-}
-
-bool ccBBox::isValid() const
-{
-    return valid;
-}
-
-const CCVector3& ccBBox::minCorner() const
-{
-    return bbMin;
-}
-
-const CCVector3& ccBBox::maxCorner() const
-{
-    return bbMax;
-}
-
-CCVector3& ccBBox::minCorner()
-{
-    return bbMin;
-}
-
-CCVector3& ccBBox::maxCorner()
-{
-    return bbMax;
-}
-
 void ccBBox::draw(const colorType col[]) const
 {
-    if (!valid)
-        return;
+	if (!m_valid)
+		return;
 
-    glColor3ubv(col);
+	glColor3ubv(col);
 
-    glBegin(GL_LINE_LOOP);
-    ccGL::Vertex3v(bbMin.u);
-    ccGL::Vertex3(bbMax.x,bbMin.y,bbMin.z);
-    ccGL::Vertex3(bbMax.x,bbMax.y,bbMin.z);
-    ccGL::Vertex3(bbMin.x,bbMax.y,bbMin.z);
-    glEnd();
+	glBegin(GL_LINE_LOOP);
+	ccGL::Vertex3v(m_bbMin.u);
+	ccGL::Vertex3(m_bbMax.x,m_bbMin.y,m_bbMin.z);
+	ccGL::Vertex3(m_bbMax.x,m_bbMax.y,m_bbMin.z);
+	ccGL::Vertex3(m_bbMin.x,m_bbMax.y,m_bbMin.z);
+	glEnd();
 
-    glBegin(GL_LINE_LOOP);
-    ccGL::Vertex3(bbMin.x,bbMin.y,bbMax.z);
-    ccGL::Vertex3(bbMax.x,bbMin.y,bbMax.z);
-    ccGL::Vertex3v(bbMax.u);
-    ccGL::Vertex3(bbMin.x,bbMax.y,bbMax.z);
-    glEnd();
+	glBegin(GL_LINE_LOOP);
+	ccGL::Vertex3(m_bbMin.x,m_bbMin.y,m_bbMax.z);
+	ccGL::Vertex3(m_bbMax.x,m_bbMin.y,m_bbMax.z);
+	ccGL::Vertex3v(m_bbMax.u);
+	ccGL::Vertex3(m_bbMin.x,m_bbMax.y,m_bbMax.z);
+	glEnd();
 
-    glBegin(GL_LINES);
-    ccGL::Vertex3v(bbMin.u);
-    ccGL::Vertex3(bbMin.x,bbMin.y,bbMax.z);
-    ccGL::Vertex3(bbMax.x,bbMin.y,bbMin.z);
-    ccGL::Vertex3(bbMax.x,bbMin.y,bbMax.z);
-    ccGL::Vertex3(bbMax.x,bbMax.y,bbMin.z);
-    ccGL::Vertex3v(bbMax.u);
-    ccGL::Vertex3(bbMin.x,bbMax.y,bbMin.z);
-    ccGL::Vertex3(bbMin.x,bbMax.y,bbMax.z);
-    glEnd();
+	glBegin(GL_LINES);
+	ccGL::Vertex3v(m_bbMin.u);
+	ccGL::Vertex3(m_bbMin.x,m_bbMin.y,m_bbMax.z);
+	ccGL::Vertex3(m_bbMax.x,m_bbMin.y,m_bbMin.z);
+	ccGL::Vertex3(m_bbMax.x,m_bbMin.y,m_bbMax.z);
+	ccGL::Vertex3(m_bbMax.x,m_bbMax.y,m_bbMin.z);
+	ccGL::Vertex3v(m_bbMax.u);
+	ccGL::Vertex3(m_bbMin.x,m_bbMax.y,m_bbMin.z);
+	ccGL::Vertex3(m_bbMin.x,m_bbMax.y,m_bbMax.z);
+	glEnd();
 }
 
 ccBBox ccBBox::operator + (const ccBBox& aBBox) const
 {
-    if (!valid)
-        return ccBBox(aBBox);
+	if (!m_valid)
+		return aBBox;
+	if (!aBBox.isValid())
+		return *this;
 
-    ccBBox tempBox;
+	ccBBox tempBox;
 
-    tempBox.bbMin.x = std::min(bbMin.x, aBBox.bbMin.x);
-    tempBox.bbMin.y = std::min(bbMin.y, aBBox.bbMin.y);
-    tempBox.bbMin.z = std::min(bbMin.z, aBBox.bbMin.z);
-    tempBox.bbMax.x = std::max(bbMax.x, aBBox.bbMax.x);
-    tempBox.bbMax.y = std::max(bbMax.y, aBBox.bbMax.y);
-    tempBox.bbMax.z = std::max(bbMax.z, aBBox.bbMax.z);
+	tempBox.m_bbMin.x = std::min(m_bbMin.x, aBBox.m_bbMin.x);
+	tempBox.m_bbMin.y = std::min(m_bbMin.y, aBBox.m_bbMin.y);
+	tempBox.m_bbMin.z = std::min(m_bbMin.z, aBBox.m_bbMin.z);
+	tempBox.m_bbMax.x = std::max(m_bbMax.x, aBBox.m_bbMax.x);
+	tempBox.m_bbMax.y = std::max(m_bbMax.y, aBBox.m_bbMax.y);
+	tempBox.m_bbMax.z = std::max(m_bbMax.z, aBBox.m_bbMax.z);
 
-    return tempBox;
+	tempBox.setValidity(true);
+
+	return tempBox;
 }
 
 const ccBBox& ccBBox::operator += (const ccBBox& aBBox)
 {
-    if (!valid)
-    {
-        *this = aBBox;
-    }
-    else if (aBBox.isValid())
-    {
-        bbMin.x = std::min(bbMin.x, aBBox.bbMin.x);
-        bbMin.y = std::min(bbMin.y, aBBox.bbMin.y);
-        bbMin.z = std::min(bbMin.z, aBBox.bbMin.z);
-        bbMax.x = std::max(bbMax.x, aBBox.bbMax.x);
-        bbMax.y = std::max(bbMax.y, aBBox.bbMax.y);
-        bbMax.z = std::max(bbMax.z, aBBox.bbMax.z);
-    }
+	if (!m_valid)
+	{
+		*this = aBBox;
+	}
+	else if (aBBox.isValid())
+	{
+		m_bbMin.x = std::min(m_bbMin.x, aBBox.m_bbMin.x);
+		m_bbMin.y = std::min(m_bbMin.y, aBBox.m_bbMin.y);
+		m_bbMin.z = std::min(m_bbMin.z, aBBox.m_bbMin.z);
+		m_bbMax.x = std::max(m_bbMax.x, aBBox.m_bbMax.x);
+		m_bbMax.y = std::max(m_bbMax.y, aBBox.m_bbMax.y);
+		m_bbMax.z = std::max(m_bbMax.z, aBBox.m_bbMax.z);
+	}
 
-    return *this;
+	return *this;
 }
 
 const ccBBox& ccBBox::operator += (const CCVector3& aVector)
 {
-    if (valid)
-    {
-        bbMin += aVector;
-        bbMax += aVector;
-    }
+	if (m_valid)
+	{
+		m_bbMin += aVector;
+		m_bbMax += aVector;
+	}
 
-    return *this;
+	return *this;
 }
 
 const ccBBox& ccBBox::operator -= (const CCVector3& aVector)
 {
-    if (valid)
-    {
-        bbMin -= aVector;
-        bbMax -= aVector;
-    }
+	if (m_valid)
+	{
+		m_bbMin -= aVector;
+		m_bbMax -= aVector;
+	}
 
-    return *this;
+	return *this;
 }
 
-const ccBBox& ccBBox::operator *= (const PointCoordinateType& scaleFactor)
+const ccBBox& ccBBox::operator *= (PointCoordinateType scaleFactor)
 {
-    if (valid)
-    {
-        bbMin *= scaleFactor;
-        bbMax *= scaleFactor;
-    }
+	if (m_valid)
+	{
+		m_bbMin *= scaleFactor;
+		m_bbMax *= scaleFactor;
+	}
 
-    return *this;
+	return *this;
 }
 
-void ccBBox::add(const CCVector3& aVector)
+void ccBBox::add(const CCVector3& aPoint)
 {
-    if (valid)
-    {
-        if (aVector.x<bbMin.x)
-            bbMin.x = aVector.x;
-        else if (aVector.x>bbMax.x)
-            bbMax.x = aVector.x;
+	if (m_valid)
+	{
+		if (aPoint.x < m_bbMin.x)
+			m_bbMin.x = aPoint.x;
+		else if (aPoint.x > m_bbMax.x)
+			m_bbMax.x = aPoint.x;
 
-        if (aVector.y<bbMin.y)
-            bbMin.y = aVector.y;
-        else if (aVector.y>bbMax.y)
-            bbMax.y = aVector.y;
+		if (aPoint.y < m_bbMin.y)
+			m_bbMin.y = aPoint.y;
+		else if (aPoint.y > m_bbMax.y)
+			m_bbMax.y = aPoint.y;
 
-        if (aVector.z<bbMin.z)
-            bbMin.z = aVector.z;
-        else if (aVector.z>bbMax.z)
-            bbMax.z = aVector.z;
-    }
-    else
-    {
-        bbMax = bbMin = aVector;
-        valid = true;
-    }
+		if (aPoint.z < m_bbMin.z)
+			m_bbMin.z = aPoint.z;
+		else if (aPoint.z > m_bbMax.z)
+			m_bbMax.z = aPoint.z;
+	}
+	else
+	{
+		m_bbMax = m_bbMin = aPoint;
+		m_valid = true;
+	}
 }
 
 const ccBBox& ccBBox::operator *= (const CCLib::SquareMatrix& mat)
 {
-    if (valid)
-    {
-        CCVector3 boxCorners[8];
+	if (m_valid)
+	{
+		CCVector3 boxCorners[8];
 
-        boxCorners[0] = bbMin;
-        boxCorners[1] = CCVector3(bbMin.x,bbMin.y,bbMax.z);
-        boxCorners[2] = CCVector3(bbMin.x,bbMax.y,bbMin.z);
-        boxCorners[3] = CCVector3(bbMax.x,bbMin.y,bbMin.z);
-        boxCorners[4] = bbMax;
-        boxCorners[5] = CCVector3(bbMin.x,bbMax.y,bbMax.z);
-        boxCorners[6] = CCVector3(bbMax.x,bbMax.y,bbMin.z);
-        boxCorners[7] = CCVector3(bbMax.x,bbMin.y,bbMax.z);
+		boxCorners[0] = m_bbMin;
+		boxCorners[1] = CCVector3(m_bbMin.x,m_bbMin.y,m_bbMax.z);
+		boxCorners[2] = CCVector3(m_bbMin.x,m_bbMax.y,m_bbMin.z);
+		boxCorners[3] = CCVector3(m_bbMax.x,m_bbMin.y,m_bbMin.z);
+		boxCorners[4] = m_bbMax;
+		boxCorners[5] = CCVector3(m_bbMin.x,m_bbMax.y,m_bbMax.z);
+		boxCorners[6] = CCVector3(m_bbMax.x,m_bbMax.y,m_bbMin.z);
+		boxCorners[7] = CCVector3(m_bbMax.x,m_bbMin.y,m_bbMax.z);
 
-        clear();
+		clear();
 
-        for (int i=0;i<8;++i)
-            add(mat*boxCorners[i]);
-    }
+		for (int i=0;i<8;++i)
+			add(mat*boxCorners[i]);
+	}
 
-    return *this;
+	return *this;
 }
 
-const ccBBox& ccBBox::operator *= (const ccGLMatrix& mat)
+const ccBBox ccBBox::operator * (const ccGLMatrix& mat)
 {
-    if (valid)
-    {
-        CCVector3 boxCorners[8];
+	ccBBox rotatedBox;
 
-        boxCorners[0] = bbMin;
-        boxCorners[1] = CCVector3(bbMin.x,bbMin.y,bbMax.z);
-        boxCorners[2] = CCVector3(bbMin.x,bbMax.y,bbMin.z);
-        boxCorners[3] = CCVector3(bbMax.x,bbMin.y,bbMin.z);
-        boxCorners[4] = bbMax;
-        boxCorners[5] = CCVector3(bbMin.x,bbMax.y,bbMax.z);
-        boxCorners[6] = CCVector3(bbMax.x,bbMax.y,bbMin.z);
-        boxCorners[7] = CCVector3(bbMax.x,bbMin.y,bbMax.z);
+	if (m_valid)
+	{
+		rotatedBox.add(mat * m_bbMin);
+		rotatedBox.add(mat * CCVector3(m_bbMin.x,m_bbMin.y,m_bbMax.z));
+		rotatedBox.add(mat * CCVector3(m_bbMin.x,m_bbMax.y,m_bbMin.z));
+		rotatedBox.add(mat * CCVector3(m_bbMax.x,m_bbMin.y,m_bbMin.z));
+		rotatedBox.add(mat * m_bbMax);
+		rotatedBox.add(mat * CCVector3(m_bbMin.x,m_bbMax.y,m_bbMax.z));
+		rotatedBox.add(mat * CCVector3(m_bbMax.x,m_bbMax.y,m_bbMin.z));
+		rotatedBox.add(mat * CCVector3(m_bbMax.x,m_bbMin.y,m_bbMax.z));
+	}
 
-        clear();
+	return rotatedBox;
+}
 
-        for (int i=0;i<8;++i)
-            add(mat*boxCorners[i]);
-    }
+const ccBBox ccBBox::operator * (const ccGLMatrixd& mat)
+{
+	ccBBox rotatedBox;
 
-    return *this;
+	if (m_valid)
+	{
+		rotatedBox.add(mat * m_bbMin);
+		rotatedBox.add(mat * CCVector3(m_bbMin.x,m_bbMin.y,m_bbMax.z));
+		rotatedBox.add(mat * CCVector3(m_bbMin.x,m_bbMax.y,m_bbMin.z));
+		rotatedBox.add(mat * CCVector3(m_bbMax.x,m_bbMin.y,m_bbMin.z));
+		rotatedBox.add(mat * m_bbMax);
+		rotatedBox.add(mat * CCVector3(m_bbMin.x,m_bbMax.y,m_bbMax.z));
+		rotatedBox.add(mat * CCVector3(m_bbMax.x,m_bbMax.y,m_bbMin.z));
+		rotatedBox.add(mat * CCVector3(m_bbMax.x,m_bbMin.y,m_bbMax.z));
+	}
+
+	return rotatedBox;
 }
 
 PointCoordinateType ccBBox::minDistTo(const ccBBox& box) const
 {
-    if (valid && box.isValid())
-    {
+	if (m_valid && box.isValid())
+	{
 		CCVector3 d(0,0,0);
 
 		for (unsigned char dim=0; dim<3; ++dim)
 		{
 			//if the boxes overlap in one dimension, the distance is zero (in this dimension)
-			if (box.bbMin.u[dim] > bbMax.u[dim])
-				d.u[dim] = box.bbMin.u[dim] - bbMax.u[dim];
-			else if (box.bbMax.u[dim] < bbMin.u[dim])
-				d.x = bbMin.u[dim] - box.bbMax.u[dim];
+			if (box.m_bbMin.u[dim] > m_bbMax.u[dim])
+				d.u[dim] = box.m_bbMin.u[dim] - m_bbMax.u[dim];
+			else if (box.m_bbMax.u[dim] < m_bbMin.u[dim])
+				d.x = m_bbMin.u[dim] - box.m_bbMax.u[dim];
 		}
 
 		return d.norm();
-    }
-    else
-    {
-		return (PointCoordinateType)-1.0;
-    }
+	}
+	else
+	{
+		return static_cast<PointCoordinateType>(-1.0);
+	}
 }

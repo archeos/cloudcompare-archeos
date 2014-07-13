@@ -34,6 +34,7 @@ static const unsigned ELEMENT_INDEX_BIT_MASK = MAX_NUMBER_OF_ELEMENTS_PER_CHUNK-
 //system
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 #include <vector>
 
 //! A generic array structure split in several small chunks to avoid the 'biggest contigous memory chunk' limit
@@ -62,30 +63,30 @@ public:
 	/** This corresponds to the number of inserted elements
 		\return the number of elements actually inserted into this array
 	**/
-	inline unsigned currentSize() const {return m_count;}
+	inline unsigned currentSize() const { return m_count; }
 
 	//! Returns the maximum array size
 	/** This is the total (reserved) size, not only the number of inserted elements
 		\return the number of elements that can be stored in this array
 	**/
-	inline unsigned capacity() const {return m_maxCount;}
+	inline unsigned capacity() const { return m_maxCount; }
 
 	//! Specifies if the array has been initialized or not
 	/** The array is initialized after a call to reserve or resize (with at least one element).
 		\return true if the array has been alreay initialized, and false otherwise
 	**/
-	inline bool isAllocated() const {return (capacity()!=0);}
+	inline bool isAllocated() const { return capacity() != 0; }
 
 	//! Returns number of components
-	inline unsigned dim() const {return N;}
+	inline unsigned dim() const { return N; }
 
 	//! Returns memory (in bytes) currently used by this structure
 	inline unsigned memory() const
 	{
 		return sizeof(GenericChunkedArray) 
 				+ N*capacity()*sizeof(ElementType)
-				+ (unsigned)m_theChunks.capacity()*sizeof(ElementType*)
-				+ (unsigned)m_perChunkCount.capacity()*sizeof(unsigned);
+				+ static_cast<unsigned>(m_theChunks.capacity())*sizeof(ElementType*)
+				+ static_cast<unsigned>(m_perChunkCount.capacity())*sizeof(unsigned);
 	}
 
 	//! Clears the array
@@ -101,10 +102,10 @@ public:
 				m_theChunks.pop_back();
 			}
 			m_perChunkCount.clear();
-			m_maxCount=0;
+			m_maxCount = 0;
 		}
 
-		m_count=0;
+		m_count = 0;
 		memset(m_minVal,0,sizeof(ElementType)*N);
 		memset(m_maxVal,0,sizeof(ElementType)*N);
 		placeIteratorAtBegining();
@@ -113,7 +114,7 @@ public:
 	//! Fills the table with a particular value
 	/** \param fillValue filling value/vector (if 0, table is filled with 0)
 	**/
-	void fill(const ElementType* fillValue=0)
+	void fill(const ElementType* fillValue = 0)
 	{
 		if (m_theChunks.empty())
 			return;
@@ -121,7 +122,7 @@ public:
 		if (!fillValue)
 		{
 			//default fill value = 0
-			for (unsigned i=0;i<m_theChunks.size();++i)
+			for (unsigned i=0; i<m_theChunks.size(); ++i)
 				memset(m_theChunks[i],0,m_perChunkCount[i]*sizeof(ElementType)*N);
 		}
 		else
@@ -139,24 +140,24 @@ public:
 			unsigned copySize = 1;
 
 			//recurrence
-			while (elemFilled<elemToFill)
+			while (elemFilled < elemToFill)
 			{
 				unsigned cs = elemToFill-elemFilled;
-				if (copySize<cs)
-					cs=copySize;
+				if (copySize < cs)
+					cs = copySize;
 				memcpy(_cDest,_cSrc,cs*sizeof(ElementType)*N);
-				_cDest += cs*(unsigned)N;
+				_cDest += cs*static_cast<unsigned>(N);
 				elemFilled += cs;
-				copySize<<=1;
+				copySize <<= 1;
 			}
 
 			//then we simply have to copy the first chunk to the other ones
-			for (unsigned i=1;i<m_theChunks.size();++i)
+			for (size_t i=1; i<m_theChunks.size(); ++i)
 				memcpy(m_theChunks[i],_cSrc,m_perChunkCount[i]*sizeof(ElementType)*N);
 		}
 
 		//done
-		m_count=m_maxCount;
+		m_count = m_maxCount;
 	}
 
 	//****** memory allocators ******//
@@ -173,7 +174,7 @@ public:
 	{
 		while (m_maxCount<newNumberOfElements)
 		{
-			if (m_theChunks.empty() || m_perChunkCount.back()==MAX_NUMBER_OF_ELEMENTS_PER_CHUNK)
+			if (m_theChunks.empty() || m_perChunkCount.back() == MAX_NUMBER_OF_ELEMENTS_PER_CHUNK)
 			{
 				m_theChunks.push_back(0);
 				m_perChunkCount.push_back(0);
@@ -193,7 +194,7 @@ public:
 			if (!newTable)
 			{
 				//we cancel last insertion if it's an empty chunk
-				if (m_perChunkCount.back()==0)
+				if (m_perChunkCount.back() == 0)
 				{
 					m_perChunkCount.pop_back();
 					m_theChunks.pop_back();
@@ -217,18 +218,18 @@ public:
 		method instead).
 		\param newNumberOfElements the new number of n-uplets
 		\param initNewElements specifies if the new elements should be initialized with a specific value (in this case, the last parameter shouldn't be 0)
-		\param valueForNewElements the default value for the new elements (only necessary if the precedent parameter is true)
+		\param valueForNewElements the default value for the new elements (only necessary if the previous parameter is true)
 		\return true if the method succeeds, false otherwise
 	**/
-	bool resize(unsigned newNumberOfElements, bool initNewElements=false, const ElementType* valueForNewElements=0)
+	bool resize(unsigned newNumberOfElements, bool initNewElements = false, const ElementType* valueForNewElements = 0)
 	{
 		//if the new size is 0, we can simply clear the array!
-		if (newNumberOfElements==0)
+		if (newNumberOfElements == 0)
 		{
 			clear();
 		}
 		//otherwise if we need to enlarge the array we must 'reserve' some memory
-		else if (newNumberOfElements>m_maxCount)
+		else if (newNumberOfElements > m_maxCount)
 		{
 			if (!reserve(newNumberOfElements))
 				return false;
@@ -236,7 +237,7 @@ public:
 			if (initNewElements)
 			{
 				//m_maxCount should be up-to-date after a call to 'reserve'
-				for (unsigned i=m_count;i<m_maxCount;++i)
+				for (unsigned i=m_count; i<m_maxCount; ++i)
 					setValue(i,valueForNewElements);
 			}
 		}
@@ -267,19 +268,19 @@ public:
 				{
 					//we resize the chunk
 					numberOfElementsForThisChunk -= spaceToFree;
-					assert(numberOfElementsForThisChunk>0);
+					assert(numberOfElementsForThisChunk != 0);
 					void* newTable = realloc(m_theChunks.back(),numberOfElementsForThisChunk*N*sizeof(ElementType));
 					//if 'realloc' failed?!
 					if (!newTable)
 						return false;
-					m_theChunks.back() = (ElementType*)newTable;
+					m_theChunks.back() = static_cast<ElementType*>(newTable);
 					m_perChunkCount.back() = numberOfElementsForThisChunk;
 					m_maxCount -= spaceToFree;
 				}
 			}
 		}
 
-		m_count=m_maxCount;
+		m_count = m_maxCount;
 
 		return true;
 	}
@@ -292,28 +293,28 @@ public:
 	**/
 	void setCurrentSize(unsigned size)
 	{
-		if (size>=m_maxCount)
+		if (size > m_maxCount)
 		{
 			assert(false);
 			return;
 		}
 
-		m_count=size;
+		m_count = size;
 	}
 
 	//! Direct access operator
 	/** \param index an element index
 		\return pointer to the ith element.
 	**/
-	inline ElementType* operator[] (unsigned index) {return getValue(index);}
+	inline ElementType* operator[] (unsigned index) { return getValue(index); }
 
 	//***** data access *****//
 
 	//! Places global iterator at the begining of the array
-	inline void placeIteratorAtBegining() {m_iterator=0;}
+	inline void placeIteratorAtBegining() { m_iterator = 0; }
 
 	//! Forwards global iterator (one position)
-	inline void forwardIterator() {++m_iterator;}
+	inline void forwardIterator() { ++m_iterator; }
 
 	//! Returns the value currently pointed by the global iterator
 	/** Warning: the global iterator must have been previously initizialized
@@ -321,7 +322,7 @@ public:
 		be out of bounds.
 		\return a pointer to the current element.
 	**/
-	inline ElementType* getCurrentValue() {return getValue(m_iterator);}
+	inline ElementType* getCurrentValue() { return getValue(m_iterator); }
 
 	//! Adds a new element to the array
 	/** Warning: the memory should have been previously reserved (see
@@ -330,7 +331,7 @@ public:
 	**/
 	inline void addElement(const ElementType* newElement)
 	{
-		assert(m_count<m_maxCount);
+		assert(m_count < m_maxCount);
 		setValue(m_count++,newElement);
 	}
 
@@ -338,43 +339,43 @@ public:
 	/** \param index the index of the element to return
 		\return a pointer to the ith element
 	**/
-	inline ElementType* getValue(unsigned index) const {assert(index<m_maxCount); return m_theChunks[index >> CHUNK_INDEX_BIT_DEC]+((index & ELEMENT_INDEX_BIT_MASK)*N);}
+	inline ElementType* getValue(unsigned index) const { assert(index < m_maxCount); return m_theChunks[index >> CHUNK_INDEX_BIT_DEC]+((index & ELEMENT_INDEX_BIT_MASK)*N); }
 
 	//! Sets the value of the ith element
 	/** \param index the index of the element to update
 		\param value the new value for the element
 	**/
-	inline void setValue(unsigned index, const ElementType* value) {assert(index<m_maxCount); memcpy(getValue(index),value,N*sizeof(ElementType));}
+	inline void setValue(unsigned index, const ElementType* value) { assert(index < m_maxCount); memcpy(getValue(index),value,N*sizeof(ElementType)); }
 
 	//! Returns the element with the minimum value stored in the array
 	/** The computeMinAndMax method must be called prior to this one
 		(and each time the array content is modified).
 		\return a pointer to the "minimum" element
 	**/
-	inline ElementType* getMin() {return m_minVal;}
+	inline ElementType* getMin() { return m_minVal; }
 
 	//! Const version of GenericChunkedArray::getMin
-	inline const ElementType* getMin() const {return m_minVal;}
+	inline const ElementType* getMin() const { return m_minVal; }
 
 	//! Returns the element with the maximum value stored in the array
 	/** The computeMinAndMax method must be called prior to this one
 		(and each time the array content is modified).
 		\return a pointer to the "maximum" element
 	**/
-	inline ElementType* getMax() {return m_maxVal;}
+	inline ElementType* getMax() { return m_maxVal; }
 
 	//! Const version of GenericChunkedArray::getMax
-	inline const ElementType* getMax() const {return m_maxVal;}
+	inline const ElementType* getMax() const { return m_maxVal; }
 
 	//! Sets the value of the minimum (independantly of what is stored in the array)
 	/** \param m the "minimum" element
 	**/
-	inline void setMin(const ElementType* m) {memcpy(m_minVal,m,N*sizeof(ElementType));}
+	inline void setMin(const ElementType* m) { memcpy(m_minVal,m,N*sizeof(ElementType)); }
 
 	//! Sets the value of the maximum (independantly of what is stored in the array)
 	/** \param M the "maximum" element
 	**/
-	inline void setMax(const ElementType* M) {memcpy(m_maxVal,M,N*sizeof(ElementType));}
+	inline void setMax(const ElementType* M) { memcpy(m_maxVal,M,N*sizeof(ElementType)); }
 
 	//! Determines "minimum" and "maximum" elements
 	/** If elements are composed of several components (n-uplets with n>1),
@@ -385,7 +386,7 @@ public:
 	virtual void computeMinAndMax()
 	{
 		//no points?
-		if (m_count==0)
+		if (m_count == 0)
 		{
 			//all boundaries to zero
 			memset(m_minVal,0,sizeof(ElementType)*N);
@@ -398,15 +399,15 @@ public:
 		memcpy(m_maxVal,m_minVal,sizeof(ElementType)*N);
 
 		//we update boundaries with all other values
-		for (unsigned i=1;i<m_count;++i)
+		for (unsigned i=1; i<m_count; ++i)
 		{
 			const ElementType* val = getValue(i);
-			for (unsigned j=0;j<N;++j)
+			for (unsigned j=0; j<N; ++j)
 			{
-				if (val[j]<m_minVal[j])
-					m_minVal[j]=val[j];
-				else if (val[j]>m_maxVal[j])
-					m_maxVal[j]=val[j];
+				if (val[j] < m_minVal[j])
+					m_minVal[j] = val[j];
+				else if (val[j] > m_maxVal[j])
+					m_maxVal[j] = val[j];
 			}
 		}
 	}
@@ -420,11 +421,11 @@ public:
 		assert(firstElementIndex < m_count && secondElementIndex < m_count);
 		ElementType* v1 = getValue(firstElementIndex);
 		ElementType* v2 = getValue(secondElementIndex);
-		/*if (N==1) --> case N==1 is specialized below
-			std::swap(*v1,*v2);
-		else
-		{
-		//*/
+		//if (N==1) --> case N==1 is specialized below
+		//	std::swap(*v1,*v2);
+		//else
+		//{
+		//
 			ElementType tempVal[N];
 			memcpy(tempVal,v1,N*sizeof(ElementType));
 			memcpy(v1,v2,N*sizeof(ElementType));
@@ -433,13 +434,13 @@ public:
 	}
 
 	//! Returns the number of chunks
-	inline unsigned chunksCount() const { return (unsigned)m_theChunks.size(); }
+	inline unsigned chunksCount() const { return static_cast<unsigned>(m_theChunks.size()); }
 
 	//! Returns the number of points in a given chunk
-	inline unsigned chunkSize(unsigned index) const { assert(index < m_theChunks.size()); return m_perChunkCount[index]; }
+	inline unsigned chunkSize(unsigned index) const { assert(index < static_cast<unsigned>(m_theChunks.size())); return m_perChunkCount[index]; }
 
 	//! Returns the begining of a given chunk (pointer)
-	inline ElementType* chunkStartPtr(unsigned index) const { assert(index < m_theChunks.size()); return m_theChunks[index]; }
+	inline ElementType* chunkStartPtr(unsigned index) const { assert(index < static_cast<unsigned>(m_theChunks.size())); return m_theChunks[index]; }
 
 	//! Copy array data to another one
 	/** \param dest destination array (will be resize if necessary)
@@ -512,26 +513,25 @@ public:
 		, m_count(0)
 		, m_maxCount(0)
 		, m_iterator(0)
-	{
-	}
+	{}
 
 	//! Returns the array size
 	/** This corresponds to the number of inserted elements
 		\return the number of elements actually inserted into this array
 	**/
-	inline unsigned currentSize() const {return m_count;}
+	inline unsigned currentSize() const { return m_count; }
 
 	//! Returns the maximum array size
 	/** This is the total (reserved) size, not only the number of inserted elements
 		\return the number of elements that can be stored in this array
 	**/
-	inline unsigned capacity() const {return m_maxCount;}
+	inline unsigned capacity() const { return m_maxCount; }
 
 	//! Specifies if the array has been initialized or not
 	/** The array is initialized after a call to reserve or resize (with at least one element).
 		\return true if the array has been alreay initialized, and false otherwise
 	**/
-	inline bool isAllocated() const {return (capacity()!=0);}
+	inline bool isAllocated() const { return capacity() != 0; }
 
 	//! Returns number of components
 	inline unsigned dim() const {return 1;}
@@ -541,8 +541,8 @@ public:
 	{
 		return sizeof(GenericChunkedArray) 
 				+ capacity()*sizeof(ElementType)
-				+ (unsigned)m_theChunks.capacity()*sizeof(ElementType*)
-				+ (unsigned)m_perChunkCount.capacity()*sizeof(unsigned);
+				+ static_cast<unsigned>(m_theChunks.capacity())*sizeof(ElementType*)
+				+ static_cast<unsigned>(m_perChunkCount.capacity())*sizeof(unsigned);
 	}
 	//! Clears the array
 	/** \param releaseMemory whether memory should be released or not (for quicker "refill")
@@ -557,26 +557,26 @@ public:
 				m_theChunks.pop_back();
 			}
 			m_perChunkCount.clear();
-			m_maxCount=0;
+			m_maxCount = 0;
 		}
 
-		m_count=0;
-		m_minVal=m_maxVal=0;
+		m_count = 0;
+		m_minVal = m_maxVal = 0;
 		placeIteratorAtBegining();
 	}
 
 	//! Fills the table with a particular value
 	/** \param fillValue filling value/vector (if 0, table is filled with 0)
 	**/
-	void fill(const ElementType& fillValue=0)
+	void fill(const ElementType& fillValue = 0)
 	{
 		if (m_theChunks.empty())
 			return;
 
-		if (fillValue==0)
+		if (fillValue == 0)
 		{
 			//default fill value = 0
-			for (unsigned i=0;i<m_theChunks.size();++i)
+			for (unsigned i=0; i<m_theChunks.size(); ++i)
 				memset(m_theChunks[i],0,m_perChunkCount[i]*sizeof(ElementType));
 		}
 		else
@@ -596,21 +596,21 @@ public:
 			while (elemFilled<elemToFill)
 			{
 				unsigned cs = elemToFill-elemFilled;
-				if (copySize<cs)
-					cs=copySize;
+				if (copySize < cs)
+					cs = copySize;
 				memcpy(_cDest,_cSrc,cs*sizeof(ElementType));
 				_cDest += cs;
 				elemFilled += cs;
-				copySize<<=1;
+				copySize <<= 1;
 			}
 
 			//then we simply have to copy the first chunk to the other ones
-			for (unsigned i=1;i<m_theChunks.size();++i)
+			for (size_t i=1; i<m_theChunks.size(); ++i)
 				memcpy(m_theChunks[i],_cSrc,m_perChunkCount[i]*sizeof(ElementType));
 		}
 
 		//done
-		m_count=m_maxCount;
+		m_count = m_maxCount;
 	}
 
 	//****** memory allocators ******//
@@ -625,18 +625,18 @@ public:
 	**/
 	bool reserve(unsigned newNumberOfElements)
 	{
-		while (m_maxCount<newNumberOfElements)
+		while (m_maxCount < newNumberOfElements)
 		{
-			if (m_theChunks.empty() || m_perChunkCount.back()==MAX_NUMBER_OF_ELEMENTS_PER_CHUNK)
+			if (m_theChunks.empty() || m_perChunkCount.back() == MAX_NUMBER_OF_ELEMENTS_PER_CHUNK)
 			{
 				m_theChunks.push_back(0);
 				m_perChunkCount.push_back(0);
 			}
 
 			//the number of new elements that we want to reserve
-			unsigned newNumberOfElementsForThisChunk = newNumberOfElements-m_maxCount;
+			unsigned newNumberOfElementsForThisChunk = newNumberOfElements - m_maxCount;
 			//free room left in the current chunk
-			unsigned freeSpaceInThisChunk = MAX_NUMBER_OF_ELEMENTS_PER_CHUNK-m_perChunkCount.back();
+			unsigned freeSpaceInThisChunk = MAX_NUMBER_OF_ELEMENTS_PER_CHUNK - m_perChunkCount.back();
 			//of course, we can't take more than that...
 			if (freeSpaceInThisChunk < newNumberOfElementsForThisChunk)
 				newNumberOfElementsForThisChunk = freeSpaceInThisChunk;
@@ -647,7 +647,7 @@ public:
 			if (!newTable)
 			{
 				//we cancel last insertion if it's an empty chunk
-				if (m_perChunkCount.back()==0)
+				if (m_perChunkCount.back() == 0)
 				{
 					m_perChunkCount.pop_back();
 					m_theChunks.pop_back();
@@ -655,7 +655,7 @@ public:
 				return false;
 			}
 			//otherwise we update current structure
-			m_theChunks.back() = (ElementType*)newTable;
+			m_theChunks.back() = static_cast<ElementType*>(newTable);
 			m_perChunkCount.back() += newNumberOfElementsForThisChunk;
 			m_maxCount += newNumberOfElementsForThisChunk;
 		}
@@ -671,13 +671,13 @@ public:
 		method instead).
 		\param newNumberOfElements the new number of n-uplets
 		\param initNewElements specifies if the new elements should be initialized with a specific value (in this case, the last parameter shouldn't be 0)
-		\param valueForNewElements the default value for the new elements (only necessary if the precedent parameter is true)
+		\param valueForNewElements the default value for the new elements (only necessary if the previous parameter is true)
 		\return true if the method succeeds, false otherwise
 	**/
-	bool resize(unsigned newNumberOfElements, bool initNewElements=false, const ElementType& valueForNewElements=0)
+	bool resize(unsigned newNumberOfElements, bool initNewElements = false, const ElementType& valueForNewElements = 0)
 	{
 		//if the new size is 0, we can simply clear the array!
-		if (newNumberOfElements==0)
+		if (newNumberOfElements == 0)
 		{
 			clear();
 		}
@@ -690,7 +690,7 @@ public:
 			if (initNewElements)
 			{
 				//m_maxCount should be up-to-date after a call to 'reserve'
-				for (unsigned i=m_count;i<m_maxCount;++i)
+				for (unsigned i=m_count; i<m_maxCount; ++i)
 					setValue(i,valueForNewElements);
 			}
 		}
@@ -708,7 +708,7 @@ public:
 				unsigned numberOfElementsForThisChunk = m_perChunkCount.back();
 
 				//if there's more elements to remove than elements in this chunk
-				if (spaceToFree>=numberOfElementsForThisChunk)
+				if (spaceToFree >= numberOfElementsForThisChunk)
 				{
 					//simply remove the chunk
 					m_maxCount -= numberOfElementsForThisChunk;
@@ -721,19 +721,19 @@ public:
 				{
 					//we resize the chunk
 					numberOfElementsForThisChunk -= spaceToFree;
-					assert(numberOfElementsForThisChunk>0);
+					assert(numberOfElementsForThisChunk > 0);
 					void* newTable = realloc(m_theChunks.back(),numberOfElementsForThisChunk*sizeof(ElementType));
 					//if 'realloc' failed?!
 					if (!newTable)
 						return false;
-					m_theChunks.back() = (ElementType*)newTable;
+					m_theChunks.back() = static_cast<ElementType*>(newTable);
 					m_perChunkCount.back() = numberOfElementsForThisChunk;
 					m_maxCount -= spaceToFree;
 				}
 			}
 		}
 
-		m_count=m_maxCount;
+		m_count = m_maxCount;
 
 		return true;
 	}
@@ -746,32 +746,28 @@ public:
 	**/
 	void setCurrentSize(unsigned size)
 	{
-		if (size>=m_maxCount)
+		if (size > m_maxCount)
 		{
 			assert(false);
 			return;
 		}
 
-		m_count=size;
+		m_count = size;
 	}
 
 	//! Direct access operator
 	/** \param index an element index
 		\return pointer to the ith element.
 	**/
-	inline ElementType& operator[] (unsigned index)
-	{
-		assert(index<m_maxCount);
-		return m_theChunks[index >> CHUNK_INDEX_BIT_DEC][index & ELEMENT_INDEX_BIT_MASK];
-	}
+	inline ElementType& operator[] (unsigned index) { assert(index < m_maxCount); return m_theChunks[index >> CHUNK_INDEX_BIT_DEC][index & ELEMENT_INDEX_BIT_MASK]; }
 
 	//***** data access *****//
 
 	//! Places global iterator at the begining of the array
-	inline void placeIteratorAtBegining() {m_iterator=0;}
+	inline void placeIteratorAtBegining() { m_iterator = 0; }
 
 	//! Forwards global iterator (one position)
-	inline void forwardIterator() {++m_iterator;}
+	inline void forwardIterator() { ++m_iterator; }
 
 	//! Returns the value currently pointed by the global iterator
 	/** Warning: the global iterator must have been previously initizialized
@@ -779,7 +775,7 @@ public:
 		be out of bounds.
 		\return current element value as a reference.
 	**/
-	inline const ElementType& getCurrentValue() const {return getValue(m_iterator);}
+	inline const ElementType& getCurrentValue() const { return getValue(m_iterator); }
 
 	//! Returns a pointer on the the value currently pointed by the global iterator
 	/** Warning: the global iterator must have been previously initizialized
@@ -787,7 +783,7 @@ public:
 		be out of bounds.
 		\return a pointer to the current element.
 	**/
-	inline ElementType* getCurrentValuePtr() {return &(*this)[m_iterator];}
+	inline ElementType* getCurrentValuePtr() { return &(*this)[m_iterator]; }
 
 	//! Adds a new element to the array
 	/** Warning: the memory should have been previously reserved (see
@@ -796,7 +792,7 @@ public:
 	**/
 	inline void addElement(const ElementType& newElement)
 	{
-		assert(m_count<m_maxCount);
+		assert(m_count < m_maxCount);
 		setValue(m_count++,newElement);
 	}
 
@@ -804,48 +800,43 @@ public:
 	/** \param index the index of the element to return
 		\return a pointer to the ith element
 	**/
-	inline const ElementType& getValue(unsigned index) const
-	{
-		assert(index<m_maxCount);
-		return m_theChunks[index >> CHUNK_INDEX_BIT_DEC][index & ELEMENT_INDEX_BIT_MASK];
-	}
-//		return (*this)[index];}
+	inline const ElementType& getValue(unsigned index) const { assert(index < m_maxCount); return m_theChunks[index >> CHUNK_INDEX_BIT_DEC][index & ELEMENT_INDEX_BIT_MASK]; }
 
 	//! Sets the value of the ith element
 	/** \param index the index of the element to update
 		\param value the new value for the element
 	**/
-	inline void setValue(unsigned index, const ElementType& value) {(*this)[index]=value;}
+	inline void setValue(unsigned index, const ElementType& value) { (*this)[index]=value; }
 
 	//! Returns the element with the minimum value stored in the array
 	/** The computeMinAndMax method must be called prior to this one
 		(and each time the array content is modified).
 		\return a pointer to the "minimum" element
 	**/
-	inline ElementType getMin() {return m_minVal;}
+	inline ElementType getMin() { return m_minVal; }
 
 	//! Const version of GenericChunkedArray::getMin
-	inline const ElementType getMin() const {return m_minVal;}
+	inline const ElementType getMin() const { return m_minVal; }
 
 	//! Returns the element with the maximum value stored in the array
 	/** The computeMinAndMax method must be called prior to this one
 		(and each time the array content is modified).
 		\return a pointer to the "maximum" element
 	**/
-	inline ElementType getMax() {return m_maxVal;}
+	inline ElementType getMax() { return m_maxVal; }
 
 	//! Const version of GenericChunkedArray::getMax
-	inline const ElementType getMax() const {return m_maxVal;}
+	inline const ElementType getMax() const { return m_maxVal; }
 
 	//! Sets the value of the minimum (independantly of what is stored in the array)
 	/** \param m the "minimum" element
 	**/
-	inline void setMin(const ElementType& m) {m_minVal = m;}
+	inline void setMin(const ElementType& m) { m_minVal = m; }
 
 	//! Sets the value of the maximum (independantly of what is stored in the array)
 	/** \param M the "maximum" element
 	**/
-	inline void setMax(const ElementType& M) {m_maxVal = M;}
+	inline void setMax(const ElementType& M) { m_maxVal = M; }
 
 	//! Determines "minimum" and "maximum" elements
 	/** If elements are composed of several components (n-uplets with n>1),
@@ -856,7 +847,7 @@ public:
 	virtual void computeMinAndMax()
 	{
 		//no points?
-		if (m_maxCount==0)
+		if (m_maxCount == 0)
 		{
 			//all boundaries to zero
 			m_minVal = m_maxVal = 0;
@@ -867,13 +858,13 @@ public:
 		m_minVal = m_minVal = getValue(0);
 
 		//we update boundaries with all other values
-		for (unsigned i=1;i<m_maxCount;++i)
+		for (unsigned i=1; i<m_maxCount; ++i)
 		{
 			const ElementType& val = getValue(i);
-			if (val<m_minVal)
-				m_minVal=val;
-			else if (val>m_maxVal)
-				m_maxVal=val;
+			if (val < m_minVal)
+				m_minVal = val;
+			else if (val > m_maxVal)
+				m_maxVal = val;
 		}
 	}
 
@@ -892,7 +883,7 @@ public:
 	}
 
 	//! Returns the number of chunks
-	inline unsigned chunksCount() const { return (unsigned)m_theChunks.size(); }
+	inline unsigned chunksCount() const { return static_cast<unsigned>(m_theChunks.size()); }
 
 	//! Returns the number of points in a given chunk
 	inline unsigned chunkSize(unsigned index) const { assert(index < m_theChunks.size()); return m_perChunkCount[index]; }

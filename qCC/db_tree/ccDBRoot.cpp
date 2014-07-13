@@ -56,13 +56,13 @@ static const int c_propViewLeftColumnWidth = 115;
 
 ccDBRoot::ccDBRoot(ccCustomQTreeView* dbTreeWidget, QTreeView* propertiesTreeWidget, QObject* parent) : QAbstractItemModel(parent)
 {
-    m_treeRoot = new ccHObject("DB Tree");
+	m_treeRoot = new ccHObject("DB Tree");
 
-    //DB Tree
-    assert(dbTreeWidget);
-    m_dbTreeWidget = dbTreeWidget;
-    m_dbTreeWidget->setModel(this);
-    m_dbTreeWidget->header()->hide();
+	//DB Tree
+	assert(dbTreeWidget);
+	m_dbTreeWidget = dbTreeWidget;
+	m_dbTreeWidget->setModel(this);
+	m_dbTreeWidget->header()->hide();
 
 	//drag & drop support
 	m_dbTreeWidget->setDragEnabled(true);
@@ -70,13 +70,15 @@ ccDBRoot::ccDBRoot(ccCustomQTreeView* dbTreeWidget, QTreeView* propertiesTreeWid
 	//m_dbTreeWidget->viewport()->setAcceptDrops(true);
 	m_dbTreeWidget->setDropIndicatorShown(true);
 	m_dbTreeWidget->setDragDropMode(QAbstractItemView::InternalMove);
+#ifndef CC_QT5
 	setSupportedDragActions(Qt::MoveAction);
-    /*//already done in ui file!
-    m_dbTreeWidget->setEditTriggers(QAbstractItemView::EditKeyPressed);
-    m_dbTreeWidget->setDragDropMode(QAbstractItemView::InternalMove);
-    m_dbTreeWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    m_dbTreeWidget->setUniformRowHeights(true);
-    //*/
+#endif
+	/*//already done in ui file!
+	m_dbTreeWidget->setEditTriggers(QAbstractItemView::EditKeyPressed);
+	m_dbTreeWidget->setDragDropMode(QAbstractItemView::InternalMove);
+	m_dbTreeWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	m_dbTreeWidget->setUniformRowHeights(true);
+	//*/
 
 	//context menu on DB tree elements
 	m_dbTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -120,41 +122,45 @@ ccDBRoot::ccDBRoot(ccCustomQTreeView* dbTreeWidget, QTreeView* propertiesTreeWid
 	connect(m_alignCameraWithEntity,			SIGNAL(triggered()),								this, SLOT(alignCameraWithEntityDirect()));
 	connect(m_alignCameraWithEntityReverse,		SIGNAL(triggered()),								this, SLOT(alignCameraWithEntityIndirect()));
 
-    //other DB tree signals/slots connection
-    connect(m_dbTreeWidget->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&, const QItemSelection&)), this, SLOT(changeSelection(const QItemSelection&, const QItemSelection&)));
+	//other DB tree signals/slots connection
+	connect(m_dbTreeWidget->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&, const QItemSelection&)), this, SLOT(changeSelection(const QItemSelection&, const QItemSelection&)));
 
-    //Properties Tree
-    assert(propertiesTreeWidget);
-    m_propertiesTreeWidget = propertiesTreeWidget;
-    m_propertiesModel = new QStandardItemModel(0, 2, parent);
-    /*//already done in ui file!
-    m_propertiesTreeWidget->header()->hide();
-    m_propertiesTreeWidget->setSelectionMode(QAbstractItemView::NoSelection);
-    m_propertiesTreeWidget->setAllColumnsShowFocus(true);
-    //*/
-    m_ccPropDelegate = new ccPropertiesTreeDelegate(m_propertiesModel, m_propertiesTreeWidget);
-    m_propertiesTreeWidget->setItemDelegate(m_ccPropDelegate);
-    m_propertiesTreeWidget->setModel(m_propertiesModel);
+	//Properties Tree
+	assert(propertiesTreeWidget);
+	m_propertiesTreeWidget = propertiesTreeWidget;
+	m_propertiesModel = new QStandardItemModel(0, 2, parent);
+	/*//already done in ui file!
+	m_propertiesTreeWidget->header()->hide();
+	m_propertiesTreeWidget->setSelectionMode(QAbstractItemView::NoSelection);
+	m_propertiesTreeWidget->setAllColumnsShowFocus(true);
+	//*/
+	m_ccPropDelegate = new ccPropertiesTreeDelegate(m_propertiesModel, m_propertiesTreeWidget);
+	m_propertiesTreeWidget->setItemDelegate(m_ccPropDelegate);
+	m_propertiesTreeWidget->setModel(m_propertiesModel);
+#ifdef CC_QT5
+	m_propertiesTreeWidget->header()->setSectionResizeMode(QHeaderView::Interactive);
+#else
 	m_propertiesTreeWidget->header()->setResizeMode(QHeaderView::Interactive);
+#endif
 	m_propertiesTreeWidget->header()->setStretchLastSection(true);
-    m_propertiesTreeWidget->setEnabled(false);
+	m_propertiesTreeWidget->setEnabled(false);
 
-    //Properties tree signals/slots connection
-    connect(m_ccPropDelegate, SIGNAL(ccObjectPropertiesChanged(ccHObject*)), this, SLOT(updateCCObject(ccHObject*)));
-    connect(m_ccPropDelegate, SIGNAL(ccObjectAppearanceChanged(ccHObject*)), this, SLOT(redrawCCObject(ccHObject*)));
-    connect(m_ccPropDelegate, SIGNAL(ccObjectAndChildrenAppearanceChanged(ccHObject*)), this, SLOT(redrawCCObjectAndChildren(ccHObject*)));
+	//Properties tree signals/slots connection
+	connect(m_ccPropDelegate, SIGNAL(ccObjectPropertiesChanged(ccHObject*)), this, SLOT(updateCCObject(ccHObject*)));
+	connect(m_ccPropDelegate, SIGNAL(ccObjectAppearanceChanged(ccHObject*)), this, SLOT(redrawCCObject(ccHObject*)));
+	connect(m_ccPropDelegate, SIGNAL(ccObjectAndChildrenAppearanceChanged(ccHObject*)), this, SLOT(redrawCCObjectAndChildren(ccHObject*)));
 }
 
 ccDBRoot::~ccDBRoot()
 {
-    if (m_ccPropDelegate)
-        delete m_ccPropDelegate;
+	if (m_ccPropDelegate)
+		delete m_ccPropDelegate;
 
-    if (m_propertiesModel)
-        delete m_propertiesModel;
+	if (m_propertiesModel)
+		delete m_propertiesModel;
 
-    if (m_treeRoot)
-        delete m_treeRoot;
+	if (m_treeRoot)
+		delete m_treeRoot;
 }
 
 void ccDBRoot::unloadAll()
@@ -170,34 +176,34 @@ void ccDBRoot::unloadAll()
 
 		anObject->prepareDisplayForRefresh_recursive();
 
-        beginRemoveRows(index(anObject).parent(),i,i);
-        m_treeRoot->removeChild(i);
-        endRemoveRows();
-    }
+		beginRemoveRows(index(anObject).parent(),i,i);
+		m_treeRoot->removeChild(i);
+		endRemoveRows();
+	}
 
-    updatePropertiesView();
+	updatePropertiesView();
 
-    MainWindow::RefreshAllGLWindow();
+	MainWindow::RefreshAllGLWindow();
 }
 
 ccHObject* ccDBRoot::getRootEntity()
 {
-    return m_treeRoot;
+	return m_treeRoot;
 }
 
 void ccDBRoot::addElement(ccHObject* anObject, bool autoExpand/*=true*/)
 {
-    if (!anObject)
-        return;
+	if (!anObject)
+		return;
 
-    //look for object's parent
-    ccHObject* parentObject = anObject->getParent();
-    if (!parentObject)
-    {
-        //if the object has no parent, it will be inserted at tree root
-        parentObject = m_treeRoot;
-        m_treeRoot->addChild(anObject);
-    }
+	//look for object's parent
+	ccHObject* parentObject = anObject->getParent();
+	if (!parentObject)
+	{
+		//if the object has no parent, it will be inserted at tree root
+		parentObject = m_treeRoot;
+		m_treeRoot->addChild(anObject);
+	}
 	else
 	{
 		//DGM TODO: how could we check that the object is not already inserted in the DB tree?
@@ -210,10 +216,10 @@ void ccDBRoot::addElement(ccHObject* anObject, bool autoExpand/*=true*/)
 		//	return;
 	}
 
-    //look for insert node index in tree
-    QModelIndex insertNodeIndex = index(parentObject);
-    int childPos = parentObject->getChildIndex(anObject);
-	
+	//look for insert node index in tree
+	QModelIndex insertNodeIndex = index(parentObject);
+	int childPos = parentObject->getChildIndex(anObject);
+
 	//row insertion operation (start)
 	beginInsertRows(insertNodeIndex, childPos, childPos);
 
@@ -234,82 +240,62 @@ void ccDBRoot::addElement(ccHObject* anObject, bool autoExpand/*=true*/)
 
 void ccDBRoot::expandElement(ccHObject* anObject, bool state)
 {
-    if (!anObject || !m_dbTreeWidget)
-        return;
+	if (!anObject || !m_dbTreeWidget)
+		return;
 
 	m_dbTreeWidget->setExpanded(index(anObject),state);
 }
 
 void ccDBRoot::removeElement(ccHObject* anObject)
 {
-    if (!anObject)
-        return;
+	if (!anObject)
+		return;
 
-    //we hide properties view in case this is the deleted object that is currently selected
-    hidePropertiesView();
+	//we hide properties view in case this is the deleted object that is currently selected
+	hidePropertiesView();
 
-    //every object in tree must have a parent!
-    ccHObject* parent = anObject->getParent();
-    if (!parent)
-    {
+	//every object in tree must have a parent!
+	ccHObject* parent = anObject->getParent();
+	if (!parent)
+	{
 		ccLog::Warning("[ccDBRoot::removeElement] Internal error: object has no parent!");
-        return;
-    }
+		return;
+	}
 
-    int childPos = parent->getChildIndex(anObject);
-    assert(childPos>=0);
+	int childPos = parent->getChildIndex(anObject);
+	assert(childPos>=0);
+	{
+		//row removal operation (start)
+		beginRemoveRows(index(parent),childPos,childPos);
 
-    //row removal operation (start)
-    beginRemoveRows(index(parent),childPos,childPos);
+		parent->removeChild(childPos);
 
-    parent->removeChild(childPos);
+		//row removal operation (end)
+		endRemoveRows();
+	}
 
-    //row removal operation (end)
-    endRemoveRows();
-
-    //we restablish properties view
-    updatePropertiesView();
+	//we restore properties view
+	updatePropertiesView();
 }
 
 void ccDBRoot::deleteSelectedEntities()
 {
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    if (selectedIndexes.size() < 1)
-        return;
-    unsigned selCount = (unsigned)selectedIndexes.size();
+	if (selectedIndexes.size() < 1)
+		return;
+	unsigned selCount = static_cast<unsigned>(selectedIndexes.size());
 
-    hidePropertiesView();
-
-	//specific case: shared labels
-	ccHObject::Container allLabels;
-	bool hasSharedLabels = false;
-	std::set<ccHObject*> cloudsToBeDeleted; //will only be used if 'hasSharedLabels' is true
-	if (m_treeRoot->filterChildren(allLabels,true,CC_2D_LABEL) != 0)
-	{
-		for (unsigned i=0; i<allLabels.size(); ++i)
-		{
-			if (allLabels[i]->isA(CC_2D_LABEL)) //Warning: cc2DViewportLabel is also a kind of 'CC_2D_LABEL'!
-			{
-				cc2DLabel* label = static_cast<cc2DLabel*>(allLabels[i]);
-				//shared labels are labels shared by at least 2 different clouds
-				if (label->size() > 1 && label->getPoint(0).cloud != label->getPoint(1).cloud
-					|| label->size() > 2 && label->getPoint(1).cloud != label->getPoint(2).cloud)
-				{
-					hasSharedLabels = true;
-					break;
-				}
-			}
-		}
-	}
+	hidePropertiesView();
 
 	//we remove all objects that are children of other deleted ones!
 	//(otherwise we may delete the parent before the child!)
-    std::vector<ccHObject*> toBeDeleted;
-    for (unsigned i=0;i<selCount;++i)
-    {
-        ccHObject* obj = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
-        //we don't take care of parentless objects (i.e. the tree root)
+	//TODO DGM: not sure this is still necessary with the new dependency mechanism
+	std::vector<ccHObject*> toBeDeleted;
+	for (unsigned i=0; i<selCount; ++i)
+	{
+		ccHObject* obj = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
+		//we don't take care of parent-less objects (i.e. the tree root)
 		if (!obj->getParent() || obj->isLocked())
 		{
 			ccLog::Warning(QString("Object '%1' can't be deleted this way (locked)").arg(obj->getName()));
@@ -318,7 +304,7 @@ void ccDBRoot::deleteSelectedEntities()
 
 		//we don't take objects that are siblings of others
 		bool isSiblingOfAnotherOne = false;
-		for (unsigned j=0;j<selCount;++j)
+		for (unsigned j=0; j<selCount; ++j)
 		{
 			if (i != j)
 			{
@@ -334,7 +320,7 @@ void ccDBRoot::deleteSelectedEntities()
 		if (!isSiblingOfAnotherOne)
 		{
 			//last check: mesh vertices
-			if (obj->isKindOf(CC_POINT_CLOUD) && obj->getParent()->isKindOf(CC_MESH))
+			if (obj->isKindOf(CC_TYPES::POINT_CLOUD) && obj->getParent()->isKindOf(CC_TYPES::MESH))
 				if (ccHObjectCaster::ToGenericMesh(obj->getParent())->getAssociatedCloud() == obj)
 				{
 					ccLog::Warning("Mesh vertices can't be deleted without their parent mesh!");
@@ -342,48 +328,10 @@ void ccDBRoot::deleteSelectedEntities()
 				}
 
 			toBeDeleted.push_back(obj);
-
-			if (hasSharedLabels)
-			{
-				//we must keep a parallel list for clouds only
-				if (obj->isA(CC_POINT_CLOUD))
-				{
-					cloudsToBeDeleted.insert(obj);
-				}
-				else
-				{
-					ccHObject::Container subClouds;
-					if (obj->filterChildren(subClouds,true,CC_POINT_CLOUD) != 0)
-						for (size_t i=0; i<subClouds.size(); ++i)
-							cloudsToBeDeleted.insert(subClouds[i]);
-				}
-			}
 		}
 	}
 
-    qism->clear();
-
-	//check now that we don't delete clouds on which some labels are dependent
-	if (hasSharedLabels)
-	{
-		size_t labelCount = allLabels.size();
-		for (size_t i=0;i<labelCount;++i)
-		{
-			cc2DLabel* label = static_cast<cc2DLabel*>(allLabels[i]);
-			if (label->size() > 1) //there's no issue with 1-point labels!
-			{
-				for (unsigned j=1;j<label->size();++j) //1st cloud is always the parent!
-					if (label->getPoint(j).cloud
-						&& label->getPoint(j).cloud != label->getPoint(0).cloud
-						&& cloudsToBeDeleted.find(label->getPoint(j).cloud) != cloudsToBeDeleted.end())
-					{
-						ccLog::Warning(QString("Label '%1' has been deleted as it is dependent on '%2'").arg(label->getName()).arg(label->getPoint(j).cloud->getName()));
-						label->clear();
-						toBeDeleted.push_back(label);
-					}
-			}
-		}
-	}
+	qism->clear();
 
 	while (!toBeDeleted.empty())
 	{
@@ -393,7 +341,7 @@ void ccDBRoot::deleteSelectedEntities()
 
 		anObject->prepareDisplayForRefresh_recursive();
 
-		if (anObject->isKindOf(CC_MESH))
+		if (anObject->isKindOf(CC_TYPES::MESH))
 		{
 			//specific case: the object is a mesh and its parent is its vertices!
 			//(can happen if a Delaunay mesh is computed directly in CC)
@@ -401,144 +349,151 @@ void ccDBRoot::deleteSelectedEntities()
 				anObject->getParent()->setVisible(true);
 		}
 
-        ccHObject* parent = anObject->getParent();
-        int childPos = parent->getChildIndex(anObject);
-        assert(childPos>=0);
+		ccHObject* parent = anObject->getParent();
+		int childPos = parent->getChildIndex(anObject);
+		assert(childPos >= 0);
 
-        beginRemoveRows(index(anObject).parent(),childPos,childPos);
-        parent->removeChild(childPos);
-        endRemoveRows();
-    }
+		beginRemoveRows(index(anObject).parent(),childPos,childPos);
+		parent->removeChild(childPos);
+		endRemoveRows();
+	}
 
-    updatePropertiesView();
+	updatePropertiesView();
 
-    MainWindow::RefreshAllGLWindow();
+	MainWindow::RefreshAllGLWindow();
 }
 
 QVariant ccDBRoot::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid())
-        return QVariant();
+	if (!index.isValid())
+		return QVariant();
 
-    const ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
+	const ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
 	assert(item);
 	if (!item)
-        return QVariant();
+		return QVariant();
 
-    if (role == Qt::DisplayRole)
-    {
+	if (role == Qt::DisplayRole)
+	{
 		QString baseName(item->getName());
 		if (baseName.isEmpty())
 			baseName = QString("no name");
 		//specific case
-		if (item->isA(CC_2D_LABEL))
+		if (item->isA(CC_TYPES::LABEL_2D))
 			baseName = QString("2D label: ")+baseName;
-		else if (item->isA(CC_2D_VIEWPORT_LABEL))
+		else if (item->isA(CC_TYPES::VIEWPORT_2D_LABEL))
 			baseName = QString("2D area label: ")+baseName;
 
-       return QVariant(baseName);
-    }
-    if (role == Qt::EditRole)
-    {
-       return QVariant(item->getName());
-    }
-    else if (role == Qt::DecorationRole)
-    {
-        bool locked = item->isLocked();
-        switch (item->getClassID())
-        {
-            case CC_HIERARCHY_OBJECT:
-                if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbHObjectSymbolLocked.png"));
-                else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbHObjectSymbol.png"));
-            case CC_POINT_CLOUD:
-                if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbCloudSymbolLocked.png"));
-                else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbCloudSymbol.png"));
-			//all primitives
-			case CC_PLANE:
-			case CC_SPHERE:
-			case CC_TORUS:	
-			case CC_CYLINDER:
-			case CC_CONE:	
-			case CC_BOX:	
-			case CC_DISH:	
-			case CC_EXTRU:	
-			case CC_FACET:
-                if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbMiscGeomSymbolLocked.png"));
-                else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbMiscGeomSymbol.png"));
-            case CC_MESH:
-                if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbMeshSymbolLocked.png"));
-                else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbMeshSymbol.png"));
-            case CC_SUB_MESH:
-                if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbSubMeshSymbolLocked.png"));
-                else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbSubMeshSymbol.png"));
-			case CC_POLY_LINE:
-				return QIcon(QString::fromUtf8(":/CC/images/dbPolylineSymbol.png"));
-            case CC_POINT_OCTREE:
-                if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbOctreeSymbolLocked.png"));
-                else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbOctreeSymbol.png"));
-            case CC_CALIBRATED_IMAGE:
-                return QIcon(QString::fromUtf8(":/CC/images/dbCalibratedImageSymbol.png"));
-            case CC_IMAGE:
-                return QIcon(QString::fromUtf8(":/CC/images/dbImageSymbol.png"));
-            case CC_SENSOR:
-            case CC_GBL_SENSOR:
-                return QIcon(QString::fromUtf8(":/CC/images/dbSensorSymbol.png"));
-			case CC_MATERIAL_SET:
-                return QIcon(QString::fromUtf8(":/CC/images/dbMaterialSymbol.png"));
-			case CC_NORMALS_ARRAY:
-			case CC_NORMAL_INDEXES_ARRAY:
-			case CC_RGB_COLOR_ARRAY:
-			case CC_TEX_COORDS_ARRAY:
-                if (locked)
-                    return QIcon(QString::fromUtf8(":/CC/images/dbContainerSymbolLocked.png"));
-                else
-                    return QIcon(QString::fromUtf8(":/CC/images/dbContainerSymbol.png"));
-			case CC_2D_LABEL:
-				return QIcon(QString::fromUtf8(":/CC/images/dbLabelSymbol.png"));
-			case CC_2D_VIEWPORT_OBJECT:
-				return QIcon(QString::fromUtf8(":/CC/images/dbViewportSymbol.png"));
-			case CC_2D_VIEWPORT_LABEL:
-				return QIcon(QString::fromUtf8(":/CC/images/dbAreaLabelSymbol.png"));
-            default:
-                if (locked)
-                   return QIcon(QString::fromUtf8(":/CC/images/dbLockSymbol.png"));
-                else
-                    return QVariant();
-         }
-     }
-     else if (role == Qt::CheckStateRole)
-     {
-         if (item->isEnabled())
-            return Qt::Checked;
-        else
-            return Qt::Unchecked;
-     }
+		return QVariant(baseName);
+	}
+	if (role == Qt::EditRole)
+	{
+		return QVariant(item->getName());
+	}
+	else if (role == Qt::DecorationRole)
+	{
+		// does the object have an "embedded icon"? - It may be the case for ccHObject defined in plugins
+		QIcon icon = item->getIcon();
+		if (!icon.isNull())
+			return icon;
 
-    return QVariant();
+		bool locked = item->isLocked();
+		switch (item->getClassID())
+		{
+		case CC_TYPES::HIERARCHY_OBJECT:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbHObjectSymbolLocked.png"));
+			else
+				return QIcon(QString::fromUtf8(":/CC/images/dbHObjectSymbol.png"));
+		case CC_TYPES::POINT_CLOUD:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbCloudSymbolLocked.png"));
+			else
+				return QIcon(QString::fromUtf8(":/CC/images/dbCloudSymbol.png"));
+			//all primitives
+		case CC_TYPES::PLANE:
+		case CC_TYPES::SPHERE:
+		case CC_TYPES::TORUS:	
+		case CC_TYPES::CYLINDER:
+		case CC_TYPES::CONE:	
+		case CC_TYPES::BOX:	
+		case CC_TYPES::DISH:	
+		case CC_TYPES::EXTRU:	
+		case CC_TYPES::FACET:
+		case CC_TYPES::QUADRIC:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbMiscGeomSymbolLocked.png"));
+			else
+				return QIcon(QString::fromUtf8(":/CC/images/dbMiscGeomSymbol.png"));
+		case CC_TYPES::MESH:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbMeshSymbolLocked.png"));
+			else
+				return QIcon(QString::fromUtf8(":/CC/images/dbMeshSymbol.png"));
+		case CC_TYPES::SUB_MESH:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbSubMeshSymbolLocked.png"));
+			else
+				return QIcon(QString::fromUtf8(":/CC/images/dbSubMeshSymbol.png"));
+		case CC_TYPES::POLY_LINE:
+			return QIcon(QString::fromUtf8(":/CC/images/dbPolylineSymbol.png"));
+		case CC_TYPES::POINT_OCTREE:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbOctreeSymbolLocked.png"));
+			else
+				return QIcon(QString::fromUtf8(":/CC/images/dbOctreeSymbol.png"));
+		case CC_TYPES::CALIBRATED_IMAGE:
+			return QIcon(QString::fromUtf8(":/CC/images/dbCalibratedImageSymbol.png"));
+		case CC_TYPES::IMAGE:
+			return QIcon(QString::fromUtf8(":/CC/images/dbImageSymbol.png"));
+		case CC_TYPES::SENSOR:
+		case CC_TYPES::GBL_SENSOR:
+			return QIcon(QString::fromUtf8(":/CC/images/dbSensorSymbol.png"));
+		case CC_TYPES::MATERIAL_SET:
+			return QIcon(QString::fromUtf8(":/CC/images/dbMaterialSymbol.png"));
+		case CC_TYPES::NORMALS_ARRAY:
+		case CC_TYPES::NORMAL_INDEXES_ARRAY:
+		case CC_TYPES::RGB_COLOR_ARRAY:
+		case CC_TYPES::TEX_COORDS_ARRAY:
+		case CC_TYPES::TRANS_BUFFER:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbContainerSymbolLocked.png"));
+			else
+				return QIcon(QString::fromUtf8(":/CC/images/dbContainerSymbol.png"));
+		case CC_TYPES::LABEL_2D:
+			return QIcon(QString::fromUtf8(":/CC/images/dbLabelSymbol.png"));
+		case CC_TYPES::VIEWPORT_2D_OBJECT:
+			return QIcon(QString::fromUtf8(":/CC/images/dbViewportSymbol.png"));
+		case CC_TYPES::VIEWPORT_2D_LABEL:
+			return QIcon(QString::fromUtf8(":/CC/images/dbAreaLabelSymbol.png"));
+		default:
+			if (locked)
+				return QIcon(QString::fromUtf8(":/CC/images/dbLockSymbol.png"));
+			else
+				return QVariant();
+		}
+	}
+	else if (role == Qt::CheckStateRole)
+	{
+		if (item->isEnabled())
+			return Qt::Checked;
+		else
+			return Qt::Unchecked;
+	}
+
+	return QVariant();
 }
 
 bool ccDBRoot::setData(const QModelIndex &index, const QVariant &value, int role)
 {
-    if (index.isValid())
-    {
-        if (role == Qt::EditRole)
-        {
-            if (value.toString().isEmpty())
-                return false;
+	if (index.isValid())
+	{
+		if (role == Qt::EditRole)
+		{
+			if (value.toString().isEmpty())
+				return false;
 
-            ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
+			ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
 			assert(item);
 			if (item)
 			{
@@ -547,7 +502,7 @@ bool ccDBRoot::setData(const QModelIndex &index, const QVariant &value, int role
 				//particular cases:
 				// - labels name is their title (so we update them)
 				// - name might be displayed in 3D
-				if (item->nameShownIn3D() || item->isKindOf(CC_2D_LABEL))
+				if (item->nameShownIn3D() || item->isKindOf(CC_TYPES::LABEL_2D))
 					if (item->isEnabled() && item->isVisible() && item->getDisplay())
 						item->getDisplay()->redraw();
 
@@ -556,11 +511,11 @@ bool ccDBRoot::setData(const QModelIndex &index, const QVariant &value, int role
 				emit dataChanged(index, index);
 			}
 
-            return true;
-         }
-         else if (role == Qt::CheckStateRole)
-         {
-            ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
+			return true;
+		}
+		else if (role == Qt::CheckStateRole)
+		{
+			ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
 			assert(item);
 			if (item)
 			{
@@ -573,93 +528,93 @@ bool ccDBRoot::setData(const QModelIndex &index, const QVariant &value, int role
 				//reflectObjectPropChange(item);
 			}
 
-            return true;
-         }
-    }
+			return true;
+		}
+	}
 
-    return false;
+	return false;
 }
 
 
 QModelIndex ccDBRoot::index(int row, int column, const QModelIndex &parentIndex) const
 {
-    if (!hasIndex(row, column, parentIndex))
-        return QModelIndex();
+	if (!hasIndex(row, column, parentIndex))
+		return QModelIndex();
 
-    ccHObject *parent = (parentIndex.isValid() ? static_cast<ccHObject*>(parentIndex.internalPointer()) : m_treeRoot);
+	ccHObject *parent = (parentIndex.isValid() ? static_cast<ccHObject*>(parentIndex.internalPointer()) : m_treeRoot);
 	assert(parent);
 	if (!parent)
-        return QModelIndex();
-    ccHObject *child = parent->getChild(row);
-    if (child)
-        return createIndex(row, column, child);
-    else
-        return QModelIndex();
+		return QModelIndex();
+	ccHObject *child = parent->getChild(row);
+	if (child)
+		return createIndex(row, column, child);
+	else
+		return QModelIndex();
 }
 
 QModelIndex ccDBRoot::index(ccHObject* object)
 {
-    assert(object);
+	assert(object);
 
-    if (object == m_treeRoot)
-        return QModelIndex();
+	if (object == m_treeRoot)
+		return QModelIndex();
 
-    ccHObject* parent = object->getParent();
-    if (!parent)
-    {
-        ccLog::Error(QString("An error while creating DB tree index: object '%1' has no parent!").arg(object->getName()));
-        return QModelIndex();
-    }
+	ccHObject* parent = object->getParent();
+	if (!parent)
+	{
+		ccLog::Error(QString("An error while creating DB tree index: object '%1' has no parent!").arg(object->getName()));
+		return QModelIndex();
+	}
 
-    int pos = parent->getChildIndex(object);
-    assert(pos>=0);
+	int pos = parent->getChildIndex(object);
+	assert(pos>=0);
 
-    return createIndex(pos,0,object);
+	return createIndex(pos,0,object);
 }
 
 QModelIndex ccDBRoot::parent(const QModelIndex &index) const
 {
-    if (!index.isValid())
-        return QModelIndex();
+	if (!index.isValid())
+		return QModelIndex();
 
-    ccHObject *childItem = static_cast<ccHObject*>(index.internalPointer());
+	ccHObject *childItem = static_cast<ccHObject*>(index.internalPointer());
 	assert(childItem);
 	if (!childItem)
-        return QModelIndex();
-    ccHObject *parentItem = childItem->getParent();
+		return QModelIndex();
+	ccHObject *parentItem = childItem->getParent();
 
 	assert(parentItem);
-    if (!parentItem || parentItem == m_treeRoot)
-        return QModelIndex();
+	if (!parentItem || parentItem == m_treeRoot)
+		return QModelIndex();
 
-    return createIndex(parentItem->getIndex(), 0, parentItem);
+	return createIndex(parentItem->getIndex(), 0, parentItem);
 }
 
 int ccDBRoot::rowCount(const QModelIndex &parent) const
 {
-    ccHObject *parentItem = 0;
+	ccHObject *parentItem = 0;
 	if (!parent.isValid())
-        parentItem = m_treeRoot;
-    else
-        parentItem = static_cast<ccHObject*>(parent.internalPointer());
-	
+		parentItem = m_treeRoot;
+	else
+		parentItem = static_cast<ccHObject*>(parent.internalPointer());
+
 	assert(parentItem);
-    return (parentItem ? parentItem->getChildrenNumber() : 0);
+	return (parentItem ? parentItem->getChildrenNumber() : 0);
 }
 
 int ccDBRoot::columnCount(const QModelIndex &parent) const
 {
-    return 1;
-    /*if (parent.isValid())
-        return static_cast<ccHObject*>(parent.internalPointer())->columnCount();
-    else
-        return m_treeRoot->columnCount();
-    //*/
+	return 1;
+	/*if (parent.isValid())
+		return static_cast<ccHObject*>(parent.internalPointer())->columnCount();
+	else
+		return m_treeRoot->columnCount();
+	//*/
 }
 
 void ccDBRoot::changeSelection(const QItemSelection & selected, const QItemSelection & deselected)
 {
-    //first unselect
+	//first unselect
 	QModelIndexList deselectedItems = deselected.indexes();
 	{
 		for (int i=0;i<deselectedItems.count();++i)
@@ -674,7 +629,7 @@ void ccDBRoot::changeSelection(const QItemSelection & selected, const QItemSelec
 		}
 	}
 
-    //then select
+	//then select
 	QModelIndexList selectedItems = selected.indexes();
 	{
 		for (int i=0;i<selectedItems.count();++i)
@@ -689,11 +644,11 @@ void ccDBRoot::changeSelection(const QItemSelection & selected, const QItemSelec
 		}
 	}
 
-    updatePropertiesView();
+	updatePropertiesView();
 
-    MainWindow::RefreshAllGLWindow();
+	MainWindow::RefreshAllGLWindow();
 
-    emit selectionChanged();
+	emit selectionChanged();
 }
 
 void ccDBRoot::unselectEntity(ccHObject* obj)
@@ -712,17 +667,17 @@ void ccDBRoot::unselectEntity(ccHObject* obj)
 
 void ccDBRoot::unselectAllEntities()
 {
-    QItemSelectionModel* selectionModel = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* selectionModel = m_dbTreeWidget->selectionModel();
 	assert(selectionModel);
 
 	selectionModel->clear();
 }
 
-void ccDBRoot::selectEntity(ccHObject* obj, bool forceAdditiveSelection/*=false*/)
+void ccDBRoot::selectEntity(ccHObject* obj, bool forceAdditiveSelection/* = false*/)
 {
-    bool additiveSelection = forceAdditiveSelection || (QApplication::keyboardModifiers () & Qt::ControlModifier);
+	bool additiveSelection = forceAdditiveSelection || (QApplication::keyboardModifiers () & Qt::ControlModifier);
 
-    QItemSelectionModel* selectionModel = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* selectionModel = m_dbTreeWidget->selectionModel();
 	assert(selectionModel);
 
 	//valid object? then we will try to select (or toggle) it
@@ -741,7 +696,7 @@ void ccDBRoot::selectEntity(ccHObject* obj, bool forceAdditiveSelection/*=false*
 					if (!selectedIndexes.empty())
 					{
 						//special case: labels can only be merged with labels!
-						if (obj->isA(CC_2D_LABEL) != static_cast<ccHObject*>(selectedIndexes[0].internalPointer())->isA(CC_2D_LABEL))
+						if (obj->isA(CC_TYPES::LABEL_2D) != static_cast<ccHObject*>(selectedIndexes[0].internalPointer())->isA(CC_TYPES::LABEL_2D))
 						{
 							ccLog::Warning("[Selection] Labels and other entities can't be mixed! (release the CTRL key to start a new selection)");
 							return;
@@ -753,7 +708,7 @@ void ccDBRoot::selectEntity(ccHObject* obj, bool forceAdditiveSelection/*=false*
 			}
 			else
 			{
-				if (selectionModel->isSelected(selectedIndex))  //nothing to do
+				if (selectionModel->isSelected(selectedIndex))	//nothing to do
 					return;
 				selectionModel->select(selectedIndex,QItemSelectionModel::ClearAndSelect);
 				obj->setSelected(true);
@@ -774,9 +729,9 @@ void ccDBRoot::selectEntity(ccHObject* obj, bool forceAdditiveSelection/*=false*
 void ccDBRoot::selectEntity(int uniqueID)
 {
 	ccHObject* obj = 0;
-    //minimum unqiue ID is 1 (0 means 'deselect')
-    if (uniqueID > 0)
-        obj = find(uniqueID);
+	//minimum unqiue ID is 1 (0 means 'deselect')
+	if (uniqueID > 0)
+		obj = find(uniqueID);
 
 	selectEntity(obj);
 }
@@ -803,7 +758,7 @@ void ccDBRoot::selectEntities(std::set<int> entIDs)
 			if (obj)
 			{
 				entities.push_back(obj);
-				if (obj->isA(CC_2D_LABEL))
+				if (obj->isA(CC_TYPES::LABEL_2D))
 					++labelCount;
 			}
 		}
@@ -825,13 +780,13 @@ void ccDBRoot::selectEntities(std::set<int> entIDs)
 			if (formerSelectedIndexes.isEmpty() || !ctrlPushed)
 				keepLabels = (labelCount == entities.size()); //yes if they are the only selected entities
 			else if (ctrlPushed)
-				keepLabels = static_cast<ccHObject*>(formerSelectedIndexes[0].internalPointer())->isA(CC_2D_LABEL); //yes if previously selected entities were already labels
+				keepLabels = static_cast<ccHObject*>(formerSelectedIndexes[0].internalPointer())->isA(CC_TYPES::LABEL_2D); //yes if previously selected entities were already labels
 		}
 
 		for (ccHObject::Container::const_iterator it = entities.begin(); it != entities.end(); ++it)
 		{
 			//filter input selection (can't keep both labels and standard entities --> we can't mix them!)
-			bool isLabel = (*it)->isA(CC_2D_LABEL);
+			bool isLabel = (*it)->isA(CC_TYPES::LABEL_2D);
 			if (isLabel == keepLabels && (!ctrlPushed || !(*it)->isSelected()))
 			{
 				QModelIndex selectedIndex = index(*it);
@@ -852,137 +807,139 @@ ccHObject* ccDBRoot::find(int uniqueID) const
 
 void ccDBRoot::showPropertiesView(ccHObject* obj)
 {
-    m_ccPropDelegate->fillModel(obj);
+	m_ccPropDelegate->fillModel(obj);
 
-    m_propertiesTreeWidget->setEnabled(true);
+	m_propertiesTreeWidget->setEnabled(true);
 	m_propertiesTreeWidget->setColumnWidth(0,c_propViewLeftColumnWidth);
 }
 
 void ccDBRoot::hidePropertiesView()
 {
-    m_ccPropDelegate->unbind();
-    m_propertiesModel->clear();
-    m_propertiesTreeWidget->setEnabled(false);
+	m_ccPropDelegate->unbind();
+	m_propertiesModel->clear();
+	m_propertiesTreeWidget->setEnabled(false);
 }
 
 void ccDBRoot::reflectObjectPropChange(ccHObject* obj)
 {
-    assert(m_ccPropDelegate);
-    assert(m_propertiesTreeWidget);
-    if (!m_propertiesTreeWidget->isEnabled() || m_ccPropDelegate->getCurrentObject()!=obj)
-        showPropertiesView(obj);
+	assert(m_ccPropDelegate);
+	assert(m_propertiesTreeWidget);
+	if (!m_propertiesTreeWidget->isEnabled() || m_ccPropDelegate->getCurrentObject()!=obj)
+		showPropertiesView(obj);
 }
 
 void ccDBRoot::updatePropertiesView()
 {
-    assert(m_propertiesTreeWidget);
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	assert(m_propertiesTreeWidget);
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    if (selectedIndexes.size()==1)
-        showPropertiesView(static_cast<ccHObject*>(selectedIndexes[0].internalPointer()));
-    else
-        hidePropertiesView();
+	if (selectedIndexes.size()==1)
+		showPropertiesView(static_cast<ccHObject*>(selectedIndexes[0].internalPointer()));
+	else
+		hidePropertiesView();
 }
 
 void ccDBRoot::updateCCObject(ccHObject* anObject)
 {
-    assert(anObject);
+	assert(anObject);
 
-    QModelIndex idx = index(anObject);
+	QModelIndex idx = index(anObject);
 
-    if (idx.isValid())
-        emit dataChanged(idx,idx);
+	if (idx.isValid())
+		emit dataChanged(idx,idx);
 }
 
 void ccDBRoot::redrawCCObject(ccHObject* anObject)
 {
-    assert(anObject);
+	assert(anObject);
 
-    anObject->redrawDisplay();
+	anObject->redrawDisplay();
 }
 
 void ccDBRoot::redrawCCObjectAndChildren(ccHObject* anObject)
 {
-    assert(anObject);
+	assert(anObject);
 
-    anObject->prepareDisplayForRefresh_recursive();
-    anObject->refreshDisplay_recursive();
+	anObject->prepareDisplayForRefresh_recursive();
+	anObject->refreshDisplay_recursive();
 }
 
 int ccDBRoot::countSelectedEntities(CC_CLASS_ENUM filter)
 {
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    int selCount = selectedIndexes.size();
+	int selCount = selectedIndexes.size();
 
-    if (selCount == 0 || filter == CC_OBJECT)
-        return selCount;
+	if (selCount == 0 || filter == CC_TYPES::OBJECT)
+		return selCount;
 
-    int i,realCount = 0;
-    for (i=0;i<selCount; ++i)
-    {
-        ccHObject* anObject = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
-        if (anObject && anObject->isKindOf(filter))
-            ++realCount;
-    }
+	int realCount = 0;
+	for (int i=0; i<selCount; ++i)
+	{
+		ccHObject* anObject = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
+		if (anObject && anObject->isKindOf(filter))
+			++realCount;
+	}
 
-    return realCount;
+	return realCount;
 }
 
-int ccDBRoot::getSelectedEntities(ccHObject::Container& selEntities,
-                                    CC_CLASS_ENUM filter/*=CC_OBJECT*/,
-                                    dbTreeSelectionInfo* info/*=NULL*/)
+int ccDBRoot::getSelectedEntities(	ccHObject::Container& selEntities,
+									CC_CLASS_ENUM filter/*=CC_TYPES::OBJECT*/,
+									dbTreeSelectionInfo* info/*=NULL*/)
 {
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    int i,selCount = selectedIndexes.size();
+	int i,selCount = selectedIndexes.size();
 
-    for (i=0;i<selCount; ++i)
-    {
-        ccHObject* anObject = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
-        if (anObject && anObject->isKindOf(filter))
-            selEntities.push_back(anObject);
-    }
+	for (i=0; i<selCount; ++i)
+	{
+		ccHObject* anObject = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
+		if (anObject && anObject->isKindOf(filter))
+			selEntities.push_back(anObject);
+	}
 
-    if (info)
-    {
-        info->reset();
-        info->selCount=selCount;
+	if (info)
+	{
+		info->reset();
+		info->selCount = selCount;
 
-        for (i=0;i<selCount;++i)
-        {
-            ccHObject* obj = selEntities[i];
+		for (i=0; i<selCount; ++i)
+		{
+			ccHObject* obj = selEntities[i];
 
-            info->sfCount += int(obj->hasScalarFields());
-            info->colorCount += int(obj->hasColors());
-            info->normalsCount += int(obj->hasNormals());
+			info->sfCount += int(obj->hasScalarFields());
+			info->colorCount += int(obj->hasColors());
+			info->normalsCount += int(obj->hasNormals());
 
-            if (obj->isKindOf(CC_POINT_CLOUD))
-            {
-                ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(obj);
-                info->cloudCount++;
-                info->octreeCount += int(cloud->getOctree()!=NULL);
-            }
+			if (obj->isKindOf(CC_TYPES::POINT_CLOUD))
+			{
+				ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(obj);
+				info->cloudCount++;
+				info->octreeCount += int(cloud->getOctree()!=NULL);
+			}
 
-            if (obj->isKindOf(CC_MESH))
-                info->meshCount++;
+			if (obj->isKindOf(CC_TYPES::MESH))
+				info->meshCount++;
 
-            if (obj->isKindOf(CC_POLY_LINE))
-                info->polylineCount++;
+			if (obj->isKindOf(CC_TYPES::POLY_LINE))
+				info->polylineCount++;
 
-            if (obj->isKindOf(CC_SENSOR))
-            {
-                info->sensorCount++;
-                if (obj->isKindOf(CC_GBL_SENSOR))
-                    info->gblSensorCount++;
-            }
+			if (obj->isKindOf(CC_TYPES::SENSOR))
+			{
+				info->sensorCount++;
+				if (obj->isKindOf(CC_TYPES::GBL_SENSOR))
+					info->gblSensorCount++;
+				if (obj->isKindOf(CC_TYPES::CAMERA_SENSOR))
+					info->cameraSensorCount++;
+			}
 
-            if (obj->isKindOf(CC_POINT_KDTREE))
+			if (obj->isKindOf(CC_TYPES::POINT_KDTREE))
 				info->kdTreeCount++;
-        }
-    }
+		}
+	}
 
-    return int(selEntities.size());
+	return int(selEntities.size());
 }
 
 Qt::DropActions ccDBRoot::supportedDropActions() const
@@ -992,29 +949,29 @@ Qt::DropActions ccDBRoot::supportedDropActions() const
 
 Qt::ItemFlags ccDBRoot::flags(const QModelIndex &index) const
 {
-    if (!index.isValid())
-        return 0;
+	if (!index.isValid())
+		return 0;
 
 	Qt::ItemFlags defaultFlags = QAbstractItemModel::flags(index);
 
 	//common flags
 	defaultFlags |= (Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
 
-    //class type based filtering
-    const ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
+	//class type based filtering
+	const ccHObject *item = static_cast<ccHObject*>(index.internalPointer());
 	assert(item);
-	if (item)
+	if (item && !item->isLocked()) //locked items cannot be drag-dropped
 	{
-		if (item->isA(CC_HIERARCHY_OBJECT)							||
-			item->isKindOf(CC_POINT_CLOUD)							||
-			(item->isKindOf(CC_MESH) && !item->isA(CC_SUB_MESH))	|| //a sub-mesh can't leave its parent mesh
-			item->isKindOf(CC_IMAGE)								||
-			item->isKindOf(CC_2D_LABEL)								||
-			item->isKindOf(CC_PRIMITIVE))
+		if (item->isA(CC_TYPES::HIERARCHY_OBJECT)								||
+			item->isKindOf(CC_TYPES::POINT_CLOUD)								||
+			(item->isKindOf(CC_TYPES::MESH) && !item->isA(CC_TYPES::SUB_MESH))	|| //a sub-mesh can't leave its parent mesh
+			item->isKindOf(CC_TYPES::IMAGE)										||
+			item->isKindOf(CC_TYPES::LABEL_2D)									||
+			item->isKindOf(CC_TYPES::PRIMITIVE))
 		{
 			defaultFlags |= (Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
 		}
-		else if (item->isKindOf(CC_POLY_LINE))
+		else if (item->isKindOf(CC_TYPES::POLY_LINE))
 		{
 			const ccPolyline* poly = static_cast<const ccPolyline*>(item);
 			//we can only displace a polyline if it is not dependant on it's father!
@@ -1022,13 +979,13 @@ Qt::ItemFlags ccDBRoot::flags(const QModelIndex &index) const
 			if (polyVertices != poly->getParent())
 				defaultFlags |= (Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
 		}
-		else if (item->isKindOf(CC_2D_VIEWPORT_OBJECT))
+		else if (item->isKindOf(CC_TYPES::VIEWPORT_2D_OBJECT))
 		{
 			defaultFlags |= Qt::ItemIsDragEnabled;
 		}
 	}
 
-    return defaultFlags;
+	return defaultFlags;
 }
 
 QMap<int,QVariant> ccDBRoot::itemData(const QModelIndex& index) const
@@ -1049,7 +1006,7 @@ QMap<int,QVariant> ccDBRoot::itemData(const QModelIndex& index) const
 bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int destRow, int destColumn, const QModelIndex& destParent)
 {
 	if (action != Qt::MoveAction)
-         return false;
+		return false;
 
 	//default mime type for QAbstractItemModel items)
 	if (!data->hasFormat("application/x-qabstractitemmodeldatalist"))
@@ -1086,27 +1043,27 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 		//let's check if we can actually move the entity
 		if (oldParent)
 		{
-			if (item->isKindOf(CC_POINT_CLOUD))
+			if (item->isKindOf(CC_TYPES::POINT_CLOUD))
 			{
 				//point cloud == mesh vertices?
-				if (oldParent->isKindOf(CC_MESH) && ccHObjectCaster::ToGenericMesh(oldParent)->getAssociatedCloud() == item)
+				if (oldParent->isKindOf(CC_TYPES::MESH) && ccHObjectCaster::ToGenericMesh(oldParent)->getAssociatedCloud() == item)
 					if (oldParent != newParent)
 					{
 						ccLog::Error("Vertices can't leave their parent mesh!");
 						return false;
 					}
 			}
-			else if (item->isKindOf(CC_MESH))
+			else if (item->isKindOf(CC_TYPES::MESH))
 			{
 				//a sub-mesh can't leave its parent mesh
-				if (item->isA(CC_SUB_MESH))
+				if (item->isA(CC_TYPES::SUB_MESH))
 				{
 					assert(false);
 					ccLog::Error("Sub-meshes can't leave their mesh group!");
 					return false;
 				}
 				//a mesh can't leave its associated cloud
-				else if (oldParent->isKindOf(CC_POINT_CLOUD) &&  ccHObjectCaster::ToGenericMesh(item)->getAssociatedCloud() == oldParent)
+				else if (oldParent->isKindOf(CC_TYPES::POINT_CLOUD) && ccHObjectCaster::ToGenericMesh(item)->getAssociatedCloud() == oldParent)
 				{
 					if (oldParent != newParent)
 					{
@@ -1115,7 +1072,7 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 					}
 				}
 			}
-			else if (/*item->isKindOf(CC_PRIMITIVE) || */item->isKindOf(CC_IMAGE))
+			else if (/*item->isKindOf(CC_TYPES::PRIMITIVE) || */item->isKindOf(CC_TYPES::IMAGE))
 			{
 				if (oldParent != newParent)
 				{
@@ -1126,16 +1083,16 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 			else if (oldParent != newParent)
 			{
 				//a label or a group of labels can't be moved to another cloud!
-				ccHObject::Container labels;
-				if (item->isA(CC_2D_LABEL))
+				/*ccHObject::Container labels;
+				if (item->isA(CC_TYPES::LABEL_2D))
 					labels.push_back(item);
 				else
-					item->filterChildren(labels,true,CC_2D_LABEL);
+					item->filterChildren(labels,true,CC_TYPES::LABEL_2D);
 
 				//for all labels in the sub-tree
 				for (ccHObject::Container::const_iterator it = labels.begin(); it != labels.end(); ++it)
 				{
-					if ((*it)->isA(CC_2D_LABEL)) //Warning: cc2DViewportLabel is also a kind of 'CC_2D_LABEL'!
+					if ((*it)->isA(CC_TYPES::LABEL_2D)) //Warning: cc2DViewportLabel is also a kind of 'CC_TYPES::LABEL_2D'!
 					{
 						cc2DLabel* label = static_cast<cc2DLabel*>(*it);
 						bool canMove = false;
@@ -1159,6 +1116,7 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 						}
 					}
 				}
+				//*/
 			}
 		}
 
@@ -1166,26 +1124,27 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 		if (oldParent && newParent == oldParent)
 		{
 			int oldRow = newParent->getChildIndex(item);
-			if (destRow<0)
+			if (destRow < 0)
 			{
 				assert(newParent->getChildrenNumber()>0);
-				destRow = (int)newParent->getChildrenNumber()-1;
+				destRow = static_cast<int>(newParent->getChildrenNumber())-1;
 			}
 			else if (oldRow<destRow)
 			{
-				assert(destRow>0);
+				assert(destRow > 0);
 				--destRow;
 			}
-			else if (oldRow==destRow)
+			else if (oldRow == destRow)
 				return false; //nothing to do
 		}
 
-		//remove link from old parent
-		bool fatherDependant = false;
-		if (item->getFlagState(CC_FATHER_DEPENDENT))
+		//remove link with old parent (only CHILD/PARENT related flags!)
+		int itemDependencyFlags = item->getDependencyFlagsWith(oldParent); //works even with NULL
+		int fatherDependencyFlags = oldParent ? oldParent->getDependencyFlagsWith(item) : 0;
+		if (oldParent)
 		{
-			fatherDependant = true;
-			item->setFlagState(CC_FATHER_DEPENDENT,false);
+			oldParent->removeDependencyFlag(item,ccHObject::DP_PARENT_OF_OTHER);
+			item->removeDependencyFlag(oldParent,ccHObject::DP_PARENT_OF_OTHER);
 		}
 
 		//remove item from current position
@@ -1193,7 +1152,14 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 
 		//sets new parent
 		assert(newParent);
-		newParent->addChild(item,fatherDependant,destRow);
+		newParent->addChild(item,fatherDependencyFlags & ccHObject::DP_PARENT_OF_OTHER,destRow);
+		item->addDependency(newParent,itemDependencyFlags & ccHObject::DP_PARENT_OF_OTHER);
+		//restore other flags on old parent (as all flags have been removed when calling removeElement!)
+		if (oldParent)
+		{
+			oldParent->addDependency(item,fatherDependencyFlags & (~ccHObject::DP_PARENT_OF_OTHER));
+			item->addDependency(oldParent,itemDependencyFlags & (~ccHObject::DP_PARENT_OF_OTHER));
+		}
 
 		if (newParent->getDisplay() == 0)
 			newParent->setDisplay(item->getDisplay());
@@ -1203,6 +1169,8 @@ bool ccDBRoot::dropMimeData(const QMimeData* data, Qt::DropAction action, int de
 		//add item back
 		addElement(item,false);
 	}
+
+	MainWindow::RefreshAllGLWindow();
 
 	return true;
 }
@@ -1260,11 +1228,11 @@ void ccDBRoot::expandOrCollapseHoveredBranch(bool expand)
 
 void ccDBRoot::alignCameraWithEntity(bool reverse)
 {
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    int selCount = selectedIndexes.size();
-    if (selCount == 0)
-        return;
+	int selCount = selectedIndexes.size();
+	if (selCount == 0)
+		return;
 
 	ccHObject* obj = static_cast<ccHObject*>(selectedIndexes[0].internalPointer());
 	if (!obj)
@@ -1279,11 +1247,11 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 	ccGLWindow* win = static_cast<ccGLWindow*>(display);
 
 	//plane normal
-	CCVector3 planeNormal;
-	CCVector3 planeVertDir;
+	CCVector3d planeNormal;
+	CCVector3d planeVertDir;
 	CCVector3 center;
 
-	if (obj->isA(CC_2D_LABEL)) //2D label with 3 points?
+	if (obj->isA(CC_TYPES::LABEL_2D)) //2D label with 3 points?
 	{
 		cc2DLabel* label = static_cast<cc2DLabel*>(obj);
 		//work only with labels with 3 points!
@@ -1295,7 +1263,8 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 			const CCVector3* _B = B.cloud->getPoint(B.index);
 			const cc2DLabel::PickedPoint& C = label->getPoint(2);
 			const CCVector3* _C = C.cloud->getPoint(C.index);
-			planeNormal = (*_B-*_A).cross(*_C-*_A);
+			CCVector3 N = (*_B-*_A).cross(*_C-*_A);
+			planeNormal = CCVector3d::fromArray(N.u);
 			planeVertDir = /*(*_B-*_A)*/win->getCurrentUpDir();
 			center = (*_A + *_B + *_C)/3;
 		}
@@ -1305,21 +1274,21 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 			return;
 		}
 	}
-	else if (obj->isA(CC_PLANE)) //plane
+	else if (obj->isA(CC_TYPES::PLANE)) //plane
 	{
 		ccPlane* plane = static_cast<ccPlane*>(obj);
 		//3rd column = plane normal!
-		planeNormal = plane->getNormal();
-		planeVertDir = plane->getTransformation().getColumnAsVec3D(1);
-		center = plane->getCenter();
+		planeNormal = CCVector3d::fromArray(plane->getNormal().u);
+		planeVertDir = CCVector3d::fromArray(plane->getTransformation().getColumnAsVec3D(1).u);
+		center = plane->getBBCenter();
 	}
-	else if (obj->isA(CC_FACET)) //facet
+	else if (obj->isA(CC_TYPES::FACET)) //facet
 	{
 		ccFacet* facet = static_cast<ccFacet*>(obj);
-		planeNormal = facet->getNormal();
-		CCVector3 planeHorizDir(0,1,0);
+		planeNormal = CCVector3d::fromArray(facet->getNormal().u);
+		CCVector3d planeHorizDir(0,1,0);
 		CCLib::CCMiscTools::ComputeBaseVectors(planeNormal,planeHorizDir,planeVertDir);
-		center = facet->getCenter();
+		center = facet->getBBCenter();
 	}
 	else
 	{
@@ -1334,11 +1303,11 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 
 	//output the transformation matrix that would make this normal points towards +Z
 	{
-		ccGLMatrix transMat;
+		ccGLMatrixd transMat;
 		transMat.setTranslation(-center);
-		ccGLMatrix viewMat = win->getViewportParameters().viewMat;
+		ccGLMatrixd viewMat = win->getViewportParameters().viewMat;
 		viewMat = viewMat * transMat;
-		viewMat.setTranslation(viewMat.getTranslationAsVec3D() + center);
+		viewMat.setTranslation(viewMat.getTranslationAsVec3D() + CCVector3d::fromArray(center.u));
 
 		ccLog::Print("[Align camera] Corresponding view matrix:");
 		ccLog::Print(viewMat.toString(12,' ')); //full precision
@@ -1348,11 +1317,11 @@ void ccDBRoot::alignCameraWithEntity(bool reverse)
 
 void ccDBRoot::gatherRecursiveInformation()
 {
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    int i,selCount = selectedIndexes.size();
-    if (selCount == 0)
-        return;
+	int i,selCount = selectedIndexes.size();
+	if (selCount == 0)
+		return;
 
 	struct GlobalInfo
 	{
@@ -1402,7 +1371,7 @@ void ccDBRoot::gatherRecursiveInformation()
 			continue;
 
 		//gather information from current entity
-		if (ent->isA(CC_POINT_CLOUD))
+		if (ent->isA(CC_TYPES::POINT_CLOUD))
 		{
 			ccPointCloud* cloud = static_cast<ccPointCloud*>(ent);
 			info.cloudCount++;
@@ -1413,7 +1382,7 @@ void ccDBRoot::gatherRecursiveInformation()
 			info.normalCount += (cloud->hasNormals() ? cloudSize : 0);
 			info.scalarFieldCount += cloud->getNumberOfScalarFields();
 		}
-		else if (ent->isKindOf(CC_MESH))
+		else if (ent->isKindOf(CC_TYPES::MESH))
 		{
 			ccMesh* mesh = static_cast<ccMesh*>(ent);
 
@@ -1423,19 +1392,19 @@ void ccDBRoot::gatherRecursiveInformation()
 			info.normalCount += (mesh->hasTriNormals() ? meshSize : 0);
 			info.materialCount += (mesh->getMaterialSet() ? (unsigned)mesh->getMaterialSet()->size() : 0);
 		}
-		else if (ent->isKindOf(CC_2D_LABEL))
+		else if (ent->isKindOf(CC_TYPES::LABEL_2D))
 		{
 			info.labelCount++;
 		}
-		else if (ent->isKindOf(CC_SENSOR))
+		else if (ent->isKindOf(CC_TYPES::SENSOR))
 		{
 			info.sensorCount++;
 		}
-		else if (ent->isKindOf(CC_POINT_OCTREE))
+		else if (ent->isKindOf(CC_TYPES::POINT_OCTREE))
 		{
 			info.octreeCount++;
 		}
-		else if (ent->isKindOf(CC_IMAGE))
+		else if (ent->isKindOf(CC_TYPES::IMAGE))
 		{
 			info.imageCount++;
 		}
@@ -1509,15 +1478,15 @@ void ccDBRoot::sortSiblingsType()
 
 void ccDBRoot::sortSelectedEntitiesSiblings(SortRules sortRule)
 {
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    int i,selCount = selectedIndexes.size();
-    if (selCount == 0)
-        return;
+	int selCount = selectedIndexes.size();
+	if (selCount == 0)
+		return;
 
-	for (i=0;i<selCount;++i)
-    {
-        ccHObject* item = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
+	for (int i=0; i<selCount; ++i)
+	{
+		ccHObject* item = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
 		unsigned childCount = (item ? item->getChildrenNumber() : 0);
 		if (childCount>1)
 		{
@@ -1611,27 +1580,29 @@ void ccDBRoot::toggleSelectedEntities3DName()
 
 void ccDBRoot::toggleSelectedEntitiesProperty(unsigned prop)
 {
-	if (prop>6)
+	if (prop > 6)
 	{
 		ccLog::Warning("[ccDBRoot::toggleSelectedEntitiesProperty] Internal error: invalid 'prop' value");
 		return;
 	}
 
-    QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
+	QItemSelectionModel* qism = m_dbTreeWidget->selectionModel();
 	QModelIndexList selectedIndexes = qism->selectedIndexes();
-    int i,selCount = selectedIndexes.size();
-    if (selCount == 0)
-        return;
+	int selCount = selectedIndexes.size();
+	if (selCount == 0)
+		return;
 
 	//hide properties view
 	hidePropertiesView();
 
-	for (i=0;i<selCount;++i)
-    {
-        ccHObject* item = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
-		assert(item);
+	for (int i=0; i<selCount; ++i)
+	{
+		ccHObject* item = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
 		if (!item)
+		{
+			assert(false);
 			continue;
+		}
 		switch(prop)
 		{
 		case 0: //enable state
@@ -1659,8 +1630,8 @@ void ccDBRoot::toggleSelectedEntitiesProperty(unsigned prop)
 		item->prepareDisplayForRefresh();
 	}
 
-    //we restablish properties view
-    updatePropertiesView();
+	//we restablish properties view
+	updatePropertiesView();
 
 	MainWindow::RefreshAllGLWindow();
 }
@@ -1697,32 +1668,34 @@ void ccDBRoot::showContextMenu(const QPoint& menuPos)
 		
 		//selected items?
 		QModelIndexList selectedIndexes = qism->selectedIndexes();
-		int i,selCount = selectedIndexes.size();
+		int selCount = selectedIndexes.size();
 		if (selCount)
 		{
-			bool toggleVisibility=false;
-			bool toggleOtherProperties=false;
-			bool toggleMaterials=false;
-			bool hasMoreThan2Children=false;
-			bool hasExactlyOnePlanarEntity=false;
-			bool leafObject=false;
-			for (i=0;i<selCount;++i)
+			bool toggleVisibility = false;
+			bool toggleOtherProperties = false;
+			bool toggleMaterials = false;
+			bool hasMoreThan2Children = false;
+			bool hasExactlyOnePlanarEntity = false;
+			bool leafObject = false;
+			for (int i=0; i<selCount; ++i)
 			{
 				ccHObject* item = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
-				assert(item);
 				if (!item)
+				{
+					assert(false);
 					continue;
-				if (item->getChildrenNumber()>1)
-					hasMoreThan2Children=true;
+				}
+				if (item->getChildrenNumber() > 1)
+					hasMoreThan2Children = true;
 				leafObject |= item->isLeaf();
-				if (!item->isA(CC_HIERARCHY_OBJECT))
+				if (!item->isA(CC_TYPES::HIERARCHY_OBJECT))
 				{
 					toggleVisibility = true;
-					if (item->isKindOf(CC_POINT_CLOUD))
+					if (item->isKindOf(CC_TYPES::POINT_CLOUD))
 					{
 						toggleOtherProperties = true;
 					}
-					else if (item->isKindOf(CC_MESH))
+					else if (item->isKindOf(CC_TYPES::MESH))
 					{
 						toggleMaterials = true;
 						toggleOtherProperties = true;
@@ -1730,11 +1703,11 @@ void ccDBRoot::showContextMenu(const QPoint& menuPos)
 					
 					if (selCount == 1)
 					{
-						if (item->isA(CC_2D_LABEL))
+						if (item->isA(CC_TYPES::LABEL_2D))
 						{
 							hasExactlyOnePlanarEntity = (static_cast<cc2DLabel*>(item)->size() == 3);
 						}
-						else if (item->isA(CC_PLANE) || item->isA(CC_FACET))
+						else if (item->isA(CC_TYPES::PLANE) || item->isA(CC_TYPES::FACET))
 						{
 							hasExactlyOnePlanarEntity = true;
 						}
@@ -1802,7 +1775,7 @@ QItemSelectionModel::SelectionFlags ccCustomQTreeView::selectionCommand(const QM
 		if (!selectedIndexes.empty() && !selectionModel()->isSelected(index))
 		{
 			ccHObject* selectedItem = static_cast<ccHObject*>(index.internalPointer());
-			if (selectedItem && selectedItem->isA(CC_2D_LABEL) != static_cast<ccHObject*>(selectedIndexes[0].internalPointer())->isA(CC_2D_LABEL))
+			if (selectedItem && selectedItem->isA(CC_TYPES::LABEL_2D) != static_cast<ccHObject*>(selectedIndexes[0].internalPointer())->isA(CC_TYPES::LABEL_2D))
 				return QItemSelectionModel::ClearAndSelect;
 		}
 	}

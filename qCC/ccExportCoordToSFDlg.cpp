@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1631                                                              $
-//$LastChangedDate:: 2010-08-25 07:21:40 +0200 (mer., 25 août 2010)       $
-//**************************************************************************
-//
 
 #include "ccExportCoordToSFDlg.h"
 
@@ -28,9 +21,9 @@ ccExportCoordToSFDlg::ccExportCoordToSFDlg(QWidget* parent/*=0*/)
 	: QDialog(parent)
 	, Ui::ExportCoordToSFDlg()
 {
-    setupUi(this);
+	setupUi(this);
 
-    setWindowFlags(Qt::Tool);
+	setWindowFlags(Qt::Tool);
 }
 
 bool ccExportCoordToSFDlg::exportX() const

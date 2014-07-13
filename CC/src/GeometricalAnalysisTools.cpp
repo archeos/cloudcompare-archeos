@@ -26,27 +26,27 @@
 #include "DistanceComputationTools.h"
 #include "DgmOctreeReferenceCloud.h"
 #include "ScalarField.h"
+#include "ScalarFieldTools.h"
 
 //system
 #include <assert.h>
 
 using namespace CCLib;
 
-//#define COMPUTE_CURVATURE_2
-int GeometricalAnalysisTools::computeCurvature(GenericIndexedCloudPersist* theCloud, Neighbourhood::CC_CURVATURE_TYPE cType, PointCoordinateType kernelRadius, GenericProgressCallback* progressCb, DgmOctree* _theOctree)
+int GeometricalAnalysisTools::computeCurvature(	GenericIndexedCloudPersist* theCloud,
+												Neighbourhood::CC_CURVATURE_TYPE cType,
+												PointCoordinateType kernelRadius,
+												GenericProgressCallback* progressCb/*=0*/,
+												DgmOctree* inputOctree/*=0*/)
 {
 	if (!theCloud)
         return -1;
 
 	unsigned numberOfPoints = theCloud->size();
-#ifdef COMPUTE_CURVATURE_2
-	if (numberOfPoints<5)
-#else
-	if (numberOfPoints<10)
-#endif
+	if (numberOfPoints < 5)
         return -2;
 
-	DgmOctree* theOctree = _theOctree;
+	DgmOctree* theOctree = inputOctree;
 	if (!theOctree)
 	{
 		theOctree = new DgmOctree(theCloud);
@@ -59,12 +59,11 @@ int GeometricalAnalysisTools::computeCurvature(GenericIndexedCloudPersist* theCl
 
 	theCloud->enableScalarField();
 
-	uchar level = theOctree->DgmOctree::findBestLevelForAGivenNeighbourhoodSizeExtraction(kernelRadius);
+	uchar level = theOctree->findBestLevelForAGivenNeighbourhoodSizeExtraction(kernelRadius);
 
 	//parameters
-	void* additionalParameters[2];
-	additionalParameters[0] = (void*)&cType;
-	additionalParameters[1] = (void*)&kernelRadius;
+	void* additionalParameters[2] = {	static_cast<void*>(&cType),
+										static_cast<void*>(&kernelRadius) };
 
 	int result = 0;
 
@@ -76,20 +75,20 @@ int GeometricalAnalysisTools::computeCurvature(GenericIndexedCloudPersist* theCl
 													&computeCellCurvatureAtLevel,
 													additionalParameters,
 													progressCb,
-													"Curvature Computation")==0)
+													"Curvature Computation") == 0)
 	{
 		//something went wrong
 		result = -4;
 	}
 
-	if (!_theOctree)
+	if (!inputOctree)
         delete theOctree;
 
 	return result;
 }
 
-//FONCTION "CELLULAIRE" DE CALCUL DE COURBURE (PAR FONCTION DE HAUTEUR LOCALE)
-//DETAIL DES PARAMETRES ADDITIONNELS (2) :
+//"PER-CELL" METHOD: CURVATURE ESTIMATION (WITH QUADRATIC FIT)
+//ADDITIONAL PARAMETERS (2):
 // [0] -> (CC_CURVATURE_TYPE*) cType : curvature type
 // [1] -> (PointCoordinateType*) radius : sphere radius
 bool GeometricalAnalysisTools::computeCellCurvatureAtLevel(	const DgmOctree::octreeCell& cell,
@@ -97,17 +96,15 @@ bool GeometricalAnalysisTools::computeCellCurvatureAtLevel(	const DgmOctree::oct
 															NormalizedProgress* nProgress/*=0*/)
 {
 	//parameters
-	Neighbourhood::CC_CURVATURE_TYPE cType	= *((Neighbourhood::CC_CURVATURE_TYPE*)additionalParameters[0]);
-	PointCoordinateType radius				= *((PointCoordinateType*)additionalParameters[1]);
+	Neighbourhood::CC_CURVATURE_TYPE cType	= *static_cast<Neighbourhood::CC_CURVATURE_TYPE*>(additionalParameters[0]);
+	PointCoordinateType radius				= *static_cast<PointCoordinateType*>(additionalParameters[1]);
 
 	//structure for nearest neighbors search
 	DgmOctree::NearestNeighboursSphericalSearchStruct nNSS;
-	nNSS.level								= cell.level;
-	nNSS.truncatedCellCode					= cell.truncatedCode;
+	nNSS.level = cell.level;
 	nNSS.prepare(radius,cell.parentOctree->getCellSize(nNSS.level));
 	cell.parentOctree->getCellPos(cell.truncatedCode,cell.level,nNSS.cellPos,true);
 	cell.parentOctree->computeCellCenter(nNSS.cellPos,cell.level,nNSS.cellCenter);
-	//*/
 
 	unsigned n = cell.points->size(); //number of points in the current cell
 
@@ -139,18 +136,15 @@ bool GeometricalAnalysisTools::computeCellCurvatureAtLevel(	const DgmOctree::oct
 		cell.points->getPoint(i,nNSS.queryPoint);
 
 		//look for neighbors in a sphere
+		//warning: there may be more points at the end of nNSS.pointsInNeighbourhood than the actual nearest neighbors (neighborCount)!
 		unsigned neighborCount = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,radius,false);
 		//neighborCount = std::min(neighborCount,16);
 
-#ifndef COMPUTE_CURVATURE_2
-		if (neighborCount>5)
-#else
-		if (neighborCount>10)
-#endif
+		if (neighborCount > 5)
 		{
 		    //current point index
 			unsigned index = cell.points->getPointGlobalIndex(i);
-		    //current point index in neighbourhood (to compute curvature at thre right position!)
+		    //current point index in neighbourhood (to compute curvature at the right position!)
             unsigned indexInNeighbourhood = 0;
 
 			DgmOctreeReferenceCloud neighboursCloud(&nNSS.pointsInNeighbourhood,neighborCount);
@@ -166,11 +160,7 @@ bool GeometricalAnalysisTools::computeCellCurvatureAtLevel(	const DgmOctree::oct
 				}
 			}
 
-#ifndef COMPUTE_CURVATURE_2
 			curv = Z.computeCurvature(indexInNeighbourhood,cType);
-#else
-			curv = Z.computeCurvature2(indexInNeighbourhood,cType);
-#endif
 		}
 
 		cell.points->setPointScalarValue(i,curv);
@@ -182,7 +172,111 @@ bool GeometricalAnalysisTools::computeCellCurvatureAtLevel(	const DgmOctree::oct
 	return true;
 }
 
-int GeometricalAnalysisTools::computeLocalDensity(GenericIndexedCloudPersist* theCloud, GenericProgressCallback* progressCb, DgmOctree* _theOctree)
+int GeometricalAnalysisTools::flagDuplicatePoints(	GenericIndexedCloudPersist* theCloud,
+													double minDistanceBetweenPoints/*=1.0e-12*/,
+													GenericProgressCallback* progressCb/*=0*/,
+													DgmOctree* inputOctree/*=0*/)
+{
+	if (!theCloud)
+        return -1;
+
+	unsigned numberOfPoints = theCloud->size();
+	if (numberOfPoints <= 1)
+        return -2;
+
+	DgmOctree* theOctree = inputOctree;
+	if (!theOctree)
+	{
+		theOctree = new DgmOctree(theCloud);
+		if (theOctree->build(progressCb)<1)
+		{
+			delete theOctree;
+			return -3;
+		}
+	}
+
+	theCloud->enableScalarField();
+	//set all flags to 0 by default
+	theCloud->forEach(CCLib::ScalarFieldTools::SetScalarValueToZero);
+
+	unsigned char level = theOctree->findBestLevelForAGivenNeighbourhoodSizeExtraction(static_cast<PointCoordinateType>(minDistanceBetweenPoints));
+
+	//parameters
+	void* additionalParameters[1] = { static_cast<void*>(&minDistanceBetweenPoints) };
+
+	int result = 0;
+
+	//doesn't work in parallel!
+	if (theOctree->executeFunctionForAllCellsAtLevel(	level,
+														&flagDuplicatePointsInACellAtLevel,
+														additionalParameters,
+														progressCb,
+														"Flag duplicate points") == 0)
+	{
+		//something went wrong
+		result = -4;
+	}
+
+	if (!inputOctree)
+        delete theOctree;
+
+	return result;
+}
+
+//"PER-CELL" METHOD: FLAG DUPLICATE POINTS
+//ADDITIONAL PARAMETERS (1):
+// [0] -> (double*) maxSquareDistBetweenPoints: max square distance between points
+bool GeometricalAnalysisTools::flagDuplicatePointsInACellAtLevel(	const DgmOctree::octreeCell& cell,
+																	void** additionalParameters,
+																	NormalizedProgress* nProgress/*=0*/)
+{
+	//parameter(s)
+	double minDistBetweenPoints = *static_cast<double*>(additionalParameters[0]);
+
+	//structure for nearest neighbors search
+	DgmOctree::NearestNeighboursSphericalSearchStruct nNSS;
+	nNSS.level = cell.level;
+	nNSS.prepare(static_cast<PointCoordinateType>(minDistBetweenPoints),cell.parentOctree->getCellSize(nNSS.level));
+	cell.parentOctree->getCellPos(cell.truncatedCode,cell.level,nNSS.cellPos,true);
+	cell.parentOctree->computeCellCenter(nNSS.cellPos,cell.level,nNSS.cellCenter);
+
+	unsigned n = cell.points->size(); //number of points in the current cell
+	
+	//for each point in the cell
+	for (unsigned i=0; i<n; ++i)
+	{
+		//don't process points already flagged as 'duplicate'
+		if (cell.points->getPointScalarValue(i) == 0)
+		{
+			cell.points->getPoint(i,nNSS.queryPoint);
+
+			//look for neighbors in a sphere
+			//warning: there may be more points at the end of nNSS.pointsInNeighbourhood than the actual nearest neighbors (neighborCount)!
+			unsigned neighborCount = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,minDistBetweenPoints,false);
+			if (neighborCount > 1) //the point itself lies in the neighborhood
+			{
+				unsigned iIndex = cell.points->getPointGlobalIndex(i);
+				for (unsigned j=0; j<neighborCount; ++j)
+				{
+					if (nNSS.pointsInNeighbourhood[j].pointIndex != iIndex)
+					{
+						//flag this point as 'duplicate'
+						cell.points->getAssociatedCloud()->setPointScalarValue(nNSS.pointsInNeighbourhood[j].pointIndex,static_cast<ScalarType>(1));
+					}
+				}
+			}
+		}
+
+		if (nProgress && !nProgress->oneStep())
+			return false;
+	}
+
+	return true;
+}
+
+int GeometricalAnalysisTools::computeLocalDensityApprox(GenericIndexedCloudPersist* theCloud,
+														GenericProgressCallback* progressCb/*=0*/,
+														DgmOctree* inputOctree/*=0*/)
 {
 	if (!theCloud)
         return -1;
@@ -191,7 +285,7 @@ int GeometricalAnalysisTools::computeLocalDensity(GenericIndexedCloudPersist* th
 	if (numberOfPoints<3)
         return -2;
 
-	DgmOctree* theOctree = _theOctree;
+	DgmOctree* theOctree = inputOctree;
 	if (!theOctree)
 	{
 		theOctree = new DgmOctree(theCloud);
@@ -213,61 +307,49 @@ int GeometricalAnalysisTools::computeLocalDensity(GenericIndexedCloudPersist* th
 #else
 	if (theOctree->executeFunctionForAllCellsAtLevel_MT(level,
 #endif
-														&computePointsDensityInACellAtLevel,
+														&computeApproxPointsDensityInACellAtLevel,
 														0,
 														progressCb,
-														"Local Density Computation")==0)
+														"Approximate Local Density Computation")==0)
 	{
 		//something went wrong
 		result = -4;
 	}
 
-	if (!_theOctree)
+	if (!inputOctree)
         delete theOctree;
 
 	return result;
 }
 
-//FONCTION "CELLULAIRE" DE CALCUL DE DENSITE LOCALE
-//PAS DE PARAMETRES ADDITIONNELS
-const double c_sphereVolumeCoef = (4.0/3.0*M_PI);
-bool GeometricalAnalysisTools::computePointsDensityInACellAtLevel(	const DgmOctree::octreeCell& cell,
-																	void** additionalParameters,
-																	NormalizedProgress* nProgress/*=0*/)
+//"PER-CELL" METHOD: APPROXIMATE LOCAL DENSITY
+//ADDITIONAL PARAMETERS (0): NONE
+bool GeometricalAnalysisTools::computeApproxPointsDensityInACellAtLevel(const DgmOctree::octreeCell& cell,
+																		void** additionalParameters,
+																		NormalizedProgress* nProgress/*=0*/)
 {
-	//structures pour la recherche de voisinages SPECIFIQUES
 	DgmOctree::NearestNeighboursSearchStruct nNSS;
 	nNSS.level								= cell.level;
 	nNSS.alreadyVisitedNeighbourhoodSize	= 0;
 	nNSS.minNumberOfNeighbors				= 2;
-	nNSS.truncatedCellCode					= cell.truncatedCode;
 	cell.parentOctree->getCellPos(cell.truncatedCode,cell.level,nNSS.cellPos,true);
 	cell.parentOctree->computeCellCenter(nNSS.cellPos,cell.level,nNSS.cellCenter);
 
-	unsigned n=cell.points->size();
+	unsigned n = cell.points->size();
 	for (unsigned i=0; i<n; ++i)
 	{
 		cell.points->getPoint(i,nNSS.queryPoint);
 
         //the first point is always the point itself!
-		if (cell.parentOctree->findNearestNeighborsStartingFromCell(nNSS)>1)
+		if (cell.parentOctree->findNearestNeighborsStartingFromCell(nNSS) > 1)
 		{
-            //DGM: we consider that the point is alone in a sphere of radius R and volume V=(4*pi/3)*R^3
-			//So, the local density is ~1/V!
-            double R2 = (double)nNSS.pointsInNeighbourhood[1].squareDist; //R2 in fact
-			if (R2 > ZERO_TOLERANCE)
-			{
-				double V = R2*sqrt(R2)*c_sphereVolumeCoef; //R^3 * (4*pi/3)
-				cell.points->setPointScalarValue(i,(ScalarType)(1.0/V));
-			}
-			else
-			{
-				cell.points->setPointScalarValue(i,NAN_VALUE);
-			}
+            //DGM: now we only output the distance to the nearest neighbor
+            double R2 = nNSS.pointsInNeighbourhood[1].squareDistd; //R2 in fact
+			cell.points->setPointScalarValue(i,static_cast<ScalarType>(sqrt(R2)));
 		}
 		else
 		{
-			//shoudln't happen! Appart if the cloud has only one point...
+			//shouldn't happen! Apart if the cloud has only one point...
             cell.points->setPointScalarValue(i,NAN_VALUE);
 		}
 
@@ -278,7 +360,10 @@ bool GeometricalAnalysisTools::computePointsDensityInACellAtLevel(	const DgmOctr
 	return true;
 }
 
-int GeometricalAnalysisTools::computeRoughness(GenericIndexedCloudPersist* theCloud, PointCoordinateType kernelRadius, GenericProgressCallback* progressCb/*=0*/, DgmOctree* _theOctree/*=0*/)
+int GeometricalAnalysisTools::computeLocalDensity(	GenericIndexedCloudPersist* theCloud,
+													PointCoordinateType kernelRadius,
+													GenericProgressCallback* progressCb/*=0*/,
+													DgmOctree* inputOctree/*=0*/)
 {
 	if (!theCloud)
         return -1;
@@ -287,7 +372,7 @@ int GeometricalAnalysisTools::computeRoughness(GenericIndexedCloudPersist* theCl
 	if (numberOfPoints<3)
         return -2;
 
-	DgmOctree* theOctree = _theOctree;
+	DgmOctree* theOctree = inputOctree;
 	if (!theOctree)
 	{
 		theOctree = new DgmOctree(theCloud);
@@ -300,93 +385,180 @@ int GeometricalAnalysisTools::computeRoughness(GenericIndexedCloudPersist* theCl
 
 	theCloud->enableScalarField();
 
-	uchar level = theOctree->DgmOctree::findBestLevelForAGivenNeighbourhoodSizeExtraction(kernelRadius);
+	uchar level = theOctree->findBestLevelForAGivenNeighbourhoodSizeExtraction(kernelRadius);
+	
+	ScalarType sphereVolume = static_cast<ScalarType>( pow(static_cast<double>(kernelRadius), 3.0)*4.0*M_PI/3.0 ); // volume = 4/3 * pi * r^3
 
 	//parameters
-	void* additionalParameters[1] = { (void*)&kernelRadius };
+	void* additionalParameters[2] = {	static_cast<void*>(&kernelRadius),
+										static_cast<void*>(&sphereVolume) };
 
 	int result = 0;
 
-#ifdef ENABLE_MT_OCTREE
-	if (theOctree->executeFunctionForAllCellsAtLevel_MT(level,
-#else
+#ifndef ENABLE_MT_OCTREE
 	if (theOctree->executeFunctionForAllCellsAtLevel(level,
+#else
+	if (theOctree->executeFunctionForAllCellsAtLevel_MT(level,
 #endif
-		&computePointsRoughnessInACellAtLevel,
-		additionalParameters,
-		progressCb,
-		"Roughness Computation")==0)
+														&computePointsDensityInACellAtLevel,
+														additionalParameters,
+														progressCb,
+														"Local Density Computation") == 0)
 	{
 		//something went wrong
 		result = -4;
 	}
 
-	if (!_theOctree)
+	if (!inputOctree)
         delete theOctree;
 
 	return result;
 }
 
-
-//FONCTION "CELLULAIRE" DE CALCUL DE RUGOSITE (PAR PLAN AUX MOINDRES CARRES)
-//DETAIL DES PARAMETRES ADDITIONNELS (1) :
-// [0] -> (PointCoordinateType*) kernelRadius : le rayon du voisinage de calcul
-bool GeometricalAnalysisTools::computePointsRoughnessInACellAtLevel(const DgmOctree::octreeCell& cell, 
+//"PER-CELL" METHOD: LOCAL DENSITY
+//ADDITIONNAL PARAMETERS (2):
+// [0] -> (PointCoordinateType*) kernelRadius : spherical neighborhood radius
+// [1] -> (ScalarType*) sphereVolume : spherical neighborhood volume
+bool GeometricalAnalysisTools::computePointsDensityInACellAtLevel(	const DgmOctree::octreeCell& cell, 
 																	void** additionalParameters,
 																	NormalizedProgress* nProgress/*=0*/)
 {
 	//parameter(s)
-	PointCoordinateType radius = *((PointCoordinateType*)additionalParameters[0]);
+	PointCoordinateType radius = *static_cast<PointCoordinateType*>(additionalParameters[0]);
+	ScalarType volume = *static_cast<ScalarType*>(additionalParameters[1]);
+	
+	assert(volume > 0);
 
 	//structure for nearest neighbors search
 	DgmOctree::NearestNeighboursSphericalSearchStruct nNSS;
-	nNSS.level								= cell.level;
-	nNSS.truncatedCellCode					= cell.truncatedCode;
+	nNSS.level = cell.level;
 	nNSS.prepare(radius,cell.parentOctree->getCellSize(nNSS.level));
 	cell.parentOctree->getCellPos(cell.truncatedCode,cell.level,nNSS.cellPos,true);
 	cell.parentOctree->computeCellCenter(nNSS.cellPos,cell.level,nNSS.cellCenter);
 
 	unsigned n = cell.points->size(); //number of points in the current cell
 	
-	//we already know some of the neighbours: the points in the current cell!
-	/*{
-		try
-		{
-			nNSS.pointsInNeighbourhood.resize(n);
-		}
-		catch (const std::bad_alloc&) //out of memory
-		{
+	//for each point in the cell
+	for (unsigned i=0; i<n; ++i)
+	{
+		cell.points->getPoint(i,nNSS.queryPoint);
+
+		//look for neighbors inside a sphere
+		//warning: there may be more points at the end of nNSS.pointsInNeighbourhood than the actual nearest neighbors (neighborCount)!
+		unsigned neighborCount = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,radius,false);
+
+		cell.points->setPointScalarValue(i,static_cast<ScalarType>(neighborCount)/volume);
+
+		if (nProgress && !nProgress->oneStep())
 			return false;
-		}
-
-		DgmOctree::NeighboursSet::iterator it = nNSS.pointsInNeighbourhood.begin();
-
-		for (unsigned i=0;i<n;++i,++it)
-		{
-			it->pointIndex = cell.points->getPointGlobalIndex(i);
-			it->point = cell.points->getAssociatedCloud()->getPointPersistentPtr(it->pointIndex);
-			//it->squareDist = 
-		}
-		nNSS.alreadyVisitedNeighbourhoodSize = 1;
 	}
-	//*/
 
+	return true;
+}
+
+int GeometricalAnalysisTools::computeRoughness(GenericIndexedCloudPersist* theCloud, PointCoordinateType kernelRadius, GenericProgressCallback* progressCb/*=0*/, DgmOctree* inputOctree/*=0*/)
+{
+	if (!theCloud)
+        return -1;
+
+	unsigned numberOfPoints = theCloud->size();
+	if (numberOfPoints<3)
+        return -2;
+
+	DgmOctree* theOctree = inputOctree;
+	if (!theOctree)
+	{
+		theOctree = new DgmOctree(theCloud);
+		if (theOctree->build(progressCb)<1)
+		{
+			delete theOctree;
+			return -3;
+		}
+	}
+
+	theCloud->enableScalarField();
+
+	uchar level = theOctree->findBestLevelForAGivenNeighbourhoodSizeExtraction(kernelRadius);
+
+	//parameters
+	void* additionalParameters[1] = { static_cast<void*>(&kernelRadius) };
+
+	int result = 0;
+
+#ifdef ENABLE_MT_OCTREE
+	if (theOctree->executeFunctionForAllCellsAtLevel_MT(level,
+#else
+	if (theOctree->executeFunctionForAllCellsAtLevel(	level,
+#endif
+														&computePointsRoughnessInACellAtLevel,
+														additionalParameters,
+														progressCb,
+														"Roughness Computation") == 0)
+	{
+		//something went wrong
+		result = -4;
+	}
+
+	if (!inputOctree)
+        delete theOctree;
+
+	return result;
+}
+
+//"PER-CELL" METHOD: ROUGHNESS ESTIMATION (LEAST SQUARES PLANE FIT)
+//ADDITIONNAL PARAMETERS (1):
+// [0] -> (PointCoordinateType*) kernelRadius : neighbourhood radius
+bool GeometricalAnalysisTools::computePointsRoughnessInACellAtLevel(const DgmOctree::octreeCell& cell, 
+																	void** additionalParameters,
+																	NormalizedProgress* nProgress/*=0*/)
+{
+	//parameter(s)
+	PointCoordinateType radius = *static_cast<PointCoordinateType*>(additionalParameters[0]);
+
+	//structure for nearest neighbors search
+	DgmOctree::NearestNeighboursSphericalSearchStruct nNSS;
+	nNSS.level = cell.level;
+	nNSS.prepare(radius,cell.parentOctree->getCellSize(nNSS.level));
+	cell.parentOctree->getCellPos(cell.truncatedCode,cell.level,nNSS.cellPos,true);
+	cell.parentOctree->computeCellCenter(nNSS.cellPos,cell.level,nNSS.cellCenter);
+
+	unsigned n = cell.points->size(); //number of points in the current cell
+	
 	//for each point in the cell
 	for (unsigned i=0; i<n; ++i)
 	{
         ScalarType d = NAN_VALUE;
 		cell.points->getPoint(i,nNSS.queryPoint);
 
-		//look for neighbors in a sphere
+		//look for neighbors inside a sphere
+		//warning: there may be more points at the end of nNSS.pointsInNeighbourhood than the actual nearest neighbors (= neighborCount)!
 		unsigned neighborCount = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,radius,false);
-		if (neighborCount>2)
+		if (neighborCount > 3)
 		{
-			DgmOctreeReferenceCloud neighboursCloud(&nNSS.pointsInNeighbourhood,neighborCount);
+			//find the query point in the nearest neighbors set and place it at the end
+			const unsigned globalIndex = cell.points->getPointGlobalIndex(i);
+			unsigned localIndex = 0;
+			while (localIndex < neighborCount && nNSS.pointsInNeighbourhood[localIndex].pointIndex != globalIndex)
+				++ localIndex;
+			//the query point should be in the nearest neighbors set!
+			assert(localIndex < neighborCount);
+			if (localIndex+1 < neighborCount) //no need to swap with another point if it's already at the end!
+			{
+				std::swap(nNSS.pointsInNeighbourhood[localIndex],nNSS.pointsInNeighbourhood[neighborCount-1]);
+			}
+
+			DgmOctreeReferenceCloud neighboursCloud(&nNSS.pointsInNeighbourhood,neighborCount-1); //we don't take the query point into account!
 			Neighbourhood Z(&neighboursCloud);
 
             const PointCoordinateType* lsq = Z.getLSQPlane();
             if (lsq)
-                d = DistanceComputationTools::computePoint2PlaneDistance(&nNSS.queryPoint,lsq);
+                d = fabs(DistanceComputationTools::computePoint2PlaneDistance(&nNSS.queryPoint,lsq));
+
+			//swap the points back to their original position (DGM: not necessary)
+			//if (localIndex+1 < neighborCount)
+			//{
+			//	std::swap(nNSS.pointsInNeighbourhood[localIndex],nNSS.pointsInNeighbourhood[neighborCount-1]);
+			//}
 		}
 
         cell.points->setPointScalarValue(i,d);
@@ -401,28 +573,22 @@ bool GeometricalAnalysisTools::computePointsRoughnessInACellAtLevel(const DgmOct
 CCVector3 GeometricalAnalysisTools::computeGravityCenter(GenericCloud* theCloud)
 {
 	assert(theCloud);
+	
 	unsigned count = theCloud->size();
-	if (count)
+	if (count == 0)
+		return CCVector3();
+
+	CCVector3d sum(0,0,0);
+
+	theCloud->placeIteratorAtBegining();
+	const CCVector3 *P = 0;
+	while ((P = theCloud->getNextPoint()))
 	{
-		double Xsum = 0.0;
-		double Ysum = 0.0;
-		double Zsum = 0.0;
-
-		theCloud->placeIteratorAtBegining();
-		const CCVector3 *P;
-        while ((P=theCloud->getNextPoint()))
-        {
-            Xsum += (double)P->x;
-            Ysum += (double)P->y;
-            Zsum += (double)P->z;
-        }
-
-        return CCVector3( (PointCoordinateType) (Xsum / (double)count),
-						  (PointCoordinateType) (Ysum / (double)count),
-						  (PointCoordinateType) (Zsum / (double)count));
+		sum += CCVector3d::fromArray(P->u);
 	}
 
-	return CCVector3();
+	sum /= static_cast<double>(count);
+	return CCVector3::fromArray(sum.u);
 }
 
 CCLib::SquareMatrixd GeometricalAnalysisTools::computeCovarianceMatrix(GenericCloud* theCloud, const PointCoordinateType* _gravityCenter)
@@ -452,20 +618,20 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeCovarianceMatrix(GenericCl
 		const CCVector3* Q = theCloud->getNextPoint();
 
         CCVector3 P = *Q-G;
-		mXX += (double)(P.x*P.x);
-		mYY += (double)(P.y*P.y);
-		mZZ += (double)(P.z*P.z);
-		mXY += (double)(P.x*P.y);
-		mXZ += (double)(P.x*P.z);
-		mYZ += (double)(P.y*P.z);
+		mXX += static_cast<double>(P.x*P.x);
+		mYY += static_cast<double>(P.y*P.y);
+		mZZ += static_cast<double>(P.z*P.z);
+		mXY += static_cast<double>(P.x*P.y);
+		mXZ += static_cast<double>(P.x*P.z);
+		mYZ += static_cast<double>(P.y*P.z);
 	}
 
-	covMat.m_values[0][0] = mXX/(double)n;
-	covMat.m_values[0][0] = mYY/(double)n;
-	covMat.m_values[0][0] = mZZ/(double)n;
-	covMat.m_values[1][0] = covMat.m_values[0][1] = mXY/(double)n;
-	covMat.m_values[2][0] = covMat.m_values[0][2] = mXZ/(double)n;
-	covMat.m_values[2][1] = covMat.m_values[1][2] = mYZ/(double)n;
+	covMat.m_values[0][0] = mXX/static_cast<double>(n);
+	covMat.m_values[0][0] = mYY/static_cast<double>(n);
+	covMat.m_values[0][0] = mZZ/static_cast<double>(n);
+	covMat.m_values[1][0] = covMat.m_values[0][1] = mXY/static_cast<double>(n);
+	covMat.m_values[2][0] = covMat.m_values[0][2] = mXZ/static_cast<double>(n);
+	covMat.m_values[2][1] = covMat.m_values[1][2] = mYZ/static_cast<double>(n);
 
 	return covMat;
 }
@@ -494,8 +660,8 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeCrossCovarianceMatrix(Gene
 	unsigned count = P->size();
 	for (unsigned i=0;i<count;i++)
 	{
-		CCVector3 Pt = *P->getNextPoint()-Gp;
-		CCVector3 Qt = *Q->getNextPoint()-Gq;
+		CCVector3 Pt = *P->getNextPoint() - Gp;
+		CCVector3 Qt = *Q->getNextPoint() - Gq;
 
         l1[0] += Pt.x*Qt.x;
         l1[1] += Pt.x*Qt.y;
@@ -508,7 +674,7 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeCrossCovarianceMatrix(Gene
         l3[2] += Pt.z*Qt.z;
 	}
 
-	covMat.scale(1.0/(double)count);
+	covMat.scale(1.0/static_cast<double>(count));
 
 	return covMat;
 }
@@ -530,47 +696,51 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeWeightedCrossCovarianceMat
 
 	//shortcuts to output matrix lines
 	CCLib::SquareMatrixd covMat(3);
-	double* l1 = covMat.row(0);
-	double* l2 = covMat.row(1);
-	double* l3 = covMat.row(2);
+	double* r1 = covMat.row(0);
+	double* r2 = covMat.row(1);
+	double* r3 = covMat.row(2);
 
 	P->placeIteratorAtBegining();
 	Q->placeIteratorAtBegining();
 
 	//sums
 	unsigned count = P->size();
-	ScalarType wp=(ScalarType)1.0,wq=(ScalarType)1.0;
 	double wSum = 0.0;
-	for (unsigned i=0;i<count;i++)
+	for (unsigned i=0; i<count; i++)
 	{
 		CCVector3 Pt = *P->getNextPoint()-Gp;
 		CCVector3 Qt = *Q->getNextPoint()-Gq;
 
+		PointCoordinateType wi = PC_ONE;
 		if (weightsP)
 		{
-			wp = weightsP->getValue(i);
+			const ScalarType& wp = weightsP->getValue(i);
 			if (!ScalarField::ValidValue(wp))
 				continue;
+			wi = static_cast<PointCoordinateType>(wp);
 		}
 		if (weightsQ)
 		{
-			wq = weightsQ->getValue(i);
+			const ScalarType& wq = weightsQ->getValue(i);
 			if (!ScalarField::ValidValue(wq))
 				continue;
+			wi *= static_cast<PointCoordinateType>(wq);
 		}
-		ScalarType wpq = wp*wq;
-		Pt *= static_cast<PointCoordinateType>(wpq);
-		wSum += static_cast<double>(wpq);
+		Pt *= wi;
+		wSum += wi;
 
-        l1[0] += Pt.x * Qt.x;
-        l1[1] += Pt.x * Qt.y;
-        l1[2] += Pt.x * Qt.z;
-        l2[0] += Pt.y * Qt.x;
-        l2[1] += Pt.y * Qt.y;
-        l2[2] += Pt.y * Qt.z;
-        l3[0] += Pt.z * Qt.x;
-        l3[1] += Pt.z * Qt.y;
-        l3[2] += Pt.z * Qt.z;
+		//1st row
+        r1[0] += Pt.x * Qt.x;
+        r1[1] += Pt.x * Qt.y;
+        r1[2] += Pt.x * Qt.z;
+		//2nd row
+        r2[0] += Pt.y * Qt.x;
+        r2[1] += Pt.y * Qt.y;
+        r2[2] += Pt.y * Qt.z;
+		//3rd row
+        r3[0] += Pt.z * Qt.x;
+        r3[1] += Pt.z * Qt.y;
+        r3[2] += Pt.z * Qt.z;
 	}
 
 	if (wSum != 0.0)

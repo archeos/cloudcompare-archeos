@@ -49,7 +49,7 @@ bool cc2DViewportLabel::toFile_MeOnly(QFile& out) const
 
 	//ROI (dataVersion>=21)
 	QDataStream outStream(&out);
-	for (int i=0;i<4;++i)
+	for (int i=0; i<4; ++i)
 		outStream << m_roi[i];
 
 	return true;
@@ -65,7 +65,7 @@ bool cc2DViewportLabel::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 
 	//ROI (dataVersion>=21)
 	QDataStream inStream(&in);
-	for (int i=0;i<4;++i)
+	for (int i=0; i<4; ++i)
 		inStream >> m_roi[i];
 
 	return true;
@@ -96,8 +96,8 @@ void cc2DViewportLabel::drawMeOnly(CC_DRAW_CONTEXT& context)
 		if (params.fov != m_params.fov || params.perspectiveAspectRatio != m_params.perspectiveAspectRatio)
 			return;
 
-		if (   (params.pivotPoint - m_params.pivotPoint).norm() > ZERO_TOLERANCE
-			|| (params.cameraCenter - m_params.cameraCenter).norm() > ZERO_TOLERANCE)
+		if (	(params.pivotPoint - m_params.pivotPoint).norm() > ZERO_TOLERANCE
+			||	(params.cameraCenter - m_params.cameraCenter).norm() > ZERO_TOLERANCE)
 			return;
 	}
 	else
@@ -109,8 +109,7 @@ void cc2DViewportLabel::drawMeOnly(CC_DRAW_CONTEXT& context)
 	glPushAttrib(GL_LINE_BIT);
 
 	float relativeZoom = 1.0f;
-	float dx = 0.0f;
-	float dy = 0.0f;
+	float dx = 0, dy = 0;
 	if (!m_params.perspectiveView) //ortho mode
 	{
 		//Screen pan & pivot compensation
@@ -118,9 +117,9 @@ void cc2DViewportLabel::drawMeOnly(CC_DRAW_CONTEXT& context)
 		float winTotalZoom = params.zoom/params.pixelSize;
 		relativeZoom = winTotalZoom/totalZoom;
 
-		CCVector3 dC = m_params.cameraCenter - params.cameraCenter;
+		CCVector3d dC = m_params.cameraCenter - params.cameraCenter;
 
-		CCVector3 P = m_params.pivotPoint - params.pivotPoint;
+		CCVector3d P = m_params.pivotPoint - params.pivotPoint;
 		m_params.viewMat.apply(P);
 
 		dx = static_cast<float>(dC.x + P.x);

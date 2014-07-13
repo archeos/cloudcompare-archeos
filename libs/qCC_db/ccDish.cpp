@@ -21,12 +21,12 @@
 #include "ccPointCloud.h"
 #include "ccNormalVectors.h"
 
-ccDish::ccDish(PointCoordinateType radius,
-			   PointCoordinateType height,
-			   PointCoordinateType radius2/*=0*/,
-			   const ccGLMatrix* transMat/*=0*/,
-			   QString name/*="Dish"*/,
-			   unsigned precision/*=24*/)
+ccDish::ccDish(	PointCoordinateType radius,
+				PointCoordinateType height,
+				PointCoordinateType radius2/*=0*/,
+				const ccGLMatrix* transMat/*=0*/,
+				QString name/*="Dish"*/,
+				unsigned precision/*=24*/)
 	: ccGenericPrimitive(name,transMat)
 	, m_baseRadius(radius)
 	, m_secondRadius(radius2)
@@ -92,10 +92,9 @@ bool ccDish::buildUp()
 
 	//first point: north pole
 	verts->addPoint(CCVector3(0,0,m_height));
-	verts->addNorm(0,0,1);
+	verts->addNorm(CCVector3(0,0,1));
 
 	//then, angular sweep
-	CCVector3 N0,N,P;
 	{
 		for (unsigned j=1;j<=sectionSteps;++j)
 		{
@@ -103,9 +102,7 @@ bool ccDish::buildUp()
 			PointCoordinateType cos_theta = cos(theta);
 			PointCoordinateType sin_theta = sin(theta);
 
-			N0.x = cos_theta;
-			N0.y = 0;
-			N0.z = sin_theta;
+			CCVector3 N0(cos_theta, 0, sin_theta);
 		
 			for (unsigned i=0;i<steps;++i) //then we make a full revolution
 			{
@@ -113,12 +110,10 @@ bool ccDish::buildUp()
 				PointCoordinateType cos_phi = cos(phi);
 				PointCoordinateType sin_phi = sin(phi);
 
-				N.x = N0.x * cos_phi;
-				N.y = N0.x * sin_phi;
-				N.z = N0.z;
+				CCVector3 N(N0.x * cos_phi, N0.x * sin_phi, N0.z);
 				N.normalize();
 
-				P = N * realRadius;
+				CCVector3 P = N * realRadius;
 
 				if (m_secondRadius > 0) //half-ellipsoid mode
 				{
@@ -131,7 +126,7 @@ bool ccDish::buildUp()
 				}
 
 				verts->addPoint(P);
-				verts->addNorm(N.u);
+				verts->addNorm(N);
 			}
 		}
 	}
@@ -163,7 +158,7 @@ bool ccDish::buildUp()
 		}
 	}
 
-	updateModificationTime();
+	notifyGeometryUpdate();
 	showNormals(true);
 
 	return true;
@@ -190,9 +185,9 @@ bool ccDish::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 
 	//parameters (dataVersion>=21)
 	QDataStream inStream(&in);
-	inStream >> m_baseRadius;
-	inStream >> m_secondRadius;
-	inStream >> m_height;
+	ccSerializationHelper::CoordsFromDataStream(inStream,flags,&m_baseRadius);
+	ccSerializationHelper::CoordsFromDataStream(inStream,flags,&m_secondRadius);
+	ccSerializationHelper::CoordsFromDataStream(inStream,flags,&m_height);
 
 	return true;
 }

@@ -35,27 +35,41 @@
 class ccShader;
 class ccFrameBufferObject;
 
+//! Bilateral filer (shader)
+/** See http://en.wikipedia.org/wiki/Bilateral_filter
+**/
 class ccBilateralFilter : public ccGlFilter
 {
 public:
 
-    //! Default constructor
+	//! Default constructor
+	/** Default parameters:
+		- halfSpatialSize = 2
+		- spatialSigma = 2.0
+		- depthSigma = 0.4
+	**/
 	ccBilateralFilter();
-    //! Destructor
-    virtual ~ccBilateralFilter();
+	//! Destructor
+	virtual ~ccBilateralFilter();
 
-    void reset();
+	void reset();
 
-    //inherited from ccGlFilter
-	virtual bool init(int width,int height,const char* shadersPath);
-	virtual void shade(GLuint texDepth, GLuint texColor, float zoom = 1.0);
+	//inherited from ccGlFilter
+	virtual ccGlFilter* clone() const;
+	virtual bool init(int width, int height, QString shadersPath, QString& error);
+	virtual void shade(GLuint texDepth, GLuint texColor, float zoom = 1.0f);
 	virtual GLuint getTexture();
 
-	//! Max kernel size
-	static const unsigned KERNEL_MAX_SIZE = 15;
+	//! Set parameters
+	/** \param halfSpatialSize half spatial kernel size (between 1 and 7 - total size will be 2*h+1)
+		\param spatialSigma variance of the 'spatial' distribution (Euclidean distance of pixels)
+		\param depthSigma variance of the 'depth' distribution (depth difference of pixels)
+	**/
+	void setParams(	unsigned halfSpatialSize,
+					float spatialSigma,
+					float depthSigma );
 
-	void setParameters(int spatialSize, float spatialSigma, float depthSigma);
-
+	//! Sets whether to use the current context (OpenGL) viewport or not
 	void useExistingViewport(bool state);
 
 protected:
@@ -68,12 +82,17 @@ protected:
 	ccFrameBufferObject* m_fbo;
 	ccShader* m_shader;
 
-	int m_filterSpatialSize;
-	float m_filterSpatialSigma;
-	float m_filterDepthSigma;
+	//! Half spatial size (kernel width will be 2*h+1)
+	unsigned m_halfSpatialSize;
+	//! Variance of the 'spatial' distribution (Euclidean distance of pixels)
+	float m_spatialSigma;
+	//! Variance of the 'depth' distribution (depth difference of pixels)
+	float m_depthSigma;
 
-	float m_dampingPixelDist[KERNEL_MAX_SIZE*KERNEL_MAX_SIZE];
+	//! 'spatial' distribution (kernel values)
+	float* m_dampingPixelDist;
 
+	//! Whether to use the current context (OpenGL) viewport or not
 	bool m_useCurrentViewport;
 };
 

@@ -18,12 +18,8 @@
 #ifndef REFERENCE_CLOUD_HEADER
 #define REFERENCE_CLOUD_HEADER
 
-#ifdef _MSC_VER
-//To get rid of the really annoying warnings about template class exportation
-#pragma warning( disable: 4251 )
-#pragma warning( disable: 4530 )
-#endif
-
+//Local
+#include "CCCoreLib.h"
 #include "GenericIndexedCloudPersist.h"
 #include "GenericChunkedArray.h"
 
@@ -34,14 +30,7 @@ namespace CCLib
 /** Implements the GenericIndexedCloudPersist interface. A simple point cloud
 	that stores references to Generic3dPoint instances in a vector.
 **/
-
-#ifdef CC_USE_AS_DLL
-#include "CloudCompareDll.h"
-
-class CC_DLL_API ReferenceCloud : public GenericIndexedCloudPersist
-#else
-class ReferenceCloud : public GenericIndexedCloudPersist
-#endif
+class CC_CORE_LIB_API ReferenceCloud : public GenericIndexedCloudPersist
 {
 public:
 
@@ -127,6 +116,9 @@ public:
 	**/
 	virtual bool resize(unsigned n);
 
+	//! Returns max capacity
+	inline virtual unsigned capacity() const { return m_theIndexes->capacity(); }
+
 	//! Swaps two point references
 	/** the point references indexes should be smaller than the total
 		number of "reserved" points (see ReferenceCloud::reserve).
@@ -169,7 +161,7 @@ protected:
 	//! Updates the bounding-box with a new point (internal)
 	/** P the new point
 	**/
-	virtual void updateBBWithPoint(const CCVector3* P);
+	virtual void updateBBWithPoint(const CCVector3& P);
 
 	//! Container of 3D point indexes
 	typedef GenericChunkedArray<1,unsigned> ReferencesContainer;
@@ -180,19 +172,17 @@ protected:
 	//! Iterator on the point references container
 	unsigned m_globalIterator;
 
-	//! Cloud bounding-box (min along the 3 dimensions)
-	PointCoordinateType m_bbMins[3];
-
-	//! Cloud bounding-box (max along the 3 dimensions)
-	PointCoordinateType m_bbMaxs[3];
-
+	//! Bounding-box min corner
+	CCVector3 m_bbMin;
+	//! Bounding-box max corner
+	CCVector3 m_bbMax;
 	//! Bounding-box validity
 	bool m_validBB;
 
 	//! Associated cloud
-	/** The cloud from which references are refering.
+	/** The cloud from which references are refering to.
 		WARNING: do not use the inner iterator as it
-		is used for implementing the ReferenceCloud one.
+		is used to 'implement' the ReferenceCloud one.
 	**/
 	GenericIndexedCloudPersist* m_theAssociatedCloud;
 };

@@ -18,6 +18,9 @@
 #ifndef CC_HISTOGRAM_WINDOW_HEADER
 #define CC_HISTOGRAM_WINDOW_HEADER
 
+//Always first
+#include <ccIncludeGL.h>
+
 //Qt
 #include <QGLWidget>
 #include <QDialog>
@@ -27,9 +30,18 @@
 
 //qCC_db
 #include <ccScalarField.h>
+#include <ccColorScale.h>
+
+//QCustomPlot
+#include <qcustomplot.h>
+
+class QCPColoredBars;
+class QCPBarsWithText;
+class QCPHiddenArea;
+class QCPArrow;
 
 //! Histogram widget
-class ccHistogramWindow : public QGLWidget
+class ccHistogramWindow : public QCustomPlot
 {
 	Q_OBJECT
 
@@ -41,12 +53,14 @@ public:
 	//! Destructor
 	virtual ~ccHistogramWindow();
 
-	//! Sets first line
-	void setInfoStr(const QString& str);
+	//! Sets title
+	void setTitle(const QString& str);
+	//! Sets axis labels
+	void setAxisLabels(const QString& xLabel, const QString& yLabel);
 
 	//! Computes histogram from a scalar field
 	/** Number of classes can be freely modified afterwards (if enabled).
-		\param associated scalar field
+		\param sf associated scalar field
 		\param initialNumberOfClasses initial number of classes
 		\param numberOfClassesCanBeChanged whether to allow the user to modify the number of classes
 		\return success
@@ -57,91 +71,145 @@ public:
 
 	//! Creates histogram from a bin array (each bin = number of elements per class)
 	/** Number of classes can't be modified.
-		\param histoValues array of bins (number of points per class)
-		\param numberOfClasses corresponding number of classes
+		\param histoValues array of bins
 		\param minVal minimum value
 		\param maxVal maximum value
-		\param giveArrayOwnership whether array ownership is passed to the dialog or not
 		\return success
 	**/
-	void fromBinArray(unsigned* histoValues,
-						unsigned numberOfClasses,
+	void fromBinArray(	const std::vector<unsigned>& histoValues,
 						double minVal,
-						double maxVal,
-						bool giveArrayOwnership = true);
+						double maxVal);
 
 	//! Sets overlay curve values
-	/** Curve will only appear if the number of points matches the current number of classes)
-		\param curveValues curve points 'Y' coordinates (points will be regularly spread over histogram span)
-		\param numberOfCurvePoints number of points
-		\param giveArrayOwnership whether array ownership is passed to the dialog or not
+	/** The curve will only appear over an histogram
+		\param curveValues curve points 'Y' coordinates only (regularly sampled between the min and max histogram values)
 	**/
-	void setCurveValues(double* curveValues,
-						unsigned numberOfCurvePoints,
-						bool giveArrayOwnership = true);
+	void setCurveValues(const std::vector<double>& curveValues);
 
-protected:
+	enum HISTOGRAM_COLOR_SCHEME { USE_SOLID_COLOR, USE_CUSTOM_COLOR_SCALE, USE_SF_SCALE };
+	//! Sets how the gradient bars should be colored
+	void setColorScheme(HISTOGRAM_COLOR_SCHEME scheme) { m_colorScheme = scheme; }
+
+	//! Sets solid color
+	/** Only used if color scheme is set to USE_SOLID_COLOR. **/
+	void setSolidColor(QColor color) { m_solidColor = color; }
+	//! Sets gradient color scale
+	/** Only used if color scheme is set to USE_CUSTOM_COLOR_SCALE. **/
+	void setColorScale(ccColorScale::Shared scale) { m_colorScale = scale; }
+	
+	//! Clears the display
+	void clear();
+	//! Updates the display
+	void refresh();
+	//! Updates the histogram bars only
+	/** Only works if a SF is associated and color scheme is USE_SF_SCALE.
+	**/
+	void refreshBars();
+
+public: //SF interactor mode
+
+	//! Enables SF interaction mode
+	void enableSFInteractionMode(bool state) { m_sfInteractionMode = state; }
+
+	void setMinDispValue(double);
+	void setMaxDispValue(double);
+	void setMinSatValue(double);
+	void setMaxSatValue(double);
+
+signals:
+
+	void sfMinDispValChanged(double);
+	void sfMaxDispValChanged(double);
+	void sfMinSatValChanged(double);
+	void sfMaxSatValChanged(double);
+
+protected: //methods
 
 	//! Changes the current number of classes
 	/** Warning: n should be a multiple of 4.
 	**/
-	void setNumberOfClasses(unsigned  n);
+	void setNumberOfClasses(size_t n);
 
 	//mouse events handling
 	void mousePressEvent(QMouseEvent *event);
 	void mouseMoveEvent(QMouseEvent *event);
 	void wheelEvent(QWheelEvent* event);
-
-	void closeEvent(QCloseEvent *event);
-
-	//inherited from QGLWidget
-	//void initializeGL();
-	//void resizeGL(int w, int h);
-	void paintGL();
-
+	void resizeEvent(QResizeEvent * event);
+	
 	//! Returns current maximum bin size
 	unsigned getMaxHistoVal();
 
 	//! Clears internal structures
-	void clear();
+	void clearInternal();
 
 	//! Dynamically computes histogram bins from scalar field
-	bool computeBinArrayFromSF();
+	bool computeBinArrayFromSF(size_t binCount);
 
-	//! 1st line
-	QString m_infoStr;
-	bool m_viewInitialized;
+	//! Updates overlay curve width depending on the widget display size
+	void updateOverlayCurveWidth(int w, int h);
+
+protected: //attributes
+
+	//Title
+	QString m_titleStr;
+	bool m_showTitle;
+	QCPPlotTitle* m_titlePlot;
+
+	//! Color scheme
+	HISTOGRAM_COLOR_SCHEME m_colorScheme;
+	//! Solid color
+	QColor m_solidColor;
+	//! Gradient color scale
+	ccColorScale::Shared m_colorScale;
+
+	//! Associated scalar field
+	ccScalarField* m_associatedSF;
+	//Whether the number of classes can be changed or not
+	/** Only possible with an associated scalar field.
+	**/
 	bool m_numberOfClassesCanBeChanged;
 
-	//table and type
-	ccScalarField* m_associatedSF;
-
-	//histogram variables
-	unsigned m_numberOfClasses;
-	unsigned* m_histoValues;
-	bool m_ownHistoValues;
+	//histogram data
+	QCPColoredBars* m_histogram;
+	std::vector<unsigned> m_histoValues;
 	double m_minVal;
 	double m_maxVal;
 	unsigned m_maxHistoVal;
 
-	//overlay curve
-	double* m_curveValues;
-	double m_maxCurveValue;
-	unsigned m_numberOfCurvePoints;
-	bool m_ownCurveValues;
-
-	//histogram display area
-	int m_roi[4];
-	//classes number modification buttons ("+" and "-")
-	int m_xMinusButton,m_yMinusButton,m_xPlusButton,m_yPlusButton;
-	int m_buttonSize;
+	//! Overlay curve
+	QCPGraph* m_overlayCurve;
+	std::vector<double> m_curveValues;
 
 	//vertical indicator
+	QCPBarsWithText* m_vertBar;
 	bool m_drawVerticalIndicator;
 	double m_verticalIndicatorPositionPercent;
 
-	//rendering font
+	//! Rendering font
 	QFont m_renderingFont;
+
+protected: //SF interactor mode
+
+	//! Whether SF interaction mode is enabled or not
+	bool m_sfInteractionMode;
+
+	//! Selectable items in "SF interaction" mode
+	enum SELECTABLE_ITEMS { NONE, LEFT_AREA, RIGHT_AREA, BOTH_AREAS, LEFT_ARROW, RIGHT_ARROW, BOTH_ARROWS };
+	//! Currently selected item
+	SELECTABLE_ITEMS m_selectedItem;
+
+	//! Left greyed area
+	QCPHiddenArea* m_areaLeft;
+	//! Right greyed area
+	QCPHiddenArea* m_areaRight;
+
+	//! Left arrow
+	QCPArrow* m_arrowLeft;
+	//! Right arrow
+	QCPArrow* m_arrowRight;
+
+	//! Last mouse click
+	QPoint m_lastMouseClick;
 };
 
 //! Encapsulating dialog for ccHistogramWindow
@@ -149,17 +217,10 @@ class ccHistogramWindowDlg : public QDialog
 {
 public:
 	//! Default constructor
-	ccHistogramWindowDlg(QWidget* parent = 0)
-		: QDialog(parent)
-		, m_win(new ccHistogramWindow(this))
-	{
-		QHBoxLayout* hboxLayout = new QHBoxLayout(this);
-		hboxLayout->addWidget(m_win);
-		hboxLayout->setContentsMargins(0,0,0,0);
-	}
+	ccHistogramWindowDlg(QWidget* parent = 0);
 
 	//! Returns encapsulated ccHistogramWindow
-	ccHistogramWindow* window() { return m_win; };
+	inline ccHistogramWindow* window() { return m_win; }
 
 protected:
 

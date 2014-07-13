@@ -18,17 +18,14 @@
 #ifndef CC_CYLINDER_PRIMITIVE_HEADER
 #define CC_CYLINDER_PRIMITIVE_HEADER
 
+//Local
+#include "qCC_db.h"
 #include "ccCone.h"
 
 //! Cylinder (primitive)
 /** 3D cylinder primitive
 **/
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccCylinder : public ccCone
-#else
-class ccCylinder : public ccCone
-#endif
+class QCC_DB_LIB_API ccCylinder : public ccCone
 {
 public:
 
@@ -53,14 +50,12 @@ public:
 	ccCylinder(QString name = QString("Cylinder"));
 
 	//! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const { return CC_CYLINDER; }
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::CYLINDER; }
 
 	//inherited from ccGenericPrimitive
 	virtual QString getTypeName() const { return "Cylinder"; }
 	virtual ccGenericPrimitive* clone() const;
 
-protected:
-    
 };
 
 #endif //CC_CYLINDER_PRIMITIVE_HEADER

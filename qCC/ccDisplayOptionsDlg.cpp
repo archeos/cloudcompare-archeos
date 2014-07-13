@@ -44,6 +44,7 @@ ccDisplayOptionsDlg::ccDisplayOptionsDlg(QWidget* parent) : QDialog(parent), Ui:
 	connect(textColorButton, SIGNAL(clicked()), this, SLOT(changeTextColor()));
 	connect(decimateMeshBox, SIGNAL(clicked()), this, SLOT(changeMeshDecimation()));
 	connect(decimateCloudBox, SIGNAL(clicked()), this, SLOT(changeCloudDecimation()));
+	connect(useVBOCheckBox,	SIGNAL(clicked()), this, SLOT(changeVBOUsage()));
 	connect(showCrossCheckBox, SIGNAL(clicked()), this, SLOT(changeCrossDisplayed()));
 
 	connect(colorScaleShowHistogramCheckBox, SIGNAL(clicked()), this, SLOT(changeColorScaleShowHistogram()));
@@ -120,6 +121,7 @@ void ccDisplayOptionsDlg::refresh()
 	enableGradientCheckBox->setChecked(parameters.drawBackgroundGradient);
 	decimateMeshBox->setChecked(parameters.decimateMeshOnMove);
 	decimateCloudBox->setChecked(parameters.decimateCloudOnMove);
+	useVBOCheckBox->setChecked(parameters.useVBOs);
 	showCrossCheckBox->setChecked(parameters.displayCross);
 
 	colorScaleShowHistogramCheckBox->setChecked(parameters.colorScaleShowHistogram);
@@ -353,6 +355,11 @@ void ccDisplayOptionsDlg::changeCloudDecimation()
 	parameters.decimateCloudOnMove = decimateCloudBox->isChecked();
 }
 
+void ccDisplayOptionsDlg::changeVBOUsage()
+{
+	parameters.useVBOs = useVBOCheckBox->isChecked();
+}
+
 void ccDisplayOptionsDlg::changeCrossDisplayed()
 {
 	parameters.displayCross = showCrossCheckBox->isChecked();
@@ -433,4 +440,23 @@ void ccDisplayOptionsDlg::doAccept()
 	parameters.toPersistentSettings();
 
 	accept();
+}
+
+//#ifdef CC_WINDOWS
+//#include <QWindowsStyle>
+//static QWindowsStyle s_windowsStyle;
+//#endif
+void ccDisplayOptionsDlg::SetButtonTextColor(QAbstractButton* button, const QColor &col)
+{
+	if (!button)
+		return;
+
+	//QPalette pal = button->palette();
+	//pal.setColor(QPalette::ButtonText, col);
+	//button->setPalette(pal);
+	button->setStyleSheet(QString("background-color: rgb(%1, %2, %3)").arg(col.red(),col.green(),col.blue()));
+//#ifdef CC_WINDOWS
+//	button->setStyle(&s_windowsStyle/*new QWindowsStyle()*/);
+//	button->update();
+//#endif
 }

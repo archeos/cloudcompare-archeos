@@ -20,29 +20,32 @@
 //Qt
 #include <QTime>
 
+//qCC_db
+#include <ccSingleton.h>
+
 //System
 #include <assert.h>
 
 //unique instance
-static QTime* s_eTimer = 0;
+static ccSingleton<QTime> s_timer;
 
 void ccTimer::Init()
 {
-    if (!s_eTimer)
+	if (!s_timer.instance)
 	{
-        s_eTimer = new QTime();
-		s_eTimer->start();
+		s_timer.instance = new QTime();
+		s_timer.instance->start();
 	}
 }
 
 int ccTimer::Sec()
 {
-	assert(s_eTimer && s_eTimer->isValid());
-	return (s_eTimer ? s_eTimer->elapsed()/1000 : 0); //QTime::elapsed = ms precision
+	assert(s_timer.instance && s_timer.instance->isValid());
+	return (s_timer.instance ? s_timer.instance->elapsed()/1000 : 0);
 }
 
 int ccTimer::Msec()
 {
-	assert(s_eTimer && s_eTimer->isValid());
-	return (s_eTimer ? s_eTimer->elapsed() : 0); //QTime::elapsed = ms precision
+	assert(s_timer.instance && s_timer.instance->isValid());
+	return (s_timer.instance ? s_timer.instance->elapsed() : 0);
 }

@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1691                                                              $
-//$LastChangedDate:: 2010-10-22 16:52:55 +0200 (ven., 22 oct. 2010)        $
-//**************************************************************************
-//
 
 #ifndef CC_SF_FROM_COLOR_DLG_HEADER
 #define CC_SF_FROM_COLOR_DLG_HEADER
@@ -34,22 +27,21 @@ class ccScalarFieldFromColorDlg : public QDialog, public Ui::scalarFieldFromColo
 {
 public:
 
-    //! Default constructor
-    ccScalarFieldFromColorDlg(QWidget* parent=0);
+	//! Default constructor
+	ccScalarFieldFromColorDlg(QWidget* parent = 0);
 
-    //! Returns if to export R channel as SF
-    bool getRStatus();
+	//! Returns if to export R channel as SF
+	bool getRStatus();
 
-    //! Returns if to export G channel as SF
-    bool getGStatus();
+	//! Returns if to export G channel as SF
+	bool getGStatus();
 
-    //! Returns if to export B channel as SF
-    bool getBStatus();
+	//! Returns if to export B channel as SF
+	bool getBStatus();
 
-    //! Returns if to export Composite channel as SF
-    bool getCompositeStatus();
-
+	//! Returns if to export Composite channel as SF
+	bool getCompositeStatus();
 
 };
 
-#endif
+#endif //CC_SF_FROM_COLOR_DLG_HEADER

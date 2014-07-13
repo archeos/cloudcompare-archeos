@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1691                                                              $
-//$LastChangedDate:: 2010-10-22 16:52:55 +0200 (ven., 22 oct. 2010)        $
-//**************************************************************************
-//
 
 #ifndef CC_EXPORT_COORD_TO_SF_DLG_HEADER
 #define CC_EXPORT_COORD_TO_SF_DLG_HEADER
@@ -33,14 +26,14 @@ class ccExportCoordToSFDlg : public QDialog, public Ui::ExportCoordToSFDlg
 public:
 
 	//! Default constructor
-    ccExportCoordToSFDlg(QWidget* parent=0);
+	ccExportCoordToSFDlg(QWidget* parent = 0);
 
 	//! Returns whether X dimension should be exported
-    bool exportX() const;
+	bool exportX() const;
 	//! Returns whether Y dimension should be exported
-    bool exportY() const;
+	bool exportY() const;
 	//! Returns whether Z dimension should be exported
-    bool exportZ() const;
+	bool exportZ() const;
 };
 
 #endif //CC_EXPORT_COORD_TO_SF_DLG_HEADER

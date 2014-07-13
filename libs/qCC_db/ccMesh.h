@@ -21,59 +21,56 @@
 //CCLib
 #include <SimpleTriangle.h>
 
+//Local
+#include "qCC_db.h"
 #include "ccGenericMesh.h"
 #include "ccMaterial.h"
 
 //! Triangular mesh
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccMesh : public ccGenericMesh
-#else
-class ccMesh : public ccGenericMesh
-#endif
+class QCC_DB_LIB_API ccMesh : public ccGenericMesh
 {
 public:
 
 	//! Default ccMesh constructor
-    /** \param vertices the vertices cloud
-    **/
+	/** \param vertices the vertices cloud
+	**/
 	ccMesh(ccGenericPointCloud* vertices);
 
-    //! ccMesh constructor (from a CCLib::GenericIndexedMesh)
-    /** The GenericIndexedMesh should refer to a known ccGenericPointCloud.
-        \param giMesh the GenericIndexedMesh
-        \param giVertices giMesh vertices
-    **/
-    ccMesh(CCLib::GenericIndexedMesh* giMesh, ccGenericPointCloud* giVertices);
+	//! ccMesh constructor (from a CCLib::GenericIndexedMesh)
+	/** The GenericIndexedMesh should refer to a known ccGenericPointCloud.
+		\param giMesh the GenericIndexedMesh
+		\param giVertices giMesh vertices
+	**/
+	ccMesh(CCLib::GenericIndexedMesh* giMesh, ccGenericPointCloud* giVertices);
 
 	//! Default destructor
 	virtual ~ccMesh();
 
-    //! Returns class ID
-    virtual CC_CLASS_ENUM getClassID() const { return CC_MESH; };
+	//! Returns class ID
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::MESH; }
 
 	//! Sets the associated vertices cloud (warning)
-	virtual void setAssociatedCloud(ccGenericPointCloud* cloud) { m_associatedCloud = cloud; }
+	virtual void setAssociatedCloud(ccGenericPointCloud* cloud);
 
 	//! Clones this entity
 	/** All the main features of the entity are cloned, except from the octree
-        \param vertices vertices set to use (will be automatically - AND OPTIMALLY - cloned if 0)
+		\param vertices vertices set to use (will be automatically - AND OPTIMALLY - cloned if 0)
 		\param clonedMaterials for internal use
 		\param clonedNormsTable for internal use
 		\param cloneTexCoords for internal use
 		\return a copy of this entity
 	**/
-	virtual ccMesh* clone(	ccGenericPointCloud* vertices = 0,
-							ccMaterialSet* clonedMaterials = 0,
-							NormsIndexesTableType* clonedNormsTable = 0,
-							TextureCoordsContainer* cloneTexCoords = 0);
+	virtual ccMesh* cloneMesh(	ccGenericPointCloud* vertices = 0,
+								ccMaterialSet* clonedMaterials = 0,
+								NormsIndexesTableType* clonedNormsTable = 0,
+								TextureCoordsContainer* cloneTexCoords = 0);
 
 	//inherited methods (ccHObject)
 	virtual unsigned getUniqueIDForDisplay() const;
 
 	//inherited methods (ccGenericMesh)
 	inline virtual ccGenericPointCloud* getAssociatedCloud() const { return m_associatedCloud; }
-    virtual void refreshBB();
+	virtual void refreshBB();
 	virtual bool interpolateNormals(unsigned triIndex, const CCVector3& P, CCVector3& N);
 	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, colorType rgb[]);
 	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture);
@@ -95,15 +92,15 @@ public:
 	const virtual CCLib::TriangleSummitsIndexes* getTriangleIndexes(unsigned triangleIndex) const;
 
 	//inherited methods (ccHObject)
-    virtual ccBBox getMyOwnBB();
+	virtual ccBBox getMyOwnBB();
 	virtual bool isSerializable() const { return true; }
 
 	//inherited methods (ccDrawableObject)
-    virtual bool hasColors() const;
-    virtual bool hasNormals() const;
-    virtual bool hasScalarFields() const;
-    virtual bool hasDisplayedScalarField() const;
-    virtual bool normalsShown() const;
+	virtual bool hasColors() const;
+	virtual bool hasNormals() const;
+	virtual bool hasScalarFields() const;
+	virtual bool hasDisplayedScalarField() const;
+	virtual bool normalsShown() const;
 	virtual void setDisplay(ccGenericGLDisplay* win);
 	virtual void toggleMaterials() { showMaterials(!materialsShown()); }
 
@@ -113,10 +110,10 @@ public:
 	virtual void shiftTriangleIndexes(unsigned shift);
 
 	//! Adds a triangle to the mesh
-	/** Warning: bounding box validity is broken after a call to this method.
-        However, for the sake of performance, no call to updateModificationTime
-        is made automatically. Make sure to do so when all modifications are done.
-        \param i1 first summit index (relatively to the vertex cloud)
+	/** \warning Bounding-box validity is broken after a call to this method.
+		However, for the sake of performance, no call to notifyGeometryUpdate
+		is made automatically. Make sure to do so when all modifications are done!
+		\param i1 first summit index (relatively to the vertex cloud)
 		\param i2 second summit index (relatively to the vertex cloud)
 		\param i3 third summit index (relatively to the vertex cloud)
 	**/
@@ -287,8 +284,17 @@ public:
 	**/
 	void setTriangleTexCoordIndexes(unsigned triangleIndex, int i1, int i2, int i3);
 
-    //! Computes per-vertex normals
-    virtual bool computeNormals();
+	//! Computes normals
+	/** \param perVertex whether normals should be computed per-vertex or per-triangle
+		\return success
+	**/
+	virtual bool computeNormals(bool perVertex);
+
+	//! Computes per-vertex normals
+	virtual bool computePerVertexNormals();
+
+	//! Computes per-triangle normals
+	virtual bool computePerTriangleNormals();
 
 	//! Laplacian smoothing
 	/** \param nbIteration smoothing iterations
@@ -305,14 +311,14 @@ public:
 	};
 
 	//! Applies process to the mesh scalar field (the one associated to its vertices in fact)
-    /** A very simple smoothing/enhancement algorithm based on
-        each vertex direct neighbours. Prior to calling this method,
-        one should check first that the vertices are associated to a
-        scalar field.
+	/** A very simple smoothing/enhancement algorithm based on
+		each vertex direct neighbours. Prior to calling this method,
+		one should check first that the vertices are associated to a
+		scalar field.
 		Warning: the processed scalar field must be enabled for both
 		INPUT & OUTPUT! (see ccGenericCloud::setCurrentScalarField)
-        \param process either 'smooth' or 'enhance'
-    **/
+		\param process either 'smooth' or 'enhance'
+	**/
 	bool processScalarField(MESH_SCALAR_FIELD_PROCESS process);
 
 	//! Subdivides mesh (so as to ensure that all triangles are falls below 'maxArea')
@@ -320,24 +326,31 @@ public:
 	**/
 	ccMesh* subdivide(PointCoordinateType maxArea) const;
 
-    //! Creates a new mesh with the selected vertices only
-    /** This method is called after a graphical segmentation.
-        It creates a new mesh structure with the vertices that are
-        tagged as "visible" (see ccGenericPointCloud::visibilityArray).
+	//! Creates a new mesh with the selected vertices only
+	/** This method is called after a graphical segmentation.
+		It creates a new mesh structure with the vertices that are
+		tagged as "visible" (see ccGenericPointCloud::visibilityArray).
 		This method will also update this mesh if removeSelectedFaces is true.
-        In this case, all "selected" triangles will be removed from this mesh's instance.
+		In this case, all "selected" triangles will be removed from this mesh's instance.
 
-        \param removeSelectedFaces specifies if the faces composed only of 'selected' vertices should be removed or not
-    **/
+		\param removeSelectedFaces specifies if the faces composed only of 'selected' vertices should be removed or not
+	**/
 	virtual ccMesh* createNewMeshFromSelection(bool removeSelectedFaces);
+
+	//! Swaps two triangles
+	/** Automatically updates internal structures (i.e. lookup tables for
+		material, normals, etc.).
+	**/
+	void swapTriangles(unsigned index1, unsigned index2);
 
 protected:
 
-    //inherited from ccHObject
+	//inherited from ccHObject
 	virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
-    virtual void applyGLTransformation(const ccGLMatrix& trans);
+	virtual void applyGLTransformation(const ccGLMatrix& trans);
+	virtual void onUpdateOf(ccHObject* obj);
 
 	//! Same as other 'interpolateNormals' method with a set of 3 vertices indexes
 	bool interpolateNormals(unsigned i1, unsigned i2, unsigned i3, const CCVector3& P, CCVector3& N, const int* triNormIndexes = 0);
@@ -346,6 +359,31 @@ protected:
 
 	//! Used internally by 'subdivide'
 	bool pushSubdivide(/*PointCoordinateType maxArea, */unsigned indexA, unsigned indexB, unsigned indexC);
+
+	/*** EXTENDED CALL SCRIPTS (FOR CC_SUB_MESHES) ***/
+	
+	//0 parameter
+	#define ccMesh_extended_call0(baseName,recursiveName) \
+	inline virtual void recursiveName() \
+	{ \
+		baseName(); \
+		for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it) \
+			if ((*it)->isA(CC_TYPES::SUB_MESH)) \
+				static_cast<ccGenericMesh*>(*it)->baseName(); \
+	} \
+
+	//1 parameter
+	#define ccMesh_extended_call1(baseName,param1Type,recursiveName) \
+	inline virtual void recursiveName(param1Type p) \
+	{ \
+		baseName(p); \
+		for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it) \
+			if ((*it)->isA(CC_TYPES::SUB_MESH)) \
+				static_cast<ccGenericMesh*>(*it)->baseName(p); \
+	} \
+
+	//recursive equivalents of some of ccGenericMesh methods (applied to sub-meshes as well)
+	ccMesh_extended_call1(showNormals,bool,showNormals_extended);
 
 	//! associated cloud (vertices)
 	ccGenericPointCloud* m_associatedCloud;
@@ -369,8 +407,8 @@ protected:
 	//! Dump triangle structure to transmit temporary data
 	CCLib::SimpleRefTriangle m_currentTriangle;
 
-    //! Bounding-box
-    ccBBox m_bBox;
+	//! Bounding-box
+	ccBBox m_bBox;
 
 	//! Container of per-triangle material descriptors
 	typedef GenericChunkedArray<1,int> triangleMaterialIndexesSet;

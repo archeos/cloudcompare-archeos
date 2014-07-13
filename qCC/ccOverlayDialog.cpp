@@ -45,17 +45,17 @@ ccOverlayDialog::~ccOverlayDialog()
 
 bool ccOverlayDialog::linkWith(ccGLWindow* win)
 {
-    if (m_processing)
-    {
-        ccLog::Warning("[ccOverlayDialog] Can't change associated window while running/displayed!");
-        return false;
-    }
+	if (m_processing)
+	{
+		ccLog::Warning("[ccOverlayDialog] Can't change associated window while running/displayed!");
+		return false;
+	}
 
 	if (m_associatedWin)
 	{
 		//same dialog? nothing to do
 		if (m_associatedWin == win)
-			return false;
+			return true;
 		
 		//otherwise, we automatically detach it
 		{

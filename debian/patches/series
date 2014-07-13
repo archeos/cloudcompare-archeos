@@ -1,9 +1,8 @@
-01-Doc-must-live-in-a-good-dir.patch
-02-Dynamic-directories.patch
+01-Aux-file-copy-not-handled-at-cmake-level.patch
+02-Plugins-and-shaders-paths.patch
 03-Use-Debian-libGLEW.patch
 04-Fix-local-decimal-separator.patch
 05-Use-package-directory-for-libs.patch
 06-Remove-StyleSheet-in-ccViewer.patch
 07-libfreenect-fix.patch
 08-Add-OpenMP-linker-flag.patch
-09-DXF_support.patch

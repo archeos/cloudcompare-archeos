@@ -23,6 +23,7 @@
 //Local
 #include "ccGenericPointCloud.h"
 #include "ccPointCloud.h"
+#include "ccScalarField.h"
 
 ccKdTree::ccKdTree(ccGenericPointCloud* aCloud)
 	: CCLib::TrueKdTree(aCloud)
@@ -164,7 +165,7 @@ void ccKdTree::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 bool ccKdTree::convertCellIndexToSF()
 {
-	if (!m_associatedGenericCloud || !m_associatedGenericCloud->isA(CC_POINT_CLOUD))
+	if (!m_associatedGenericCloud || !m_associatedGenericCloud->isA(CC_TYPES::POINT_CLOUD))
 		return false;
 
 	//get leaves
@@ -205,7 +206,7 @@ bool ccKdTree::convertCellIndexToSF()
 
 bool ccKdTree::convertCellIndexToRandomColor()
 {
-	if (!m_associatedGenericCloud || !m_associatedGenericCloud->isA(CC_POINT_CLOUD))
+	if (!m_associatedGenericCloud || !m_associatedGenericCloud->isA(CC_TYPES::POINT_CLOUD))
 		return false;
 
 	//get leaves

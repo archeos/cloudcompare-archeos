@@ -21,18 +21,20 @@
 //CCLib
 #include <Polyline.h>
 
+//Local
+#include "qCC_db.h"
 #include "ccHObject.h"
+
+//system
+#include <vector>
+
+class ccPointCloud;
 
 //! Colored polyline
 /** Extends the Polyline class of CCLib.
 Check CCLib documentation for more information about it.
 **/
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccPolyline : public CCLib::Polyline, public ccHObject
-#else
-class ccPolyline : public CCLib::Polyline, public ccHObject
-#endif
+class QCC_DB_LIB_API ccPolyline : public CCLib::Polyline, public ccHObject
 {
 public:
 
@@ -50,12 +52,12 @@ public:
 	virtual ~ccPolyline() {};
 
 	//! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const {return CC_POLY_LINE;}
+	virtual CC_CLASS_ENUM getClassID() const {return CC_TYPES::POLY_LINE;}
 
 	//inherited methods (ccHObject)
 	virtual bool isSerializable() const { return true; }
 	virtual bool hasColors() const;
-    virtual void applyGLTransformation(const ccGLMatrix& trans);
+	virtual void applyGLTransformation(const ccGLMatrix& trans);
 	virtual unsigned getUniqueIDForDisplay() const;
 
 	//! Defines if the polyline is considered as 2D or 3D
@@ -81,6 +83,11 @@ public:
 	**/
 	void setWidth(PointCoordinateType width);
 
+	//! Returns the width of the line
+	/** \return the width of the line in pixels
+	**/
+	PointCoordinateType getWidth() const { return m_width; }
+
 	//! Returns the polyline color
 	/** \return a pointer to the polyline RGB color
 	**/
@@ -89,17 +96,55 @@ public:
 	//inherited methods (ccHObject)
 	virtual ccBBox getMyOwnBB();
 
-	//! Extracts the (flat) contour of a point cloud
+	//! Splits the polyline into several parts based on a maximum edge length
+	/** \warning output polylines set (parts) may be empty if all the vertices are too far from each other!
+		\param maxEdgelLength maximum edge length
+		\param[out] parts output polyline parts
+		\return success
+	**/
+	bool split(	PointCoordinateType maxEdgelLength,
+				std::vector<ccPolyline*>& parts );
+
+	//! Extracts a unique closed (2D) contour polyline of a point cloud
 	/** Projects the cloud on its best fitting LS plane first.
 		\param points point cloud
 		\param maxEdgelLength max edge length (ignored if 0, in which case the contour is the convex hull)
+		\param preferredDim to specifiy a preferred (normal) direction for the polyline extraction
 		\return contour polyline (or 0 if an error occurred)
 	**/
 	static ccPolyline* ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* points,
-											PointCoordinateType maxEdgelLength = 0);
+											PointCoordinateType maxEdgelLength = 0,
+											const PointCoordinateType* preferredDim = 0);
+
+	//! Extracts one or several parts of the (2D) contour polyline of a point cloud
+	/** Projects the cloud on its best fitting LS plane first.
+		\warning output polylines set (parts) may be empty if all the vertices are too far from each other!
+		\param points point cloud
+		\param maxEdgelLength max edge length (ignored if 0, in which case the contour is the convex hull)
+		\param[out] parts output polyline parts
+		\param allowSplitting whether the polyline can be split or not
+		\param preferredDim to specifiy a preferred (normal) direction for the polyline extraction
+		\return success
+	**/
+	static bool ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* points,
+									PointCoordinateType maxEdgelLength,
+									std::vector<ccPolyline*>& parts,
+									bool allowSplitting = true,
+									const PointCoordinateType* preferredDim = 0);
 
 	//! Computes the polyline length
 	PointCoordinateType computeLength() const;
+
+	//! Sets whether to display or hide the polyline vertices
+	void showVertices(bool state) { m_showVertices = state; }
+	//! Whether the polyline vertices should be displayed or not
+	bool verticesShown() const { return m_showVertices; }
+
+	//! Sets the width of vertex markers
+	void setVertexMarkerWidth(int width) { m_vertMarkWidth = width; }
+	//! Returns the width of vertex markers
+	int getVertexMarkerWidth() const { return m_vertMarkWidth; }
+
 
 protected:
 
@@ -109,6 +154,11 @@ protected:
 
 	//inherited methods (ccHObject)
 	virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
+
+	//! Initializes the polyline with a given set of vertices and the parameters of another polyline
+	/** \warning Even the 'closed' state is copied as is!
+	**/
+	void initWith(ccPointCloud* vertices, const ccPolyline& poly);
 
 	//! Unique RGB color
 	colorType m_rgbColor[3];
@@ -121,6 +171,12 @@ protected:
 
 	//! Whether poyline should draws itself in background (false) or foreground (true)
 	bool m_foreground;
+	
+	//! Whether vertices should be displayed or not
+	bool m_showVertices;
+
+	//! Vertex marker width
+	int m_vertMarkWidth;
 };
 
 #endif //CC_GL_POLYLINE_HEADER

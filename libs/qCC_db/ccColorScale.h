@@ -19,6 +19,7 @@
 #define CC_COLOR_SCALE_HEADER
 
 //Local
+#include "qCC_db.h"
 #include "ccBasicTypes.h"
 #include "ccSerializableObject.h"
 
@@ -42,18 +43,18 @@ public:
 	//! Constructor from a (relative) position and a color
 	ccColorScaleElement(double relativePos, QColor color) : m_relativePos(relativePos), m_color(color) {}
 
-    //! Sets associated value (relative to scale boundaries)
+	//! Sets associated value (relative to scale boundaries)
 	/** \param pos relative position (always between 0.0 and 1.0!)
 	**/
 	inline void setRelativePos(double pos) { m_relativePos = pos; }
-    //! Returns step position (relative to scale boundaries)
+	//! Returns step position (relative to scale boundaries)
 	/** \return relative position (always between 0.0 and 1.0!)
 	**/
 	inline double getRelativePos() const { return m_relativePos; }
 
-    //! Sets color
+	//! Sets color
 	inline void setColor(QColor color) { m_color = color; }
-    //! Returns color
+	//! Returns color
 	inline const QColor& getColor() const { return m_color; }
 
 	//! Comparison operator between two color scale elements
@@ -83,12 +84,7 @@ protected:
 	Be sure that the 'refresh' method has been called after any modification(s)
 	of the scale steps (position or color).
 **/
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccColorScale : public ccSerializableObject
-#else
-class ccColorScale : public ccSerializableObject
-#endif
+class QCC_DB_LIB_API ccColorScale : public ccSerializableObject
 {
 public:
 
@@ -122,7 +118,7 @@ public:
 	static const unsigned MAX_STEPS = 1024;
 
 	//! Returns name
-	QString getName() const { return m_name; }
+	inline const QString& getName() const { return m_name; }
 	//! Sets name
 	void setName(const QString& name) { m_name = name; }
 
@@ -200,6 +196,9 @@ public:
 
 	//! Returns color by value
 	/** Warning: only valid with absolute scales!
+		\param value value
+		\param outOfRangeColor default color to return if relativePos if out of [0;1]
+		\return corresponding color
 	**/
 	inline const colorType* getColorByValue(double value, const colorType* outOfRangeColor = 0) const
 	{
@@ -210,7 +209,8 @@ public:
 
 	//! Returns color by relative position in scale
 	/** \param relativePos relative position (should be in [0;1])
-		\param default color to return if relativePos if out of [0;1]
+		\param outOfRangeColor default color to return if relativePos if out of [0;1]
+		\return corresponding color
 	**/
 	inline const colorType* getColorByRelativePos(double relativePos, const colorType* outOfRangeColor = 0) const
 	{
@@ -224,7 +224,8 @@ public:
 	//! Returns color by relative position in scale with a given 'resolution'
 	/** \param relativePos relative position (must be between 0 and 1!)
 		\param steps desired resolution (must be greater than 1 and smaller than MAX_STEPS)
-		\param default color to return if relativePos if out of [0;1]
+		\param outOfRangeColor default color to return if relativePos if out of [0;1]
+		\return corresponding color
 	**/
 	inline const colorType* getColorByRelativePos(double relativePos, unsigned steps, const colorType* outOfRangeColor = 0) const
 	{
@@ -243,6 +244,7 @@ public:
 
 	//! Returns color by index
 	/** \param index color index in m_rgbaScale array (must be below MAX_STEPS)
+		\return corresponding color
 	**/
 	inline const colorType* getColorByIndex(unsigned index) const
 	{
@@ -260,10 +262,10 @@ protected:
 	//! Sort elements
 	void sort();
 
-    //! Name
+	//! Name
 	QString m_name;
 
-    //! Unique ID
+	//! Unique ID
 	QString m_uuid;
 
 	//! Elements

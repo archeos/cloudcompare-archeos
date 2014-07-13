@@ -1,11 +1,11 @@
---- a/qCC/plugins/qPoissonRecon/CMakeLists.txt
-+++ b/qCC/plugins/qPoissonRecon/CMakeLists.txt
-@@ -11,7 +11,7 @@ add_subdirectory (PoissonRecon5.5)
+--- a/plugins/qPoissonRecon/CMakeLists.txt
++++ b/plugins/qPoissonRecon/CMakeLists.txt
+@@ -20,7 +20,7 @@ add_subdirectory (PoissonRecon5.71)
  
  include( ../CMakePluginTpl.cmake )
  
--target_link_libraries( ${PROJECT_NAME} PoissonRecon )
-+target_link_libraries( ${PROJECT_NAME} PoissonRecon "-fopenmp")
- include_directories( ${PoissonRecon_SOURCE_DIR}/Src )
- include_directories( ${PoissonRecon_SOURCE_DIR}/Src_CC_wrap )
+-target_link_libraries( ${PROJECT_NAME} QPOISSON_RECON_LIB )
++target_link_libraries( ${PROJECT_NAME} QPOISSON_RECON_LIB "-fopenmp" )
+ include_directories( ${QPOISSON_RECON_LIB_SOURCE_DIR}/Src )
+ include_directories( ${QPOISSON_RECON_LIB_SOURCE_DIR}/Src_CC_wrap )
  

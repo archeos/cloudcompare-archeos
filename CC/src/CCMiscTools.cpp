@@ -25,7 +25,15 @@
 #include <string.h>
 #include <assert.h>
 
+#ifdef USE_VLD
+//VLD
+#include <vld.h>
+#endif
+
 /*** MACROS FOR TRIBOXOVERLAP ***/
+/*** TRIBOXOVERLAP code is largely inspired from Tomas Akenine-Möller's algorithm
+	http://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox3.txt
+**/
 
 #ifdef FINDMINMAX
 #undef FINDMINMAX
@@ -64,7 +72,7 @@ void CCMiscTools::MakeMinAndMaxCubical(CCVector3& dimMin, CCVector3& dimMax, dou
 
 	//build corresponding 'square' box
 	{
-		CCVector3 dd(maxDD);
+		CCVector3 dd(maxDD,maxDD,maxDD);
 		CCVector3 md = dimMax+dimMin;
 	
 		dimMin = (md-dd) * static_cast<PointCoordinateType>(0.5);
@@ -241,6 +249,19 @@ bool CCMiscTools::TriBoxOverlap(PointCoordinateType* boxcenter, PointCoordinateT
 void CCMiscTools::ComputeBaseVectors(const CCVector3 &N, CCVector3& X, CCVector3& Y)
 {
 	CCVector3 Nunit = N;
+	Nunit.normalize();
+
+    //we create a first vector orthogonal to the input one
+	X = Nunit.orthogonal(); //X is also normalized
+
+	//we deduce the orthogonal vector to the input one and X
+	Y = N.cross(X);
+	//Y.normalize(); //should already be normalized!
+}
+
+void CCMiscTools::ComputeBaseVectors(const CCVector3d &N, CCVector3d& X, CCVector3d& Y)
+{
+	CCVector3d Nunit = N;
 	Nunit.normalize();
 
     //we create a first vector orthogonal to the input one

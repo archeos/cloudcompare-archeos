@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1691                                                              $
-//$LastChangedDate:: 2010-10-22 16:52:55 +0200 (ven., 22 oct. 2010)        $
-//**************************************************************************
-//
 
 #ifndef CC_CC_LABELING_DLG_HEADER
 #define CC_CC_LABELING_DLG_HEADER
@@ -32,17 +25,17 @@ class ccLabelingDlg : public QDialog, public Ui::LabelingDialog
 {
 public:
 
-    //! Default constructor
-    ccLabelingDlg(QWidget* parent=0);
+	//! Default constructor
+	ccLabelingDlg(QWidget* parent = 0);
 
-    //! Returns octree level (defines grid step)
-    int getOctreeLevel();
+	//! Returns octree level (defines grid step)
+	int getOctreeLevel();
 
-    //! Returns min number of points per extracted CC
-    int getMinPointsNb();
+	//! Returns min number of points per extracted CC
+	int getMinPointsNb();
 
-    //! Specifies whether each extracted CC should get a random color
-    bool randomColors();
+	//! Specifies whether each extracted CC should get a random color
+	bool randomColors();
 };
 
 #endif

@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1595                                                              $
-//$LastChangedDate:: 2010-07-02 18:04:17 +0200 (ven., 02 juil. 2010)       $
-//**************************************************************************
-//
 
 #ifndef CC_PLUGIN_DIALOG_HEADER
 #define CC_PLUGIN_DIALOG_HEADER
@@ -34,25 +27,28 @@ class QStringList;
 class QTreeWidget;
 class QTreeWidgetItem;
 
+//! Dialog to display the loaded plugin list
 class ccPluginDlg : public QDialog
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
-    ccPluginDlg(const QString &path, const QStringList &fileNames,
-                 QWidget *parent = 0);
+	ccPluginDlg(const QString &path,
+				const QStringList &fileNames,
+				QWidget *parent = 0);
 
 protected:
-    void findPlugins(const QString &path, const QStringList &fileNames);
-    void populateTreeWidget(QObject *plugin, const QString &text);
-    void addItems(QTreeWidgetItem *pluginItem, const char *interfaceName,
-                  const QStringList &features);
+	void findPlugins(const QString &path, const QStringList &fileNames);
+	void populateTreeWidget(QObject *plugin, const QString &text);
+	void addItems(	QTreeWidgetItem *pluginItem,
+					const char *interfaceName,
+					const QStringList &features);
 
-    QLabel *label;
-    QTreeWidget *treeWidget;
-    QPushButton *okButton;
-    QIcon interfaceIcon;
-    QIcon featureIcon;
+	QLabel *label;
+	QTreeWidget *treeWidget;
+	QPushButton *okButton;
+	QIcon interfaceIcon;
+	QIcon featureIcon;
 };
 
 #endif

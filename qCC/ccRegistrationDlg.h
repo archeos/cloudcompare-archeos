@@ -28,47 +28,48 @@
 
 class ccHObject;
 
-typedef CCLib::ICPRegistrationTools::CC_ICP_CONVERGENCE_TYPE ConvergenceMethod;
-
 //! Point cloud or mesh registration dialog
 class ccRegistrationDlg : public QDialog, public Ui::RegistrationDialog
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
 
-    //! Default constructor
-    ccRegistrationDlg(ccHObject *data, ccHObject *model, QWidget* parent=0);
+	//! Default constructor
+	ccRegistrationDlg(ccHObject *data, ccHObject *model, QWidget* parent = 0);
 
-    //! Default destructor
-    virtual ~ccRegistrationDlg();
+	//! Default destructor
+	virtual ~ccRegistrationDlg();
 
-    //! Returns convergence method
-    ConvergenceMethod getConvergenceMethod() const;
+	//shortcuts
+	typedef CCLib::ICPRegistrationTools::CONVERGENCE_TYPE ConvergenceMethod;
 
-    //! Returns max number of iterations
-    /** Only valid ifregistration method is 'ITERATION_REG'.
-    **/
-    unsigned int getMaxIterationCount() const;
+	//! Returns convergence method
+	ConvergenceMethod getConvergenceMethod() const;
 
-    //! Returns minimum error decrease between two consecutive iterations
-    /** Only valid ifregistration method is 'MAX_ERROR_REG'.
-    **/
-    double getMinErrorDecrease() const;
+	//! Returns max number of iterations
+	/** Only valid ifregistration method is 'ITERATION_REG'.
+	**/
+	unsigned int getMaxIterationCount() const;
 
-    //! Returns whether farthest points should be ignored at each iteration
-    /** This is a trick to improve registration for slightly different clouds.
-    **/
-    bool removeFarthestPoints() const;
+	//! Returns minimum error decrease between two consecutive iterations
+	/** Only valid ifregistration method is 'MAX_ERROR_REG'.
+	**/
+	double getMinErrorDecrease() const;
 
-    //! Returns the limit above which clouds should be randomly resampled
+	//! Returns whether farthest points should be ignored at each iteration
+	/** This is a trick to improve registration for slightly different clouds.
+	**/
+	bool removeFarthestPoints() const;
+
+	//! Returns the limit above which clouds should be randomly resampled
 	unsigned randomSamplingLimit() const;
 
-    //! Returns 'model' entity
-    ccHObject *getModelEntity();
+	//! Returns 'model' entity
+	ccHObject *getModelEntity();
 
-    //! Returns 'data' entity
-    ccHObject *getDataEntity();
+	//! Returns 'data' entity
+	ccHObject *getDataEntity();
 
 	//! Whether to use data displayed SF as weights
 	bool useDataSFAsWeights() const;
@@ -76,24 +77,29 @@ public:
 	//! Whether to use model displayed SF as weights
 	bool useModelSFAsWeights() const;
 
-    //! Returns whether to adjust the scale during optimization
-    /** This is useful for co-registration of lidar and photogrammetric clouds
-		for instance.
-    **/
-    bool adjustScale() const;
+	//! Returns whether to adjust the scale during optimization
+	/** This is useful for co-registration of lidar and photogrammetric clouds
+	for instance.
+	**/
+	bool adjustScale() const;
+
+	//! Returns active transformation filters
+	/** See CCLib::RegistrationTools::TRANSFORMATION_FILTERS.
+	**/
+	int getTransformationFilters() const;
 
 protected slots:
-    void swapModelAndData();
+	void swapModelAndData();
 
 protected:
 
-    void setColorsAndLabels();
+	void setColorsAndLabels();
 
-    //! 'Model' entity
-    ccHObject* modelEntity;
+	//! 'Model' entity
+	ccHObject* modelEntity;
 
-    //! 'Data' entity
-    ccHObject* dataEntity;
+	//! 'Data' entity
+	ccHObject* dataEntity;
 };
 
-#endif
+#endif //CC_REGISTRATION_DLG_HEADER

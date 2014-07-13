@@ -56,15 +56,16 @@ void ChunkedPointCloud::forEach(genericPointAction& anAction)
 	ScalarField* currentOutScalarFieldArray = getCurrentOutScalarField();
 	if (currentOutScalarFieldArray)
 	{
-		for (unsigned i=0;i<n;++i)
+		for (unsigned i=0; i<n; ++i)
 			anAction(*(CCVector3*)m_points->getValue(i),(*currentOutScalarFieldArray)[i]);
 	}
-	else //otherwise we use a fake SF (DGM FIXME: is it really interesting?!)
+	/*else //otherwise we use a fake SF (DGM FIXME: is it really interesting?!) --> NO ;)
 	{
 		ScalarType dummyDist = 0;
-		for (unsigned i=0;i<n;++i)
+		for (unsigned i=0; i<n; ++i)
 			anAction(*(CCVector3*)m_points->getValue(i),dummyDist);
 	}
+	//*/
 }
 
 void ChunkedPointCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
@@ -130,7 +131,7 @@ bool ChunkedPointCloud::reserve(unsigned newNumberOfPoints)
         return false;
 
 	//then the scalarfields
-	for (unsigned i=0;i<m_scalarFields.size();++i)
+	for (size_t i=0; i<m_scalarFields.size(); ++i)
 	{
 		if (!m_scalarFields[i]->reserve(newNumberOfPoints))
 			return false;
@@ -240,18 +241,18 @@ ScalarType ChunkedPointCloud::getPointScalarValue(unsigned pointIndex) const
 
 ScalarField* ChunkedPointCloud::getScalarField(int index) const
 {
-    return (index>=0 && index<(int)m_scalarFields.size() ? m_scalarFields[index] : 0);
+	return (index>=0 && index < static_cast<int>(m_scalarFields.size()) ? m_scalarFields[index] : 0);
 }
 
 const char* ChunkedPointCloud::getScalarFieldName(int index) const
 {
-    return (index>=0 && index<(int)m_scalarFields.size() ? m_scalarFields[index]->getName() : 0);
+    return (index>=0 && index < static_cast<int>(m_scalarFields.size()) ? m_scalarFields[index]->getName() : 0);
 }
 
 int ChunkedPointCloud::addScalarField(const char* uniqueName)
 {
     //we don't accept two SF with the same name!
-    if (getScalarFieldIndexByName(uniqueName)>=0)
+    if (getScalarFieldIndexByName(uniqueName) >= 0)
         return -1;
 
 	//create requested scalar field
@@ -327,8 +328,8 @@ int ChunkedPointCloud::getScalarFieldIndexByName(const char* name) const
     for (size_t i=0; i<sfCount; ++i)
     {
         //we don't accept two SF with the same name!
-        if (strcmp(m_scalarFields[i]->getName(),name)==0)
-            return (int)i;
+        if (strcmp(m_scalarFields[i]->getName(),name) == 0)
+            return static_cast<int>(i);
     }
 
 	return -1;

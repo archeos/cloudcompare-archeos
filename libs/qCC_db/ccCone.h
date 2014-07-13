@@ -18,6 +18,8 @@
 #ifndef CC_CONE_PRIMITIVE_HEADER
 #define CC_CONE_PRIMITIVE_HEADER
 
+//Local
+#include "qCC_db.h"
 #include "ccGenericPrimitive.h"
 
 //CCLib
@@ -26,12 +28,7 @@
 //! Cone (primitive)
 /** 3D cone primitive
 **/
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccCone : public ccGenericPrimitive
-#else
-class ccCone : public ccGenericPrimitive
-#endif
+class QCC_DB_LIB_API ccCone : public ccGenericPrimitive
 {
 public:
 
@@ -60,8 +57,8 @@ public:
 	**/
 	ccCone(QString name = QString("Cone"));
 
-    //! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const { return CC_CONE; }
+	//! Returns class ID
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::CONE; }
 
 	//inherited from ccGenericPrimitive
 	virtual QString getTypeName() const { return "Cone"; }
@@ -69,8 +66,8 @@ public:
 	virtual ccGenericPrimitive* clone() const;
 
 protected:
-    
-    //inherited from ccGenericPrimitive
+
+	//inherited from ccGenericPrimitive
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
 	virtual bool buildUp();

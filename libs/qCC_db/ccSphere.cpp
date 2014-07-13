@@ -20,11 +20,12 @@
 //Local
 #include "ccPointCloud.h"
 #include "ccNormalVectors.h"
+#include "ccGenericGLDisplay.h"
 
-ccSphere::ccSphere(PointCoordinateType radius,
-				   const ccGLMatrix* transMat/*=0*/,
-				   QString name/*=QString("Sphere")*/,
-				   unsigned precision/*=24*/)
+ccSphere::ccSphere(	PointCoordinateType radius,
+					const ccGLMatrix* transMat/*=0*/,
+					QString name/*=QString("Sphere")*/,
+					unsigned precision/*=24*/)
 	: ccGenericPrimitive(name,transMat)
 	, m_radius(radius)
 {
@@ -66,10 +67,10 @@ bool ccSphere::buildUp()
 
 	//2 first points: poles
 	verts->addPoint(CCVector3(0,0,m_radius));
-	verts->addNorm(0,0,1);
+	verts->addNorm(CCVector3(0,0,1));
 
 	verts->addPoint(CCVector3(0,0,-m_radius));
-	verts->addNorm(0,0,-1);
+	verts->addNorm(CCVector3(0,0,-1));
 
 	//then, angular sweep
 	PointCoordinateType angle_rad_step = static_cast<PointCoordinateType>(M_PI)/static_cast<PointCoordinateType>(steps);
@@ -99,7 +100,7 @@ bool ccSphere::buildUp()
 				P = N * m_radius;
 
 				verts->addPoint(P);
-				verts->addNorm(N.u);
+				verts->addNorm(N);
 			}
 		}
 	}
@@ -145,7 +146,7 @@ bool ccSphere::buildUp()
 		}
 	}
 
-	updateModificationTime();
+	notifyGeometryUpdate();
 	showNormals(true);
 
 	return true;
@@ -170,7 +171,7 @@ bool ccSphere::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 
 	//parameters (dataVersion>=21)
 	QDataStream inStream(&in);
-	inStream >> m_radius;
+	ccSerializationHelper::CoordsFromDataStream(inStream,flags,&m_radius,1);
 
 	return true;
 }
@@ -181,7 +182,7 @@ void ccSphere::drawNameIn3D(CC_DRAW_CONTEXT& context)
 		return;
 
 	//we display it in the 2D layer in fact!
-    ccBBox bBox = getBB(true,false,m_currentDisplay);
+	ccBBox bBox = getBB(true,false,m_currentDisplay);
 	if (bBox.isValid())
 	{
 		const double* MM = context._win->getModelViewMatd(); //viewMat
@@ -199,6 +200,12 @@ void ccSphere::drawNameIn3D(CC_DRAW_CONTEXT& context)
 
 		int bkgBorder = QFontMetrics(context._win->getTextDisplayFont()).height()/4+4;
 		QFont font = context._win->getTextDisplayFont(); //takes rendering zoom into account!
-		context._win->displayText(getName(),(int)xp+dPix+bkgBorder,(int)yp,ccGenericGLDisplay::ALIGN_HLEFT | ccGenericGLDisplay::ALIGN_VMIDDLE,75,0,&font);
+		context._win->displayText(	getName(),
+									static_cast<int>(xp)+dPix+bkgBorder,
+									static_cast<int>(yp),
+									ccGenericGLDisplay::ALIGN_HLEFT | ccGenericGLDisplay::ALIGN_VMIDDLE,
+									0.75f,
+									0,
+									&font);
 	}
 }

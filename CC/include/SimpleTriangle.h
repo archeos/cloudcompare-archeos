@@ -18,24 +18,19 @@
 #ifndef SIMPLE_TRIANGLE_HEADER
 #define SIMPLE_TRIANGLE_HEADER
 
+//Local
+#include "CCCoreLib.h"
 #include "GenericTriangle.h"
-
-#ifdef CC_USE_AS_DLL
-#include "CloudCompareDll.h"
-#endif
 
 namespace CCLib
 {
 
 //! A simple triangle class
 /** Implements the GenericTriangle class with references to 3D points.
-	WARNING: make sure that references are not point to temporary objects!
+	WARNING: make sure that references don't point to temporary objects!
+	WARNING: not compatible with parallelization.
 **/
-#ifdef CC_USE_AS_DLL
-class CC_DLL_API SimpleRefTriangle : public GenericTriangle
-#else
-class SimpleRefTriangle : public GenericTriangle
-#endif
+class CC_CORE_LIB_API SimpleRefTriangle : public GenericTriangle
 {
 public:
 
@@ -55,15 +50,13 @@ public:
 		: A(_A)
 		, B(_B)
 		, C(_C)
-	{
-	}
+	{}
 
 	//inherited methods (see GenericDistribution)
-	virtual const CCVector3* _getA() const {return A;};
-	virtual const CCVector3* _getB() const {return B;};
-	virtual const CCVector3* _getC() const {return C;};
+	inline virtual const CCVector3* _getA() const { return A; }
+	inline virtual const CCVector3* _getB() const { return B; }
+	inline virtual const CCVector3* _getC() const { return C; }
 
-	//direct access for speed enhancement
 	//! A summit
 	const CCVector3 *A;
 	//! B summit
@@ -73,20 +66,18 @@ public:
 };
 
 //! A simple triangle class
-/** Implements the GenericTriangle class with a triplet of 3D points **/
-#ifdef CC_USE_AS_DLL
-class CC_DLL_API SimpleTriangle : public GenericTriangle
-#else
-class SimpleTriangle : public GenericTriangle
-#endif
+/** Implements the GenericTriangle class with a triplet of 3D points.
+	Relies on direct storage for speed enhancement and parallelization!
+**/
+class CC_CORE_LIB_API SimpleTriangle : public GenericTriangle
 {
 public:
 
 	//! Default constructor
 	SimpleTriangle()
-		: A(0.0)
-		, B(0.0)
-		, C(0.0)
+		: A(0,0,0)
+		, B(0,0,0)
+		, C(0,0,0)
 	{}
 
 	//! Constructor with 3 summits
@@ -98,15 +89,13 @@ public:
 		: A(_A)
 		, B(_B)
 		, C(_C)
-	{
-	}
+	{}
 
 	//inherited methods (see GenericDistribution)
-	virtual const CCVector3* _getA() const {return &A;};
-	virtual const CCVector3* _getB() const {return &B;};
-	virtual const CCVector3* _getC() const {return &C;};
+	inline virtual const CCVector3* _getA() const { return &A; }
+	inline virtual const CCVector3* _getB() const { return &B; }
+	inline virtual const CCVector3* _getC() const { return &C; }
 
-	//direct storage for speed enhancement and parallel strategies compatibility!
 	//! A summit
 	CCVector3 A;
 	//! B summit

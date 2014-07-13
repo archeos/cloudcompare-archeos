@@ -59,9 +59,9 @@ public:
 	//! Returns a list of the points (references to) reached by the propagation process
 	/** Returns a cloud of points (references to) corresponding to the points that are
 		lying in cells that have been visited by the last propagation process.
-		\return a cloud of references to points
+		\param[out] Zk (reference) point cloud
 	**/
-	ReferenceCloud* extractPropagatedPoints();
+	bool extractPropagatedPoints(ReferenceCloud* Zk);
 
 	//! Sets the propagation timings as distances for each point
 	/** \return true if ok, false otherwise
@@ -97,9 +97,9 @@ public:
 
 protected:
 
-    //! A Fast Marching grid cell for surfacical propagation
-    class PropagationCell : public Cell
-    {
+	//! A Fast Marching grid cell for surfacical propagation
+	class PropagationCell : public Cell
+	{
 	public:
 		//! Default constructor
 		PropagationCell()
@@ -111,11 +111,11 @@ protected:
 		//! Destructor
 		virtual ~PropagationCell() {}
 
-        //! Local front acceleration
-        float f;
-        //! Equivalent cell code in the octree
-        DgmOctree::OctreeCellCodeType cellCode;
-    };
+		//! Local front acceleration
+		float f;
+		//! Equivalent cell code in the octree
+		DgmOctree::OctreeCellCodeType cellCode;
+	};
 
 	//inherited methods (see FastMarching)
 	virtual float computeTCoefApprox(Cell* currentCell, Cell* neighbourCell) const;

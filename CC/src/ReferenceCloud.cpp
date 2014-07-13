@@ -20,6 +20,7 @@
 //system
 #include <string.h>
 #include <assert.h>
+#include <algorithm>
 
 using namespace CCLib;
 
@@ -61,51 +62,45 @@ void ReferenceCloud::clear(bool releaseMemory)
 	m_validBB = false;
 }
 
-void ReferenceCloud::updateBBWithPoint(const CCVector3* P)
+void ReferenceCloud::updateBBWithPoint(const CCVector3& P)
 {
 	//X boundaries
-	if (m_bbMins[0] > P->x)
-		m_bbMins[0] = P->x;
-	else if (m_bbMaxs[0] < P->x)
-		m_bbMaxs[0] = P->x;
+	if (m_bbMin.x > P.x)
+		m_bbMin.x = P.x;
+	else if (m_bbMax.x < P.x)
+		m_bbMax.x = P.x;
 
 	//Y boundaries
-	if (m_bbMins[1] > P->y)
-		m_bbMins[1] = P->y;
-	else if (m_bbMaxs[1] < P->y)
-		m_bbMaxs[1] = P->y;
+	if (m_bbMin.y > P.y)
+		m_bbMin.y = P.y;
+	else if (m_bbMax.y < P.y)
+		m_bbMax.y = P.y;
 
 	//Z boundaries
-	if (m_bbMins[2] > P->z)
-		m_bbMins[2] = P->z;
-	else if (m_bbMaxs[2] < P->z)
-		m_bbMaxs[2] = P->z;
+	if (m_bbMin.z > P.z)
+		m_bbMin.z = P.z;
+	else if (m_bbMax.z < P.z)
+		m_bbMax.z = P.z;
 }
 
 void ReferenceCloud::computeBB()
 {
-	assert(m_theAssociatedCloud);
-
 	//empty cloud?!
-	if (size() == 0)
+	unsigned count = size();
+	if (count == 0)
 	{
-		m_bbMins[0] = m_bbMaxs[0] = 0;
-		m_bbMins[1] = m_bbMaxs[1] = 0;
-		m_bbMins[2] = m_bbMaxs[2] = 0;
+		m_bbMin = m_bbMax = CCVector3(0,0,0);
 		return;
 	}
 
 	//initialize BBox with first point
 	const CCVector3* P = getPointPersistentPtr(0);
-	m_bbMins[0] = m_bbMaxs[0] = P->x;
-	m_bbMins[1] = m_bbMaxs[1] = P->y;
-	m_bbMins[2] = m_bbMaxs[2] = P->z;
+	m_bbMin = m_bbMax = *P;
 
-	unsigned count = size();
 	for (unsigned i=1; i<count; ++i)
 	{
 		P = getPointPersistentPtr(i);
-		updateBBWithPoint(P);
+		updateBBWithPoint(*P);
 	}
 
 	m_validBB = true;
@@ -116,8 +111,8 @@ void ReferenceCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinate
 	if (!m_validBB)
 		computeBB();
 
-	memcpy(bbMin, m_bbMins, sizeof(PointCoordinateType)*3);
-	memcpy(bbMax, m_bbMaxs, sizeof(PointCoordinateType)*3);
+	memcpy(bbMin, m_bbMin.u, sizeof(PointCoordinateType)*3);
+	memcpy(bbMax, m_bbMax.u, sizeof(PointCoordinateType)*3);
 }
 
 bool ReferenceCloud::reserve(unsigned n)
@@ -182,12 +177,12 @@ void ReferenceCloud::forEach(genericPointAction& anAction)
 {
 	assert(m_theAssociatedCloud);
 
-	ScalarType d,d2;
-	unsigned count=size();
-	for (unsigned i=0;i<count;++i)
+	unsigned count = size();
+	for (unsigned i=0; i<count; ++i)
 	{
 		const unsigned& index = m_theIndexes->getValue(i);
-		d2 = d = m_theAssociatedCloud->getPointScalarValue(index);
+		ScalarType d = m_theAssociatedCloud->getPointScalarValue(index);
+		ScalarType d2 = d;
 		anAction(*m_theAssociatedCloud->getPointPersistentPtr(index),d2);
 		if (d!=d2)
 			m_theAssociatedCloud->setPointScalarValue(index,d2);
@@ -196,7 +191,7 @@ void ReferenceCloud::forEach(genericPointAction& anAction)
 
 void ReferenceCloud::removePointGlobalIndex(unsigned localIndex)
 {
-	assert(localIndex<size());
+	assert(localIndex < size());
 
 	unsigned lastIndex = size()-1;
 	//swap the value to be removed with the last one

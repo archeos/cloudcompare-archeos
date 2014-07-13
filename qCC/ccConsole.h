@@ -35,6 +35,7 @@
 
 class QListWidget;
 class QWidget;
+class MainWindow;
 
 //! Console
 class ccConsole : public QObject, public ccLog
@@ -44,21 +45,22 @@ class ccConsole : public QObject, public ccLog
 
 public:
 
-    //! Inits console (and optionaly associates it with a text output widget)
-    /** WARNING: in release mode, no message will be output if no 'textDisplay'
+	//! Inits console (and optionaly associates it with a text output widget)
+	/** WARNING: in release mode, no message will be output if no 'textDisplay'
 		widget is defined. Moreover, error messages will only appear in a
 		(blocking) QMessageBox if a 'parentWidget' widget is defined.
 		In debug mode, all message are sent to system console (with 'printf').
 		\param textDisplay text output widget (optional)
 		\param parentWidget parent widget (optional)
-    **/
-	static void Init(QListWidget* textDisplay=0, QWidget* parentWidget=0);
+		\param parentWindow parent window (if any - optional)
+	**/
+	static void Init(QListWidget* textDisplay = 0, QWidget* parentWidget = 0, MainWindow* parentWindow = 0);
 
-    //! Returns the (unique) static instance
+	//! Returns the (unique) static instance
 	static ccConsole* TheInstance();
 
-    //! Releases unique instance
-    static void ReleaseInstance();
+	//! Releases unique instance
+	static void ReleaseInstance();
 
 	//! Sets auto-refresh state
 	void setAutoRefresh(bool state);
@@ -70,26 +72,28 @@ public slots:
 
 protected:
 
-    //! Default constructor
-    /** Constructor is protected to avoid using this object as a
-        non static class.
-    **/
+	//! Default constructor
+	/** Constructor is protected to avoid using this object as a non static class.
+	**/
 	ccConsole();
 
-    //inherited from ccLog
-    virtual void displayMessage(const QString& message, MessageLevel level);
+	//inherited from ccLog
+	virtual void displayMessage(const QString& message, MessageLevel level);
 
-    //! Associated text display widget
+	//! Associated text display widget
 	QListWidget* m_textDisplay;
 
-	//! Corresponding widget
+	//! Parent widget
 	QWidget* m_parentWidget;
+
+	//! Parent window (if any)
+	MainWindow* m_parentWindow;
 
 	//! Mutex for concurrent thread access to console
 	QMutex m_mutex;
 
 	//! Queue element type (message + color)
-	typedef QPair<QString,Qt::GlobalColor> ConsoleItemType;
+	typedef QPair<QString,MessageLevel> ConsoleItemType;
 
 	//! Queue for incoming messages
 	QVector<ConsoleItemType> m_queue;

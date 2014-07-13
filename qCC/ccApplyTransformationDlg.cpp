@@ -85,13 +85,13 @@ void ccApplyTransformationDlg::onRotAngleValueChanged(double)
 	PointCoordinateType alpha = 0;
 	CCVector3 axis,t;
 
-	axis.x = rxAxisDoubleSpinBox->value();
-	axis.y = ryAxisDoubleSpinBox->value();
-	axis.z = rzAxisDoubleSpinBox->value();
-	alpha  = rAngleDoubleSpinBox->value() * CC_DEG_TO_RAD;
-	t.x    = txAxisDoubleSpinBox->value();
-	t.y    = tyAxisDoubleSpinBox->value();
-	t.z    = tzAxisDoubleSpinBox->value();
+	axis.x	= static_cast<PointCoordinateType>(rxAxisDoubleSpinBox->value());
+	axis.y	= static_cast<PointCoordinateType>(ryAxisDoubleSpinBox->value());
+	axis.z	= static_cast<PointCoordinateType>(rzAxisDoubleSpinBox->value());
+	alpha	= static_cast<PointCoordinateType>(rAngleDoubleSpinBox->value() * CC_DEG_TO_RAD);
+	t.x		= static_cast<PointCoordinateType>(txAxisDoubleSpinBox->value());
+	t.y		= static_cast<PointCoordinateType>(tyAxisDoubleSpinBox->value());
+	t.z		= static_cast<PointCoordinateType>(tzAxisDoubleSpinBox->value());
 
 	ccGLMatrix mat;
 	mat.initFromParameters(alpha,axis,t);
@@ -104,12 +104,12 @@ void ccApplyTransformationDlg::onEulerValueChanged(double)
 	PointCoordinateType phi,theta,psi = 0;
 	CCVector3 t;
 
-	phi   = ePhiDoubleSpinBox->value() * CC_DEG_TO_RAD;
-	theta = eThetaDoubleSpinBox->value() * CC_DEG_TO_RAD;
-	psi   = ePsiDoubleSpinBox->value() * CC_DEG_TO_RAD;
-	t.x   = etxAxisDoubleSpinBox->value();
-	t.y   = etyAxisDoubleSpinBox->value();
-	t.z   = etzAxisDoubleSpinBox->value();
+	phi		= static_cast<PointCoordinateType>(ePhiDoubleSpinBox->value() * CC_DEG_TO_RAD);
+	theta	= static_cast<PointCoordinateType>(eThetaDoubleSpinBox->value() * CC_DEG_TO_RAD);
+	psi		= static_cast<PointCoordinateType>(ePsiDoubleSpinBox->value() * CC_DEG_TO_RAD);
+	t.x		= static_cast<PointCoordinateType>(etxAxisDoubleSpinBox->value());
+	t.y		= static_cast<PointCoordinateType>(etyAxisDoubleSpinBox->value());
+	t.z		= static_cast<PointCoordinateType>(etzAxisDoubleSpinBox->value());
 
 	ccGLMatrix mat;
 	mat.initFromParameters(phi,theta,psi,t);
@@ -187,13 +187,13 @@ void ccApplyTransformationDlg::updateAll(const ccGLMatrix& mat, bool textForm/*=
 	}
 }
 
-ccGLMatrix ccApplyTransformationDlg::getTransformation() const
+ccGLMatrixd ccApplyTransformationDlg::getTransformation() const
 {
 	//get current input matrix text
 	QString matText = matrixTextEdit->toPlainText();
 	//convert it to a ccGLMatrix
 	bool valid = false;
-	ccGLMatrix mat = ccGLMatrix::FromString(matText,valid);
+	ccGLMatrixd mat = ccGLMatrixd::FromString(matText,valid);
 	assert(valid);
 	//eventually invert it if necessary
 	if (inverseCheckBox->isChecked())
@@ -210,11 +210,11 @@ void ccApplyTransformationDlg::checkMatrixValidityAndAccept()
 	bool valid = false;
 	ccGLMatrix mat = ccGLMatrix::FromString(matText,valid);
 
-    if (!valid)
-    {
+	if (!valid)
+	{
 		QMessageBox::warning(this, "Invalid matrix", "Matrix is invalid. Make sure to only use white spaces or tabulations between the 16 elements");
 		return;
-    }
+	}
 
 	accept();
 

@@ -35,14 +35,14 @@ class ccColorScalesManager;
 //! Dialog to edit/create color scales
 class ccColorScaleEditorDialog : public QDialog, public Ui::ColorScaleEditorDlg
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
 
-    //! Default constructor
+	//! Default constructor
 	ccColorScaleEditorDialog(ccColorScalesManager* manager, ccColorScale::Shared currentScale = ccColorScale::Shared(0), QWidget* parent = 0);
 
-    //! Destructor
+	//! Destructor
 	virtual ~ccColorScaleEditorDialog();
 
 	//! Sets associated scalar field (optional)
@@ -56,7 +56,7 @@ public:
 
 protected slots:
 
-    void colorScaleChanged(int);
+	void colorScaleChanged(int);
 	void relativeModeChanged(int);
 
 	void onStepSelected(int);
@@ -87,7 +87,7 @@ protected:
 	void setModified(bool state);
 
 	//! If the current scale has been modified, ask the user what to do
-	/** \param return whether user allows change
+	/** \return whether user allows the change or not
 	**/
 	bool canChangeCurrentScale();
 

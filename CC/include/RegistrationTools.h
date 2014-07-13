@@ -18,16 +18,11 @@
 #ifndef REGISTRATION_TOOLS_HEADER
 #define REGISTRATION_TOOLS_HEADER
 
-#ifdef _MSC_VER
-//To get rid of the really annoying warnings about template class exportation
-#pragma warning( disable: 4251 )
-#pragma warning( disable: 4530 )
-#endif
-
+//Local
+#include "CCCoreLib.h"
 #include "CCToolbox.h"
 #include "PointProjectionTools.h"
 #include "KdTree.h"
-
 
 //system
 #include <vector>
@@ -41,20 +36,40 @@ class GenericIndexedCloud;
 class ScalarField;
 
 //! Common point cloud registration algorithms
-#ifdef CC_USE_AS_DLL
-#include "CloudCompareDll.h"
-class CC_DLL_API RegistrationTools : public CCToolbox
-#else
-class RegistrationTools : public CCToolbox
-#endif
+class CC_CORE_LIB_API RegistrationTools : public CCToolbox
 {
-protected:
+public:
 
 	//! Shortcut to PointProjectionTools::ScaledTransformation
-    typedef PointProjectionTools::Transformation ScaledTransformation;
+	typedef PointProjectionTools::Transformation ScaledTransformation;
 
-    //! ICP Registration procedure with optional scale estimation
-    /** Determines the best quaternion (a couple qR|qT) and optionally
+	//! Transformation constraints
+	enum TRANSFORMATION_FILTERS
+	{
+		SKIP_NONE			= 0,
+		SKIP_RXY			= 1,
+		SKIP_RYZ			= 2,
+		SKIP_RXZ			= 4,
+		SKIP_ROTATION		= 7,
+		SKIP_TX				= 8,
+		SKIP_TY				= 16,
+		SKIP_TZ				= 32,
+		SKIP_TRANSLATION	= 56,
+	};
+
+	//! 'Filters' a transformation by constraining it along certain rotation axes and translation directions
+	/**	\param inTrans input transformation
+		\param transformationFilters filters to be applied on the resulting transformation at each step (experimental) - see RegistrationTools::TRANSFORMATION_FILTERS flags
+		\param outTrans output transformation
+	**/
+	static void FilterTransformation(	const ScaledTransformation& inTrans,
+										int transformationFilters,
+										ScaledTransformation& outTrans );
+
+protected:
+
+	//! ICP Registration procedure with optional scale estimation
+	/** Determines the best quaternion (a couple qR|qT) and optionally
 		a scale 's' (different from a priori scale Sa) to bring the cloud
 		P closer to the reference cloud X (one step). Refer to the ICP
 		algorithm theory for more details about this procedure, and to
@@ -66,16 +81,16 @@ protected:
 		Warning: P and X must have the same size, and must be in the same
 		order (i.e. P[i] is the point equivalent to X[i] for all 'i').
 
-        \param P the cloud to register (data)
-        \param X the reference cloud (model)
-        \param trans the resulting transformation
+		\param P the cloud to register (data)
+		\param X the reference cloud (model)
+		\param trans the resulting transformation
 		\param adjustScale whether to estimate scale (s) as well (see jschmidt 2005)
-        \param weightsP weights for the registered points (optional)
-        \param weightsX weights for the reference points (optional)
-        \param aPrioriScale 'a priori' scale (Sa) between P and X
-        \return success
-    **/
-    static bool RegistrationProcedure(GenericCloud* P,
+		\param weightsP weights for the registered points (optional)
+		\param weightsX weights for the reference points (optional)
+		\param aPrioriScale 'a priori' scale (Sa) between P and X
+		\return success
+	**/
+	static bool RegistrationProcedure(	GenericCloud* P,
 										GenericCloud* X,
 										ScaledTransformation& trans,
 										bool adjustScale = false,
@@ -86,11 +101,7 @@ protected:
 };
 
 //! Horn point cloud registration algorithm (Horn).
-#ifdef CC_USE_AS_DLL
-class CC_DLL_API HornRegistrationTools : public RegistrationTools
-#else
-class HornRegistrationTools : public RegistrationTools
-#endif
+class CC_CORE_LIB_API HornRegistrationTools : public RegistrationTools
 {
 public:
 
@@ -116,39 +127,35 @@ public:
 		\param trans transformation: Pr = s.R.Pl + T
 		\return RMS (or -1.0 if an error occurred)
 	**/
-	static double ComputeRMS(GenericCloud* lCloud,
+	static double ComputeRMS(	GenericCloud* lCloud,
 								GenericCloud* rCloud,
 								const ScaledTransformation& trans);
 
 };
 
 //! ICP point cloud registration algorithm (Besl et al.).
-#ifdef CC_USE_AS_DLL
-class CC_DLL_API ICPRegistrationTools : public RegistrationTools
-#else
-class ICPRegistrationTools : public RegistrationTools
-#endif
+class CC_CORE_LIB_API ICPRegistrationTools : public RegistrationTools
 {
 public:
 
-    //! Convergence control method
-    enum CC_ICP_CONVERGENCE_TYPE
-    {
-        MAX_ERROR_CONVERGENCE   = 0,
-        MAX_ITER_CONVERGENCE    = 1,
-    };
+	//! Convergence control method
+	enum CONVERGENCE_TYPE
+	{
+		MAX_ERROR_CONVERGENCE	= 0,
+		MAX_ITER_CONVERGENCE	= 1,
+	};
 
-    //! Errors
-    enum CC_ICP_RESULT
-    {
-        ICP_NOTHING_TO_DO               = 0,
-        ICP_APPLY_TRANSFO               = 1,
-        ICP_ERROR                       = 100,
-        //all errors should be greater than ICP_ERROR
-        ICP_ERROR_REGISTRATION_STEP     = 101,
-        ICP_ERROR_DIST_COMPUTATION      = 102,
-        ICP_ERROR_NOT_ENOUGH_MEMORY     = 103,
-    };
+	//! Errors
+	enum RESULT_TYPE
+	{
+		ICP_NOTHING_TO_DO				= 0,
+		ICP_APPLY_TRANSFO				= 1,
+		ICP_ERROR						= 100,
+		//all errors should be greater than ICP_ERROR
+		ICP_ERROR_REGISTRATION_STEP		= 101,
+		ICP_ERROR_DIST_COMPUTATION		= 102,
+		ICP_ERROR_NOT_ENOUGH_MEMORY		= 103,
+	};
 
 	//! Registers two point clouds
 	/** This method implements the ICP algorithm (Besl et al.).
@@ -166,30 +173,28 @@ public:
 		\param samplingLimit maximum number of points per cloud (they are randomly resampled below this limit otherwise)
 		\param modelWeights weights for model points (optional)
 		\param dataWeights weights for data points (optional)
+		\param transformationFilters filters to be applied on the resulting transformation at each step (experimental) - see RegistrationTools::TRANSFORMATION_FILTERS flags
 		\return algorithm result
 	**/
-	static CC_ICP_RESULT RegisterClouds(GenericIndexedCloudPersist* modelList,
-                                        GenericIndexedCloudPersist* dataList,
-                                        ScaledTransformation& totalTrans,
-                                        CC_ICP_CONVERGENCE_TYPE convType,
-                                        double minErrorDecrease,
-                                        unsigned nbMaxIterations,
-                                        double& finalError,
-                                        bool adjustScale = false,
-                                        GenericProgressCallback* progressCb = 0,
-                                        bool filterOutFarthestPoints = false,
-                                        unsigned samplingLimit = 20000,
+	static RESULT_TYPE RegisterClouds(	GenericIndexedCloudPersist* modelList,
+										GenericIndexedCloudPersist* dataList,
+										ScaledTransformation& totalTrans,
+										CONVERGENCE_TYPE convType,
+										double minErrorDecrease,
+										unsigned nbMaxIterations,
+										double& finalError,
+										bool adjustScale = false,
+										GenericProgressCallback* progressCb = 0,
+										bool filterOutFarthestPoints = false,
+										unsigned samplingLimit = 20000,
 										ScalarField* modelWeights = 0,
-										ScalarField* dataWeights = 0);
+										ScalarField* dataWeights = 0,
+										int transformationFilters = SKIP_NONE);
 };
 
 
 //! Four Points Congruent Sets (4PCS) registration algorithm (Dror Aiger, Niloy J. Mitra, Daniel Cohen-Or)
-#ifdef CC_USE_AS_DLL
-class CC_DLL_API FPCSRegistrationTools : public RegistrationTools
-#else
-class FPCSRegistrationTools : public RegistrationTools
-#endif
+class CC_CORE_LIB_API FPCSRegistrationTools : public RegistrationTools
 {
 public:
     //! Registers two point clouds
@@ -206,7 +211,7 @@ public:
         \param nbMaxCandidates if>0, maximal number of candidate bases allowed for each step. Otherwise the number of candidates is not bounded
 		\return false: failure ; true: success.
     **/
-    static bool RegisterClouds(GenericIndexedCloud* modelCloud,
+    static bool RegisterClouds(	GenericIndexedCloud* modelCloud,
                                 GenericIndexedCloud* dataCloud,
                                 ScaledTransformation& transform,
                                 ScalarType delta,
@@ -235,7 +240,7 @@ protected:
         \param base the resulting base
         \return false: failure ; true: success
     **/
-    static bool FindBase(GenericIndexedCloud* cloud,
+    static bool FindBase(	GenericIndexedCloud* cloud,
                             PointCoordinateType overlap,
                             unsigned nbTries,
                             Base &base);
@@ -247,10 +252,10 @@ protected:
         \param results the resulting bases
         \return the number of bases found (number of element in the results array) or -1 is a problem occurred
     **/
-    static int FindCongruentBases(KDTree* tree,
-                                            ScalarType delta,
-                                            const CCVector3* base[4],
-                                            std::vector<Base>& results);
+    static int FindCongruentBases(	KDTree* tree,
+									ScalarType delta,
+									const CCVector3* base[4],
+									std::vector<Base>& results);
 
     //! Registration score computation function
     /**!
@@ -260,10 +265,10 @@ protected:
         \param delta tolerance above which data points are not counted (if a point is less than delta-appart from de model cloud, then it is counted)
         \return the number of data points which are distance-appart from the model cloud
     **/
-    static unsigned ComputeRegistrationScore(KDTree *modelTree,
-                                                    GenericIndexedCloud *dataCloud,
-                                                    ScalarType delta,
-                                                    ScaledTransformation& dataToModel);
+    static unsigned ComputeRegistrationScore(	KDTree *modelTree,
+												GenericIndexedCloud *dataCloud,
+												ScalarType delta,
+												ScaledTransformation& dataToModel);
 
     //! Find the 3D pseudo intersection between two lines
     /** This function finds the 3D point which is the nearest from the both lines (when this point is unique, i.e. when
@@ -277,13 +282,13 @@ protected:
         \param mu [out] coeff such that p2+mu(p3-p2) is the point of [p2, p3] which is the nearest from [p0, p1]
         \return false: no intersection was found (lines may be parallel); true: inter is the pseudo intersection
     **/
-    static bool LinesIntersections(const CCVector3 &p0,
-                                    const CCVector3 &p1,
-                                    const CCVector3 &p2,
-                                    const CCVector3 &p3,
-                                    CCVector3 &inter,
-                                    PointCoordinateType& lambda,
-                                    PointCoordinateType& mu);
+    static bool LinesIntersections(	const CCVector3 &p0,
+									const CCVector3 &p1,
+									const CCVector3 &p2,
+									const CCVector3 &p3,
+									CCVector3 &inter,
+									PointCoordinateType& lambda,
+									PointCoordinateType& mu);
 
     /**!function to keep only the N best candidates bases (by comparison with the reference base invariants)
         Let B1 and B2 be 2 candidates, R be the reference, B1 and B2 aligned with R.
@@ -297,12 +302,12 @@ protected:
         \param transforms array of rigid transforms that align candidates bases with the reference base
         \return false if something went wrong
     **/
-    static bool FilterCandidates(GenericIndexedCloud *modelCloud,
-                                    GenericIndexedCloud *dataCloud,
-                                    Base& reference,
-                                    std::vector<Base>& candidates,
-                                    unsigned nbMaxCandidates,
-                                    std::vector<ScaledTransformation>& transforms);
+    static bool FilterCandidates(	GenericIndexedCloud *modelCloud,
+									GenericIndexedCloud *dataCloud,
+									Base& reference,
+									std::vector<Base>& candidates,
+									unsigned nbMaxCandidates,
+									std::vector<ScaledTransformation>& transforms);
 };
 
 }

@@ -18,34 +18,45 @@
 #ifndef CC_ORDER_CHOICE_DIALOG_HEADER
 #define CC_ORDER_CHOICE_DIALOG_HEADER
 
-#include <QDialog>
-
 #include <ui_roleChoiceDlg.h>
 
+//Qt
+#include <QDialog>
+
 class ccHObject;
+class ccMainAppInterface;
 
 //! Dialog to assign roles to two entities (e.g. compared/reference)
 class ccOrderChoiceDlg: public QDialog, public Ui::RoleChoiceDialog
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
 
-	ccOrderChoiceDlg(ccHObject* firstEntity, const char* firstRole, ccHObject* secondEntity, const char* secondRole, QWidget* parent = 0);
+	//! Default constructor
+	ccOrderChoiceDlg(	ccHObject* firstEntity,
+						const char* firstRole,
+						ccHObject* secondEntity,
+						const char* secondRole,
+						ccMainAppInterface* app = 0);
+
+	//! Destructor
 	virtual ~ccOrderChoiceDlg();
 
-    ccHObject* getFirstEntity();
-    ccHObject* getSecondEntity();
+	ccHObject* getFirstEntity();
+	ccHObject* getSecondEntity();
 
 protected slots:
-    void swap();
+	void swap();
 
 protected:
 
-    void setColorsAndLabels();
+	void setColorsAndLabels();
 
-    ccHObject *firstEnt,*secondEnt;
-    bool originalOrder;
+	ccMainAppInterface* m_app;
+	ccHObject* m_firstEnt;
+	ccHObject* m_secondEnt;
+	bool m_originalOrder;
 };
 
 #endif // CC_ORDER_CHOICE_DIALOG_HEADER

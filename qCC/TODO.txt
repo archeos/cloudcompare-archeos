@@ -9,56 +9,60 @@ Methods not yet migrated back to V2:
 
 File I/O:
 - PDF 3D
-- PTX files (http://www.danielgm.net/cc/forum/viewtopic.php?t=638)
 - X3D files (integration with 'xiot' in... standby)
 - POD files (Pointools)
-- FARO and LEICA file formats
-- SHP files (--> GDAL)
+- FARO, LEICA, POD file formats (when pigs can fly! None of them ever replied to my emails... not even a simple "no")
+- SHP files (with GDAL?)
+- OpenCTM format (https://github.com/cloudcompare/trunk/issues/146)
+- Visual SFM format (http://www.cloudcompare.org/forum/viewtopic.php?t=550)
 
 *** And from the forum topic or emails 'recent requests' ***
 
 Big ones:
-[*] fly-through mode (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=179&p=607#p607)
+[*] fly-through mode (http://www.cloudcompare.org/forum/viewtopic.php?t=179)
+[*] Command line mode could be extended
+	- Rasterize tool (http://www.cloudcompare.org/forum/viewtopic.php?t=786)
+	- Let the user specify the precise content of an ASCII file in order to prevent the file opening dialog
+		from appearing (will happen - even in 'silent mode' - if the file has more than 5 columns)
+[*] Point cloud cleanup tools (http://www.cloudcompare.org/forum/viewtopic.php?t=191)
+[*] Volume calculation
 
 Various:
+[*] Dedicated method for isolated points removal (based on the Connected Components one)
+[*] Support boolean operations on meshes (with Cork for instance) - http://www.danielgm.net/cc/forum/viewtopic.php?t=812
+[*] Import control points from ascii file (for point pair-based registration - http://www.cloudcompare.org/forum/viewtopic.php?t=585)
 [*] Finish FBX support (materials)
 [*] Use a scalar field (such as scattering angles) in the subsampling method to keep the "best" points
-	Equivalent approach with the local curvature (http://www.danielgm.net/cc/forum/viewtopic.php?t=711)
-[*] Add touchpad support (http://www.danielgm.net/cc/forum/viewtopic.php?t=671)
-[*] Pre-defined global shift vectors list (http://www.danielgm.net/cc/forum/viewtopic.php?t=651)
-[*] Reverse Unroll Feature (http://www.danielgm.net/cc/forum/viewtopic.php?t=645)
-[*] Change the way 'father dependency' is handled (info should be held by the father!)
+	Equivalent approach with the local curvature (http://www.cloudcompare.org/forum/viewtopic.php?t=711)
+[*] Add touchpad support (http://www.cloudcompare.org/forum/viewtopic.php?t=671)
+[*] Reverse Unroll Feature (http://www.cloudcompare.org/forum/viewtopic.php?t=645)
 [*] Let the user select and handle multiple clouds in the 'Clipping box' tool
-[*] Per-point size based on SF values (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=507)
+[*] Per-point size based on SF values (http://www.cloudcompare.org/forum/viewtopic.php?t=507)
 [*] Display ortho-rectified images as high-res textures (instead of point clouds!)
-[*] Use PDAL instead of libLAS (http://www.danielgm.net/cc/forum/viewtopic.php?f=15&t=437&p=1014#p1014)
+[*] Use PDAL instead of libLAS (http://www.cloudcompare.org/forum/viewtopic.php?t=437)
 [*] Run the PCV plugin on more than one file at a time (or batch process)
-[*] Command line mode could be extended (more methods, etc.)
-[*] Add 'GL filter' plugins support to ccViewer (i.e. qEDL & qSSAO)
 [*] Add interactive measurement features to ccViewer
 [*] Support mesh transparency (and PLY 'alpha' property for instance)
-[*] Add 'TRANGLE_STRIPS' support to VTK I/O filter (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=598)
+[*] Convert RGB colors/scalar field to texture when exporting to OBJ mesh file (http://www.danielgm.net/cc/forum/viewtopic.php?t=830)
 
-From Thomas S. (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=550)
-[*] It would be great if the program could manage long coordinates for the georeferencing (?!)
+
+From Thomas S. (http://www.cloudcompare.org/forum/viewtopic.php?t=550)
 [*] If CloudCompare would support VisualSFM, it would be possible to import the VisualSFM-Project (with the saved camera positions).
 	Then it should be possible to measure the points for the georeferencing in the images itself, instead of the point-cloud, which would be much more accurate.
 
 From Andrew B.
 [*] 'minimise bounding box' or various automated ways to make objects 'stand up' the way they are supposed to or be rigid-transformed on the basis of perceived axial symmetry
 [*] An automatic 'scale to unit size' in cases where compare different sized things is of interest, but size can be discarded or treated separately
-[*] Automation of the above tasks via the command line, along with the ability output of summary stats to command line or text file, command line options for ICP and cloud-cloud distance (for batch work).
+[*] Automation of the above tasks via the command line
 
 From Dimitri L.
 [*] Auto-detect header format in ASCII files (in any) 
-[*] Compute distances in a given direction (cylinder)
-[*] Compute signed distances between clouds
 [*] Being able to apply various methods based on a sub-sampled cloud
-[*] Vector fields (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=201&p=614#p614)
+[*] Vector fields (http://www.cloudcompare.org/forum/viewtopic.php?t=201)
 
 From Thomas D.
 [*] Splatting (http://idav.ucdavis.edu/~okreylos/ResDev/LiDAR/index.html)
-[*] Show/hide points based on their normal (http://www.danielgm.net/cc/forum/viewtopic.php?f=9&t=168&p=488#p488)
+[*] Show/hide points based on their normal (http://www.cloudcompare.org/forum/viewtopic.php?t=168)
 
 From AdrienA
 [*] Radiance scaling shader
@@ -82,10 +86,10 @@ From Gianluca C.
 [*] to overlay an image over the mesh with some common points and "drape" the photo on the surface
 
 From Andrew O.
-[*] add some type of three dimensional eraser. Perhaps being able to select and clear an octree cell may be the place to start (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=191&p=1542#p1542)
+[*] add some type of 3D eraser. Perhaps being able to select and clear an octree cell may be the place to start (http://www.cloudcompare.org/forum/viewtopic.php?t=191)
 
 From Tim C.
-[*] Translate/Rotate with keys or GUI buttons (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=556&p=1519#p1519)
+[*] Translate/Rotate with keys or GUI buttons (http://www.cloudcompare.org/forum/viewtopic.php?t=556)
 
 From Raphael M.
 [*] Add a checkbox on the Color Scale Manager to apply the current scale modifications in real time
@@ -101,8 +105,7 @@ From Andrew O.
 [*] Transformations: It would be nice to be able to apply conformal and affine transformations. The current matrix system requires complex calculation outside the software to compute the 4x4 matrix from known parameters. It would be nice to apply scale,omega,kappa,phi,tx,ty,tz directly.
 
 From 'dsims1980'
-[*] Spherical Parameterization of cloud or meshes is very useful for visual comparison of two models (http://www.danielgm.net/cc/forum/viewtopic.php?f=14&t=581)
+[*] Spherical Parameterization of cloud or meshes is very useful for visual comparison of two models (http://www.cloudcompare.org/forum/viewtopic.php?t=581)
 
 From Eugene L.
 [*] To be able to transfer color from a jpg image to a mesh or point cloud.
-[*] To perform volume calculation

@@ -28,6 +28,7 @@
 //system
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 #include <vector>
 
 using namespace CCLib;
@@ -90,9 +91,9 @@ int ScalarFieldTools::computeScalarFieldGradient(GenericIndexedCloudPersist* the
 
 	//structure contenant les parametres additionnels
 	PointCoordinateType radius = theOctree->getCellSize(octreeLevel);
-	void* additionalParameters[3] = {	(void*)&euclidianDistances,
-										additionalParameters[1] = (void*)&radius,
-										additionalParameters[2] = (void*)_theGradientNorms
+	void* additionalParameters[3] = {	static_cast<void*>(&euclidianDistances),
+										static_cast<void*>(&radius),
+										static_cast<void*>(_theGradientNorms)
 	};
 
 	int result = 0;
@@ -127,9 +128,9 @@ bool ScalarFieldTools::computeMeanGradientOnPatch(	const DgmOctree::octreeCell& 
 													NormalizedProgress* nProgress/*=0*/)
 {
 	//variables additionnelles
-	bool euclidianDistances									= *((bool*)additionalParameters[0]);
-	PointCoordinateType radius								= *((PointCoordinateType*)additionalParameters[1]);
-	ScalarField* theGradientNorms							= (ScalarField*)additionalParameters[2];
+	bool euclidianDistances			= *((bool*)additionalParameters[0]);
+	PointCoordinateType radius		= *((PointCoordinateType*)additionalParameters[1]);
+	ScalarField* theGradientNorms	= (ScalarField*)additionalParameters[2];
 
 	//nombre de points dans la cellule courante
 	unsigned n = cell.points->size();
@@ -137,7 +138,6 @@ bool ScalarFieldTools::computeMeanGradientOnPatch(	const DgmOctree::octreeCell& 
 	//structures pour la recherche de voisinages SPECIFIQUES
 	DgmOctree::NearestNeighboursSphericalSearchStruct nNSS;
 	nNSS.level = cell.level;
-	nNSS.truncatedCellCode = cell.truncatedCode;
 	nNSS.prepare(radius,cell.parentOctree->getCellSize(nNSS.level));
 	cell.parentOctree->getCellPos(cell.truncatedCode,cell.level,nNSS.cellPos,true);
 	cell.parentOctree->computeCellCenter(nNSS.cellPos,cell.level,nNSS.cellCenter);
@@ -154,7 +154,7 @@ bool ScalarFieldTools::computeMeanGradientOnPatch(	const DgmOctree::octreeCell& 
 			return false;
 		}
 		DgmOctree::NeighboursSet::iterator it = nNSS.pointsInNeighbourhood.begin();
-		for (unsigned j=0;j<n;++j,++it)
+		for (unsigned j=0; j<n; ++j,++it)
 		{
 			it->point = cell.points->getPointPersistentPtr(j);
 			it->pointIndex = cell.points->getPointGlobalIndex(j);
@@ -174,17 +174,18 @@ bool ScalarFieldTools::computeMeanGradientOnPatch(	const DgmOctree::octreeCell& 
 		{
 			 cell.points->getPoint(i,nNSS.queryPoint);
 
-			//on extrait un voisinage autour du point
-			int k = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,radius,true);
+			//we extract the point's neighbors
+			//warning: there may be more points at the end of nNSS.pointsInNeighbourhood than the actual nearest neighbors (k)!
+			unsigned k = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,radius,true);
 
             //if more than one neighbour (the query point itself)
-			if (k>1)
+			if (k > 1)
 			{
 				CCVector3d sum(0,0,0);
 				unsigned counter = 0;
 
 				//j=1 because the first point is the query point itself --> contribution = 0
-				for (int j=1; j<k; ++j)
+				for (unsigned j=1; j<k; ++j)
 				{
 					ScalarType d2 = cloud->getPointScalarValue(nNSS.pointsInNeighbourhood[j].pointIndex);
 					if (ScalarField::ValidValue(d2))
@@ -208,15 +209,15 @@ bool ScalarFieldTools::computeMeanGradientOnPatch(	const DgmOctree::octreeCell& 
 				}
 
 				if (counter != 0)
-					gN = static_cast<ScalarType>(sum.norm()/static_cast<double>(counter));
+					gN = static_cast<ScalarType>(sum.norm()/counter);
 			}
 		}
 
 		if (theGradientNorms)
-			//mode champ scalaire "IN" et "OUT" identique
+			//if "IN" and "OUT" SFs are the same
 			theGradientNorms->setValue(cell.points->getPointGlobalIndex(i),gN);
 		else
-			//mode champs scalaires "IN" et "OUT" differents
+			//if "IN" and "OUT" SFs are different
 			cell.points->setPointScalarValue(i,gN);
 
 		if (nProgress && !nProgress->oneStep())
@@ -315,7 +316,6 @@ bool ScalarFieldTools::computeCellGaussianFilter(	const DgmOctree::octreeCell& c
 	//structures pour la recherche de voisinages SPECIFIQUES
 	DgmOctree::NearestNeighboursSphericalSearchStruct nNSS;
 	nNSS.level = cell.level;
-	nNSS.truncatedCellCode = cell.truncatedCode;
 	nNSS.prepare(radius,cell.parentOctree->getCellSize(nNSS.level));
 	cell.parentOctree->getCellPos(cell.truncatedCode,cell.level,nNSS.cellPos,true);
 	cell.parentOctree->computeCellCenter(nNSS.cellPos,cell.level,nNSS.cellCenter);
@@ -349,6 +349,7 @@ bool ScalarFieldTools::computeCellGaussianFilter(	const DgmOctree::octreeCell& c
         {
             //we get the points inside a spherical neighbourhood (radius: '3*sigma')
             cell.points->getPoint(i,nNSS.queryPoint);
+			//warning: there may be more points at the end of nNSS.pointsInNeighbourhood than the actual nearest neighbors (k)!
             unsigned k = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,radius,false);
 
             //each point adds a contribution weighted by its distance to the sphere center
@@ -357,7 +358,7 @@ bool ScalarFieldTools::computeCellGaussianFilter(	const DgmOctree::octreeCell& c
             double wSum = 0.0;
             for (unsigned j=0;j<k;++j,++it)
             {
-                double weight = exp(-(it->squareDist)/sigma2); //PDF: -exp(-(x-mu)^2/(2*sigma^2))
+                double weight = exp(-(it->squareDistd)/sigma2); //PDF: -exp(-(x-mu)^2/(2*sigma^2))
                 ScalarType val = cloud->getPointScalarValue(it->pointIndex);
                 //scalar value must be valid
 				if (ScalarField::ValidValue(val))
@@ -384,6 +385,7 @@ bool ScalarFieldTools::computeCellGaussianFilter(	const DgmOctree::octreeCell& c
 
             //we get the points inside a spherical neighbourhood (radius: '3*sigma')
             cell.points->getPoint(i,nNSS.queryPoint);
+			//warning: there may be more points at the end of nNSS.pointsInNeighbourhood than the actual nearest neighbors (k)!
             unsigned k = cell.parentOctree->findNeighborsInASphereStartingFromCell(nNSS,radius,false);
 
             //each point adds a contribution weighted by its distance to the sphere center
@@ -394,7 +396,7 @@ bool ScalarFieldTools::computeCellGaussianFilter(	const DgmOctree::octreeCell& c
             {
                 ScalarType val = cloud->getPointScalarValue(it->pointIndex);
 				ScalarType dSF = queryValue - val;
-                double weight = exp(-(it->squareDist)/sigma2) * exp(-(dSF*dSF)/sigmaSF2);
+                double weight = exp(-(it->squareDistd)/sigma2) * exp(-(dSF*dSF)/sigmaSF2);
                 //scalar value must be valid
 				if (ScalarField::ValidValue(val))
                 {
@@ -614,8 +616,8 @@ bool ScalarFieldTools::computeKmeans(	const GenericCloud* theCloud,
 		//Fl::wait(1.0);
 
 		theOldKNums = theKNums;
-		std::fill(theKSums.begin(),theKSums.end(),0);
-		std::fill(theKNums.begin(),theKNums.end(),0);
+		std::fill(theKSums.begin(),theKSums.end(),static_cast<ScalarType>(0));
+		std::fill(theKNums.begin(),theKNums.end(),static_cast<unsigned>(0));
 		{
 			for (unsigned i=0; i<n; ++i)
 			{

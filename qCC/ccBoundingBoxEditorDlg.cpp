@@ -25,24 +25,25 @@ ccBoundingBoxEditorDlg::ccBoundingBoxEditorDlg(QWidget* parent/*=0*/)
 	: QDialog(parent)
 	, Ui::BoundingBoxEditorDialog()
 	, m_baseBoxIsMinimal(false)
+	, m_showInclusionWarning(true)
 {
-    setupUi(this);
+	setupUi(this);
 
-    setWindowFlags(Qt::Tool);
+	setWindowFlags(Qt::Tool);
 
-    xDoubleSpinBox->setMinimum(-std::numeric_limits<double>::max());
-    yDoubleSpinBox->setMinimum(-std::numeric_limits<double>::max());
-    zDoubleSpinBox->setMinimum(-std::numeric_limits<double>::max());
-    xDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
-    yDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
-    zDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
+	xDoubleSpinBox->setMinimum(-std::numeric_limits<double>::max());
+	yDoubleSpinBox->setMinimum(-std::numeric_limits<double>::max());
+	zDoubleSpinBox->setMinimum(-std::numeric_limits<double>::max());
+	xDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
+	yDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
+	zDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
 
 	dxDoubleSpinBox->setMinimum(0.0);
 	dyDoubleSpinBox->setMinimum(0.0);
 	dzDoubleSpinBox->setMinimum(0.0);
-    dxDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
-    dyDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
-    dzDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
+	dxDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
+	dyDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
+	dzDoubleSpinBox->setMaximum(std::numeric_limits<double>::max());
 
 	connect(pointTypeComboBox,	SIGNAL(currentIndexChanged(int)),	this,	SLOT(reflectChanges(int)));
 	connect(keepSquareCheckBox,	SIGNAL(toggled(bool)),				this,	SLOT(squareModeActivated(bool)));
@@ -167,7 +168,7 @@ void ccBoundingBoxEditorDlg::checkBaseInclusion()
 		exclude = !m_currentBBox.contains(m_baseBBox.minCorner()) || !m_currentBBox.contains(m_baseBBox.maxCorner());
 	}
 
-	warningLabel->setVisible(exclude);
+	warningLabel->setVisible(m_showInclusionWarning && exclude);
 	okPushButton->setEnabled(!m_baseBoxIsMinimal || !exclude);
 }
 

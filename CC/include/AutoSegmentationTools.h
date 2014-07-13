@@ -18,6 +18,8 @@
 #ifndef AUTO_SEGMENTATION_TOOLS_HEADER
 #define AUTO_SEGMENTATION_TOOLS_HEADER
 
+//Local
+#include "CCCoreLib.h"
 #include "CCToolbox.h"
 #include "ReferenceCloud.h"
 
@@ -28,19 +30,14 @@ class GenericIndexedCloudPersist;
 class GenericProgressCallback;
 class DgmOctree;
 
-//! A standard container to pack several point clouds together
-/** The auto-segmentation algorithms of this toolbox return a collection of subsets of points
-	corresponding to each segmented part. Such collection is generally stored in this kind of container.
+//! A standard container to store several subsets of points
+/** Several algorithms of the AutoSegmentationTools toolbox return a collection of subsets of points
+	corresponding to each segmented part. Such a collection is generally stored in this type of container.
 **/
 typedef std::vector<ReferenceCloud*> ReferenceCloudContainer;
 
 //! Several point cloud auto-segmentation algorithms (Connected Components, Front propagation, etc.)
-#ifdef CC_USE_AS_DLL
-#include "CloudCompareDll.h"
-class CC_DLL_API AutoSegmentationTools : public CCToolbox
-#else
-class AutoSegmentationTools : public CCToolbox
-#endif
+class CC_CORE_LIB_API AutoSegmentationTools : public CCToolbox
 {
 public:
 
@@ -62,14 +59,14 @@ public:
 		\param level the level of subdivision of the octree (between 1 and MAX_OCTREE_LEVEL)
 		\param sixConnexity indicates if the CC's 3D connexity should be 6 (26 otherwise)
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
-		\param _theOctree the cloud octree if it has already be computed
+		\param inputOctree the cloud octree if it has already be computed
 		\return error code (see DgmOctree::extractCCs)
 	**/
 	static int labelConnectedComponents(GenericIndexedCloudPersist* theCloud,
 										uchar level,
 										bool sixConnexity = false,
 										CCLib::GenericProgressCallback* progressCb = 0,
-										CCLib::DgmOctree* _theOctree = 0);
+										CCLib::DgmOctree* inputOctree = 0);
 
 	//! Extracts connected components from a point cloud
 	/** This method shloud only be called after the connected components have been
@@ -98,16 +95,16 @@ public:
 		\param theSegmentedLists the segmented parts (as a list of subsets of points)
 		\param applyGaussianFilter to specify if a gaussian filter should be applied after computing the scalar field gradient (to smooth the results)
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
-		\param _theOctree the cloud octree if it has already be computed
+		\param inputOctree the cloud octree if it has already be computed
 		\param alpha the gaussian filter kernel size (needed only if a gaussian filtering pass is required)
 		\return success
 	**/
-	static bool frontPropagationBasedSegmentation(GenericIndexedCloudPersist* theCloud,
+	static bool frontPropagationBasedSegmentation(	GenericIndexedCloudPersist* theCloud,
 													ScalarType minSeedDist,
 													uchar octreeLevel,
 													ReferenceCloudContainer& theSegmentedLists,
 													CCLib::GenericProgressCallback* progressCb = 0,
-													CCLib::DgmOctree* _theOctree = 0,
+													CCLib::DgmOctree* inputOctree = 0,
 													bool applyGaussianFilter = false,
 													float alpha = 2.0f);
 

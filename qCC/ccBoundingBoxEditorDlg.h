@@ -30,16 +30,22 @@ class ccBoundingBoxEditorDlg : public QDialog, public Ui::BoundingBoxEditorDialo
 
 public:
 
-    //! Default constructor
-    ccBoundingBoxEditorDlg(QWidget* parent=0);
+	//! Default constructor
+	ccBoundingBoxEditorDlg(QWidget* parent = 0);
 
-    //! Returns bounding box
+	//! Returns bounding box
 	ccBBox getBox() const { return m_currentBBox; }
 
-    //! Sets (minimal) base box
-	/** \param isMinimal set whether the user must define a bounding-box at least as large as this one
+	//! Sets (minimal) base box
+	/** \param box base box
+		\param isMinimal set whether the user must define a bounding-box at least as large as this one
 	**/
-    void setBaseBBox(const ccBBox& box, bool isMinimal = true);
+	void setBaseBBox(const ccBBox& box, bool isMinimal = true);
+
+	//! Whether the warning about bounding box inclusion in the base one should be displayed or not
+	/** True by default.
+	**/
+	void showInclusionWarning(bool state) { m_showInclusionWarning = state; }
 
 	//! Forces the 'keep square' mode
 	void forceKeepSquare(bool state);
@@ -88,6 +94,9 @@ protected:
 
 	//! Box state at dialog start
 	ccBBox m_initBBox;
+
+	//! Whether to show 'inclusion' warning or not
+	bool m_showInclusionWarning;
 
 };
 

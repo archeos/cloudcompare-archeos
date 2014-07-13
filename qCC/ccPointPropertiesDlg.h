@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 2184                                                              $
-//$LastChangedDate:: 2012-07-02 18:47:25 +0200 (lun., 02 juil. 2012)       $
-//**************************************************************************
-//
 
 #ifndef CC_POINT_PROPERTIES_DIALOG_HEADER
 #define CC_POINT_PROPERTIES_DIALOG_HEADER
@@ -37,7 +30,7 @@ class ccHObject;
 //! Dialog for simple point picking (information, distance, etc.)
 class ccPointPropertiesDlg : public ccPointPickingGenericInterface, public Ui::PointPropertiesDlg
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
 
@@ -46,22 +39,22 @@ public:
 	//! Default destructor
 	virtual ~ccPointPropertiesDlg();
 
-    //inherited from ccPointPickingGenericInterface
+	//inherited from ccPointPickingGenericInterface
 	virtual bool start();
 	virtual void stop(bool state);
-    virtual bool linkWith(ccGLWindow* win);
+	virtual bool linkWith(ccGLWindow* win);
 
 protected slots:
 
-    void onClose();
-    void activatePointPropertiesDisplay();
-    void activateDistanceDisplay();
-    void activateAngleDisplay();
+	void onClose();
+	void activatePointPropertiesDisplay();
+	void activateDistanceDisplay();
+	void activateAngleDisplay();
 	void activate2DZonePicking();
-    void initializeState();
+	void initializeState();
 	void exportCurrentLabel();
 	void update2DZone(int x, int y, Qt::MouseButtons buttons);
-    void processClickedPoint(int x, int y);
+	void processClickedPoint(int x, int y);
 	void close2DZone();
 
 signals:
@@ -71,20 +64,20 @@ signals:
 
 protected:
 
-    //! Picking mode
-    enum Mode
-    {
-        POINT_INFO,
-        POINT_POINT_DISTANCE,
-        POINTS_ANGLE,
+	//! Picking mode
+	enum Mode
+	{
+		POINT_INFO,
+		POINT_POINT_DISTANCE,
+		POINTS_ANGLE,
 		RECT_ZONE
-    };
+	};
 
-    //inherited from ccPointPickingGenericInterface
-    void processPickedPoint(ccPointCloud* cloud, unsigned pointIndex, int x, int y);
+	//inherited from ccPointPickingGenericInterface
+	void processPickedPoint(ccPointCloud* cloud, unsigned pointIndex, int x, int y);
 
 	//! Current picking mode
-    Mode m_pickingMode;
+	Mode m_pickingMode;
 
 	//! Associated 3D label
 	cc2DLabel* m_label;

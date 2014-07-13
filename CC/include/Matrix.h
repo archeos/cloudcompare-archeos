@@ -18,13 +18,8 @@
 #ifndef MATRIX_HEADER
 #define MATRIX_HEADER
 
-#ifdef _MSC_VER
-//To get rid of the really annoying warnings about template class exportation
-#pragma warning( disable: 4251 )
-#pragma warning( disable: 4530 )
-#endif
-
 //local
+#include "CCCoreLib.h"
 #include "CCGeom.h"
 
 //system
@@ -302,8 +297,8 @@ namespace CCLib
 					std::swap(m_values[l][c],m_values[c][l]);
 		}
 
-		//! Returns transpose
-		MatrixTpl toTranspose()
+		//! Returns the transposed version of this matrix
+		MatrixTpl transposed()
 		{
 			MatrixTpl T(*this);
 			T.transpose();
@@ -640,7 +635,7 @@ namespace CCLib
 		//! Computes eigen vectors (and values) with the Jacobian method
 		/** See numerical recipes.
 		**/
-		MatrixTpl computeJacobianEigenValuesAndVectors() const
+		MatrixTpl computeJacobianEigenValuesAndVectors(unsigned maxIterationCount = 50) const
 		{
 			if (!isValid())
 				return MatrixTpl();
@@ -678,9 +673,7 @@ namespace CCLib
 			//int j,iq,ip;
 			//Scalar tresh,theta,tau,t,sm,s,h,g,c,;
 
-			//TODO: '50' should be a parameter instead!
-			static const unsigned c_maxIterationCount = 50;
-			for (unsigned i=1; i<=c_maxIterationCount; i++)
+			for (unsigned i=1; i<=maxIterationCount; i++)
 			{
 				//Sum off-diagonal elements
 				Scalar sm = 0;
@@ -827,7 +820,7 @@ namespace CCLib
 		}
 
 		//! Sorts the eigenvectors in the decreasing order of their associated eigenvalues
-		void sortEigenValuesAndVectors()
+		void sortEigenValuesAndVectors(bool absVal = false)
 		{
 			if (!eigenValues || m_matrixSize < 2)
 				return;
@@ -836,7 +829,7 @@ namespace CCLib
 			{
 				unsigned maxValIndex = i;
 				for (unsigned j=i+1; j<m_matrixSize; j++)
-					if (eigenValues[j] > eigenValues[maxValIndex])
+					if (eigenValues[j] > eigenValues[maxValIndex]) //eigen values are always positive! (= square of singular values)
 						maxValIndex = j;
 
 				if (maxValIndex != i)

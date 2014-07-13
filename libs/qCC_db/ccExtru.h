@@ -18,6 +18,8 @@
 #ifndef CC_EXTRU_PRIMITIVE_HEADER
 #define CC_EXTRU_PRIMITIVE_HEADER
 
+//Local
+#include "qCC_db.h"
 #include "ccGenericPrimitive.h"
 
 //system
@@ -27,12 +29,7 @@
 /** It is defined by sweeping a profile representing the extrusion’s shape (polyline)
 	through a given distance (equivalent to the extrusion thickness).
 **/
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccExtru : public ccGenericPrimitive
-#else
-class ccExtru : public ccGenericPrimitive
-#endif
+class QCC_DB_LIB_API ccExtru : public ccGenericPrimitive
 {
 public:
 
@@ -54,8 +51,8 @@ public:
 	**/
 	ccExtru(QString name = QString("Extrusion"));
 
-    //! Returns class ID
-	virtual CC_CLASS_ENUM getClassID() const { return CC_EXTRU; }
+	//! Returns class ID
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::EXTRU; }
 
 	//inherited from ccGenericPrimitive
 	virtual QString getTypeName() const { return "Extrusion"; }
@@ -68,8 +65,8 @@ public:
 	const std::vector<CCVector2>& getProfile() const { return m_profile; }
 
 protected:
-    
-    //inherited from ccGenericPrimitive
+
+	//inherited from ccGenericPrimitive
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
 	virtual bool buildUp();

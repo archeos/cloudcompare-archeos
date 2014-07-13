@@ -33,7 +33,7 @@
 #include <assert.h>
 
 ccSubMesh::ccSubMesh(ccMesh* parentMesh)
-    : ccGenericMesh("Sub-mesh")
+	: ccGenericMesh("Sub-mesh")
 	, m_associatedMesh(parentMesh)
 	, m_triIndexes(new ReferencesContainer())
 	, m_globalIterator(0)
@@ -45,9 +45,27 @@ ccSubMesh::ccSubMesh(ccMesh* parentMesh)
 	showSF(parentMesh ? parentMesh->sfShown() : true);
 }
 
+ccSubMesh::~ccSubMesh()
+{
+	if (m_triIndexes)
+	{
+		m_triIndexes->release();
+		m_triIndexes = 0;
+	}
+}
+
 void ccSubMesh::setAssociatedMesh(ccMesh* mesh)
 {
 	m_associatedMesh = mesh;
+
+	if (m_associatedMesh)
+		m_associatedMesh->addDependency(this,DP_NOTIFY_OTHER_ON_UPDATE);
+}
+
+void ccSubMesh::onUpdateOf(ccHObject* obj)
+{
+	if (obj == m_associatedMesh)
+		m_bBox.setValidity(false);
 }
 
 void ccSubMesh::forEach(genericTriangleAction& anAction)
@@ -155,9 +173,9 @@ CCLib::TriangleSummitsIndexes* ccSubMesh::getTriangleIndexes(unsigned triIndex)
 void ccSubMesh::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
 {
 	getMyOwnBB(); //forces BB refresh if necessary
-    
+
 	memcpy(bbMin, m_bBox.minCorner().u, 3*sizeof(PointCoordinateType));
-    memcpy(bbMax, m_bBox.maxCorner().u, 3*sizeof(PointCoordinateType));
+	memcpy(bbMax, m_bBox.maxCorner().u, 3*sizeof(PointCoordinateType));
 }
 
 ccSubMesh* ccSubMesh::createNewSubMeshFromSelection(bool removeSelectedFaces, IndexMap* indexMap/*=0*/)
@@ -249,8 +267,9 @@ ccSubMesh* ccSubMesh::createNewSubMeshFromSelection(bool removeSelectedFaces, In
 				m_triIndexes->clear(true);
 			else
 				resize(lastTri);
+
 			m_bBox.setValidity(false);
-			updateModificationTime();
+			notifyGeometryUpdate();
 		}
 	}
 
@@ -386,7 +405,7 @@ bool ccSubMesh::addTriangleIndex(unsigned firstIndex, unsigned lastIndex)
 	}
 
 	unsigned range = lastIndex-firstIndex; //lastIndex is excluded
-    unsigned pos = size();
+	unsigned pos = size();
 
 	if (size()<pos+range && !m_triIndexes->resize(pos+range))
 		return false;
@@ -433,19 +452,14 @@ void ccSubMesh::refreshBB()
 		m_bBox.add(*tri->_getC());
 	}
 
-	updateModificationTime();
+	notifyGeometryUpdate();
 }
 
 ccBBox ccSubMesh::getMyOwnBB()
 {
-	if (size() != 0)
+	if (!m_bBox.isValid() && size() != 0)
 	{
-		if (   !m_bBox.isValid()
-			|| getLastModificationTime() < m_associatedMesh->getLastModificationTime()
-			|| (m_associatedMesh->getAssociatedCloud() && getLastModificationTime() < m_associatedMesh->getAssociatedCloud()->getLastModificationTime()) )
-		{
-			refreshBB();
-		}
+		refreshBB();
 	}
 
 	return m_bBox;

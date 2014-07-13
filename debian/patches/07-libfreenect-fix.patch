@@ -1,6 +1,6 @@
---- a/qCC/plugins/qKinect/CMakeLists.txt
-+++ b/qCC/plugins/qKinect/CMakeLists.txt
-@@ -9,7 +9,7 @@ project( QKINECT_PLUGIN_DLL )
+--- a/plugins/qKinect/CMakeLists.txt
++++ b/plugins/qKinect/CMakeLists.txt
+@@ -18,7 +18,7 @@ project( QKINECT_PLUGIN )
  
  # libfreenect is needed to build library
  set( LIBFREENECT_INCLUDE_DIR "" CACHE PATH "Include directory of libfreenect" )

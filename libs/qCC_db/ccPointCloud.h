@@ -29,11 +29,18 @@
 #include <GenericProgressCallback.h>
 
 //Local
+#include "qCC_db.h"
 #include "ccGenericPointCloud.h"
 #include "ccPlatform.h"
+#include "ccColorScale.h"
+
+//Qt
+#include <QGLBuffer>
 
 class ccPointCloud;
 class ccScalarField;
+class ccPolyline;
+class QGLBuffer;
 
 /***************************************************
 				ccPointCloud
@@ -58,52 +65,47 @@ const unsigned MAX_LOD_POINTS_NUMBER = 10000000;
 	- per-point visibility information (to hide/display subsets of points)
 	- other children objects (meshes, calibrated pictures, etc.)
 **/
-#ifdef QCC_DB_USE_AS_DLL
-#include "qCC_db_dll.h"
-class QCC_DB_DLL_API ccPointCloud : public CCLib::ChunkedPointCloud, public ccGenericPointCloud
-#else
-class ccPointCloud : public CCLib::ChunkedPointCloud, public ccGenericPointCloud
-#endif
+class QCC_DB_LIB_API ccPointCloud : public CCLib::ChunkedPointCloud, public ccGenericPointCloud
 {
 public:
 
-    //! Default constructor
+	//! Default constructor
 	/** Creates an empty cloud without any feature. Each of them shoud be
-        specifically instantiated/created (once the points have been
+		specifically instantiated/created (once the points have been
 		added to this cloud, at least partially).
 		\param name cloud name (optional)
-    **/
-    ccPointCloud(QString name = QString()) throw();
+	**/
+	ccPointCloud(QString name = QString()) throw();
 
 	//! Default destructor
 	virtual ~ccPointCloud();
 
-    //! Returns class ID
-    virtual CC_CLASS_ENUM getClassID() const {return CC_POINT_CLOUD;};
+	//! Returns class ID
+	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::POINT_CLOUD; }
 
-    /***************************************************
+	/***************************************************
 						Clone/Copy
 	***************************************************/
 
-    //! Creates a new point cloud object from a GenericIndexedCloud
+	//! Creates a new point cloud object from a GenericIndexedCloud
 	/** "GenericIndexedCloud" is an extension of GenericCloud (from CCLib)
 		which provides a const random accessor to points.
 		See CClib documentation for more information about GenericIndexedCloud.
 		As the GenericIndexedCloud interface is very simple, only points are imported.
 		Note: throws an 'int' exception in case of error (see CTOR_ERRORS)
 		\param cloud a GenericIndexedCloud structure
-    **/
+	**/
 	static ccPointCloud* From(const CCLib::GenericIndexedCloud* cloud);
 
-    //! Creates a new point cloud object from a GenericCloud
+	//! Creates a new point cloud object from a GenericCloud
 	/** "GenericCloud" is a very simple and light interface from CCLib. It is
-        meant to give access to points coordinates of any cloud (on the
+		meant to give access to points coordinates of any cloud (on the
 		condition it implements the GenericCloud interface of course).
 		See CClib documentation for more information about GenericClouds.
 		As the GenericCloud interface is very simple, only points are imported.
 		Note: throws an 'int' exception in case of error (see CTOR_ERRORS)
 		\param cloud a GenericCloud structure
-    **/
+	**/
 	static ccPointCloud* From(CCLib::GenericCloud* cloud);
 
 	//! Warnings for the partialClone method (bit flags)
@@ -114,7 +116,7 @@ public:
 
 	//! Creates a new point cloud object from a ReferenceCloud (selection)
 	/** "Reference clouds" are a set of indexes referring to a real point cloud.
-        See CClib documentation for more information about ReferenceClouds.
+		See CClib documentation for more information about ReferenceClouds.
 		Warning: the ReferenceCloud structure must refer to this cloud. 
 		\param selection a ReferenceCloud structure (pointing to source)
 		\param[out] warnings [optional] to determine if warnings (CTOR_ERRORS) occurred during the duplication process
@@ -123,7 +125,7 @@ public:
 
 	//! Creates a new point cloud object from a GenericIndexedCloud
 	/** Should be prefered to the equivalent constructor.
-		\param cloud a GenericIndexedCloud structure
+		\param selection a GenericIndexedCloud structure
 	**/
 	ccPointCloud* clone(const CCLib::GenericIndexedCloud* selection);
 
@@ -131,17 +133,18 @@ public:
 	/** All the main features of the entity are cloned, except from the octree and
 		the points visibility information.
 		\param destCloud [optional] the destination cloud can be provided here
+		\param ignoreChildren [optional] whether to ignore the cloud's children or not (in which case they will be cloned as well)
 		\return a copy of this entity
 	**/
-	virtual ccPointCloud* cloneThis(ccPointCloud* destCloud = 0);
+	virtual ccPointCloud* cloneThis(ccPointCloud* destCloud = 0, bool ignoreChildren = false);
 
 	//inherited from ccGenericPointCloud
-	virtual ccGenericPointCloud* clone(ccGenericPointCloud* destCloud = 0);
+	virtual ccGenericPointCloud* clone(ccGenericPointCloud* destCloud = 0, bool ignoreChildren = false);
 
-    //! Fuses another 3D entity with this one
+	//! Fuses another 3D entity with this one
 	/** All the main features of the given entity are added, except from the octree and
-        the points visibility information. Those features are deleted on this cloud.
-    **/
+		the points visibility information. Those features are deleted on this cloud.
+	**/
 	const ccPointCloud& operator +=(ccPointCloud*);
 
 	/***************************************************
@@ -193,7 +196,7 @@ public:
 		\param fillWithWhite whether to fill new array elements with zeros (false) or white color (true)
 		\return true if ok, false if there's not enough memory
 	**/
-	bool resizeTheRGBTable(bool fillWithWhite=false);
+	bool resizeTheRGBTable(bool fillWithWhite = false);
 
 	//! Reserves memory to store the compressed normals
 	/** Before adding normals to the cloud (with addNorm())
@@ -232,7 +235,7 @@ public:
 
 
 	/***************************************************
-                    Scalar fields handling
+				Scalar fields handling
 	***************************************************/
 
 	//! Returns the currently displayed scalar (or 0 if none)
@@ -249,59 +252,65 @@ public:
 	virtual void deleteAllScalarFields();
 
 	//! Returns whether color scale should be displayed or not
-    bool sfColorScaleShown() const;
+	bool sfColorScaleShown() const;
 	//! Sets whether color scale should be displayed or not
 	void showSFColorsScale(bool state);
 
 
 	/***************************************************
-                    Other methods
+						Other methods
 	***************************************************/
 
-    //! Returns the cloud gravity center
-    /** \return gravity center
-    **/
-    CCVector3 computeGravityCenter();
+	//! Returns the cloud gravity center
+	/** \return gravity center
+	**/
+	CCVector3 computeGravityCenter();
 
-    //inherited from ccHObject
+	//inherited from ccHObject
 	virtual void getDrawingParameters(glDrawParams& params) const;
 	virtual unsigned getUniqueIDForDisplay() const;
 
-    //inherited from ccDrawableObject
-    virtual bool hasColors() const;
-    virtual bool hasNormals() const;
-    virtual bool hasScalarFields() const;
-    virtual bool hasDisplayedScalarField() const;
+	//inherited from ccDrawableObject
+	virtual bool hasColors() const;
+	virtual bool hasNormals() const;
+	virtual bool hasScalarFields() const;
+	virtual bool hasDisplayedScalarField() const;
+	virtual void removeFromDisplay(const ccGenericGLDisplay* win); //for proper VBO release
 
-    //inherited from ccGenericPointCloud
+	//inherited from ccGenericPointCloud
 	virtual const colorType* getPointScalarValueColor(unsigned pointIndex) const;
 	virtual const colorType* geScalarValueColor(ScalarType d) const;
 	virtual ScalarType getPointDisplayedDistance(unsigned pointIndex) const;
 	virtual const colorType* getPointColor(unsigned pointIndex) const;
 	virtual const normsType& getPointNormalIndex(unsigned pointIndex) const;
-	virtual const PointCoordinateType* getPointNormal(unsigned pointIndex) const;
+	virtual const CCVector3& getPointNormal(unsigned pointIndex) const;
 	/** WARNING: if removeSelectedPoints is true, any attached octree will be deleted.
 	**/
-	virtual ccGenericPointCloud* createNewCloudFromVisibilitySelection(bool removeSelectedPoints=false);
-    virtual void applyRigidTransformation(const ccGLMatrix& trans);
-    //virtual bool isScalarFieldEnabled() const;
-    virtual void refreshBB();
+	virtual ccGenericPointCloud* createNewCloudFromVisibilitySelection(bool removeSelectedPoints = false);
+	virtual void applyRigidTransformation(const ccGLMatrix& trans);
+	//virtual bool isScalarFieldEnabled() const;
+	virtual void refreshBB();
 
-    //! Sets a particular point color
-    /** WARNING: colors must be enabled.
-    **/
+	//! Interpolate colors from another cloud
+	bool interpolateColorsFrom(	ccGenericPointCloud* cloud,
+								CCLib::GenericProgressCallback* progressCb = NULL,
+								unsigned char octreeLevel = 7);
+
+	//! Sets a particular point color
+	/** WARNING: colors must be enabled.
+	**/
 	void setPointColor(unsigned pointIndex, const colorType* col);
 
-    //! Sets a particular point compressed normal
-    /** WARNING: normals must be enabled.
-    **/
+	//! Sets a particular point compressed normal
+	/** WARNING: normals must be enabled.
+	**/
 	void setPointNormalIndex(unsigned pointIndex, normsType norm);
 
-    //! Sets a particular point normal (shortcut)
-    /** WARNING: normals must be enabled.
-        Normal is automatically compressed before storage.
-    **/
-	void setPointNormal(unsigned pointIndex, const PointCoordinateType* N);
+	//! Sets a particular point normal (shortcut)
+	/** WARNING: normals must be enabled.
+		Normal is automatically compressed before storage.
+	**/
+	void setPointNormal(unsigned pointIndex, const CCVector3& N);
 
 	//! Pushes a compressed normal vector
 	/** \param index compressed normal vector
@@ -309,21 +318,14 @@ public:
 	void addNormIndex(normsType index);
 
 	//! Pushes a normal vector on stack (shortcut)
-	/** \param Nx normal vector (X)
-        \param Ny normal vector (Y)
-        \param Nz normal vector (Z)
-    **/
-	void addNorm(PointCoordinateType Nx, PointCoordinateType Ny, PointCoordinateType Nz);
-
-	//! Pushes a normal vector on stack (shortcut)
-	/** \param N normal vector (size: 3)
-    **/
-	void addNorm(const PointCoordinateType* N);
+	/** \param N normal vector
+	**/
+	void addNorm(const CCVector3& N);
 
 	//! Adds a normal vector to the one at a specific index
 	/** The resulting sum is automatically normalized and compressed.
-        \param N normal vector to add (size: 3)
-        \param index normal index to modify
+		\param N normal vector to add (size: 3)
+		\param index normal index to modify
 	**/
 	void addNormAtIndex(const PointCoordinateType* N, unsigned index);
 
@@ -335,6 +337,14 @@ public:
 		\return success
 	**/
 	bool convertNormalToRGB();
+
+	//! Converts normals to two scalar fields: 'dip' and 'dip direction'
+	/**	One input scalar field may be empty if the corresponding value is not required
+		\param[out] dipSF dip values
+		\param[out] dipDirSF dip direction values
+		\return success
+	**/
+	bool convertNormalToDipDirSFs(ccScalarField* dipSF, ccScalarField* dipDirSF);
 
 	//! Pushes an RGB color on stack
     /** \param r red component
@@ -367,11 +377,20 @@ public:
 	//! Assigns color to points proportionnaly to their 'height'
 	/** Height is defined wrt to the specified dimension (heightDim).
 		Color array is automatically allocated if necessary.
-        \param heightDim ramp dimension (0->X, 1->Y, 2->Z)
+        \param heightDim ramp dimension (0:X, 1:Y, 2:Z)
 		\param colorScale color scale to use
 		\return success
     **/
 	bool setRGBColorByHeight(unsigned char heightDim, ccColorScale::Shared colorScale);
+
+	//! Assigns color to points by 'banding'
+	/** Banding is performed along the specified dimension
+		Color array is automatically allocated if necessary.
+        \param dim banding dimension (0:X, 1:Y, 2:Z)
+		\param freq banding frequency
+		\return success
+    **/
+	bool setRGBColorByBanding(unsigned char dim, int freq);
 
 	//! Sets RGB colors with current scalar field (values & parameters)
 	/** \return success
@@ -467,26 +486,44 @@ public:
 	int addScalarField(ccScalarField* sf);
 
 	//! Returns pointer on RGB colors table
-	ColorsTableType* rgbColors() const {return m_rgbColors;}
+	ColorsTableType* rgbColors() const { return m_rgbColors; }
 
 	//! Returns pointer on compressed normals indexes table
-	NormsIndexesTableType* normals() const {return m_normals;}
+	NormsIndexesTableType* normals() const { return m_normals; }
+
+	//! Crops the cloud inside (or outside) a boundig box
+	/** \warning Always returns a selection (potentially empty) if successful.
+		\param box croping box
+		\param inside whether selected points are inside or outside the box
+		\return points falling inside (or outside) as a selection
+	**/
+	CCLib::ReferenceCloud* crop(const ccBBox& box, bool inside = true);
+
+	//! Crops the cloud inside (or outside) a 2D polyline
+	/** \warning Always returns a selection (potentially empty) if successful.
+		\param poly croping polyline
+		\param orthoDim dimension orthogonal to the plane in which the segmentation should occur (X=0, Y=1, Z=2)
+		\param inside whether selected points are inside or outside the polyline
+		\return points falling inside (or outside) as a selection
+	**/
+	CCLib::ReferenceCloud* crop2D(const ccPolyline* poly, unsigned char orthoDim, bool inside = true);
 
 protected:
 
 	//! Appends a cloud to this one
-	const ccPointCloud& append(ccPointCloud* cloud, unsigned pointCountBefore);
+	const ccPointCloud& append(ccPointCloud* cloud, unsigned pointCountBefore, bool ignoreChildren = false);
 
     //inherited from ccHObject
 	virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
     virtual void applyGLTransformation(const ccGLMatrix& trans);
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
+	virtual void notifyGeometryUpdate();
 
-    //inherited from ChunkedPointCloud
+	//inherited from ChunkedPointCloud
 	virtual void swapPoints(unsigned firstIndex, unsigned secondIndex);
 
-    //! Colors
+	//! Colors
 	ColorsTableType* m_rgbColors;
 
 	//! Normals (compressed)
@@ -499,6 +536,65 @@ protected:
 	ccScalarField* m_currentDisplayedScalarField;
 	//! Currently displayed scalar field index
 	int m_currentDisplayedScalarFieldIndex;
+
+protected: // VBO
+
+	//! Init/updates VBOs
+	bool updateVBOs(const glDrawParams& glParams);
+
+	//! Release VBOs
+	void releaseVBOs();
+
+    class VBO : public QGLBuffer
+	{
+	public:
+		int rgbShift;
+		int normalShift;
+
+		//! Inits the VBO
+		/** \return the number of allocated bytes (or -1 if an error occurred)
+		**/
+		int init(int count, bool withColors, bool withNormals, bool* reallocated = 0);
+
+		VBO()
+			: QGLBuffer(QGLBuffer::VertexBuffer)
+			, rgbShift(0)
+			, normalShift(0)
+		{}
+	};
+
+	//! VBO set
+    struct vboSet : std::vector<VBO*>
+	{
+		//! States of th VBO(s)
+		enum STATES { NEW, INITIALIZED, FAILED };
+
+		vboSet()
+			: hasColors(false)
+			, colorIsSF(false)
+			, sourceSF(0)
+			, hasNormals(false)
+			, totalMemSizeBytes(0)
+			, state(NEW)
+		{}
+
+		bool hasColors;
+		bool colorIsSF;
+		ccScalarField* sourceSF;
+		bool hasNormals;
+		int totalMemSizeBytes;
+
+		//! Current state
+		STATES state;
+	};
+
+	//! VBOs attached to this cloud
+	vboSet m_vbos;
+
+	void glChunkVertexPointer(unsigned chunkIndex, unsigned decimStep, bool useVBOs);
+	void glChunkColorPointer(unsigned chunkIndex, unsigned decimStep, bool useVBOs);
+	void glChunkSFPointer(unsigned chunkIndex, unsigned decimStep, bool useVBOs);
+	void glChunkNormalPointer(unsigned chunkIndex, unsigned decimStep, bool useVBOs);
 
 private:
 

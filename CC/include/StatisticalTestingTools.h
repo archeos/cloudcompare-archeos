@@ -18,6 +18,8 @@
 #ifndef STATISTICAL_TESTING_TOOLS_HEADER
 #define STATISTICAL_TESTING_TOOLS_HEADER
 
+//Local
+#include "CCCoreLib.h"
 #include "CCConst.h"
 #include "CCToolbox.h"
 #include "DgmOctree.h"
@@ -32,19 +34,13 @@ class GenericDistribution;
 class GenericProgressCallback;
 
 //! Statistical testing algorithms (Chi2 distance computation, statistic filtering, etc.)
-#ifdef CC_USE_AS_DLL
-#include "CloudCompareDll.h"
-
-class CC_DLL_API StatisticalTestingTools : public CCToolbox
-#else
-class StatisticalTestingTools : public CCToolbox
-#endif
+class CC_CORE_LIB_API StatisticalTestingTools : public CCToolbox
 {
 public:
 
 	//! Computes the Chi2 distance on a sample of scalar values
 	/** The Chi2 distance is computed between an empiric distribution generated from a
-        set of scalar values (with a specific number of classes), and a theoretical distribution.
+		set of scalar values (with a specific number of classes), and a theoretical distribution.
 		It assures that each class of the empirical distribution is such that it respects n.pi>=5
 		(where n is the total number of points, and pi is the cumulative probability of the class).
 		Therefore the number of classes can be changed by the method.
@@ -108,15 +104,15 @@ public:
 		\param numberOfNeighbours the neighbourhood size for the local analysis
 		\param pTrust the Chi2 Test confidence probability
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
-		\param _theOctree the cloud octree if it has already be computed
+		\param inputOctree the cloud octree if it has already be computed
 		\return the distance threshold for filtering (or -1 if someting went wrong during the process)
 	**/
 	static double testCloudWithStatisticalModel(const GenericDistribution* distrib,
-                                                GenericIndexedCloudPersist* theCloud,
-                                                unsigned numberOfNeighbours,
-                                                double pTrust,
-                                                GenericProgressCallback* progressCb=0,
-                                                DgmOctree* _theOctree=0);
+												GenericIndexedCloudPersist* theCloud,
+												unsigned numberOfNeighbours,
+												double pTrust,
+												GenericProgressCallback* progressCb = 0,
+												DgmOctree* inputOctree = 0);
 
 protected:
 

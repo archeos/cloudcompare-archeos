@@ -14,38 +14,31 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1790                                                              $
-//$LastChangedDate:: 2011-02-14 17:31:03 +0100 (lun., 14 fevr. 2011)      $
-//**************************************************************************
-//
 
 #include "ccLabelingDlg.h"
 
 #include <DgmOctree.h>
 
 ccLabelingDlg::ccLabelingDlg(QWidget* parent/*=0*/)
-    : QDialog(parent), Ui::LabelingDialog()
+	: QDialog(parent), Ui::LabelingDialog()
 {
-    setupUi(this);
-    octreeLevelSpinBox->setMaximum(CCLib::DgmOctree::MAX_OCTREE_LEVEL);
+	setupUi(this);
+	octreeLevelSpinBox->setMaximum(CCLib::DgmOctree::MAX_OCTREE_LEVEL);
 
-    setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
+	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 }
 
 int ccLabelingDlg::getOctreeLevel()
 {
-    return octreeLevelSpinBox->value();
+	return octreeLevelSpinBox->value();
 }
 
 int ccLabelingDlg::getMinPointsNb()
 {
-    return minPtsSpinBox->value();
+	return minPtsSpinBox->value();
 }
 
 bool ccLabelingDlg::randomColors()
 {
-    return (randomColorsCheckBox->checkState()==Qt::Checked);
+	return (randomColorsCheckBox->checkState()==Qt::Checked);
 }

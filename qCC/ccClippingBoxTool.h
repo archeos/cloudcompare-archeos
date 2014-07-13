@@ -63,6 +63,7 @@ public slots:
 
 protected slots:
 
+	void editBox();
 	void reset();
 	void closeDialog();
 	void extractContour();
@@ -81,14 +82,17 @@ protected slots:
 	void shiftZMinus();
 	void shiftZPlus();
 
-    void setFrontView();
-    void setBottomView();
-    void setTopView();
-    void setBackView();
-    void setLeftView();
-    void setRightView();
+	void setFrontView();
+	void setBottomView();
+	void setTopView();
+	void setBackView();
+	void setLeftView();
+	void setRightView();
 
 protected:
+
+	//! Extracts slices and/or contours
+	void extractSlicesAndContours(bool extractSlices, bool extractContours, bool singleContourMode);
 
 	//! Shift box
 	void shiftBox(unsigned char dim, bool minus);

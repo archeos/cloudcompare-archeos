@@ -14,13 +14,6 @@
 //#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
 //#                                                                        #
 //##########################################################################
-//
-//*********************** Last revision of this file ***********************
-//$Author:: dgm                                                            $
-//$Rev:: 1933                                                              $
-//$LastChangedDate:: 2011-11-20 23:42:07 +0100 (dim., 20 nov. 2011)        $
-//**************************************************************************
-//
 
 #include "ccScalarFieldFromColorDlg.h"
 
@@ -36,31 +29,29 @@
 #endif
 
 ccScalarFieldFromColorDlg::ccScalarFieldFromColorDlg(QWidget* parent/*=0*/)
-    : QDialog(parent), Ui::scalarFieldFromColorDlg()
+	: QDialog(parent)
+	, Ui::scalarFieldFromColorDlg()
 {
-
-    setupUi(this);
-    setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
-
-
+	setupUi(this);
+	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 }
 
 bool ccScalarFieldFromColorDlg::getRStatus()
 {
-    return this->checkBoxR->isChecked();
+	return this->checkBoxR->isChecked();
 }
 
 bool ccScalarFieldFromColorDlg::getGStatus()
 {
-    return this->checkBoxG->isChecked();
+	return this->checkBoxG->isChecked();
 }
 
 bool ccScalarFieldFromColorDlg::getBStatus()
 {
-    return this->checkBoxB->isChecked();
+	return this->checkBoxB->isChecked();
 }
 
 bool ccScalarFieldFromColorDlg::getCompositeStatus()
 {
-    return this->checkBoxComposite->isChecked();
+	return this->checkBoxComposite->isChecked();
 }

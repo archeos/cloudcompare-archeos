@@ -26,6 +26,8 @@
 #include "ccPointCloud.h"
 #include "ccNormalVectors.h"
 #include "ccMaterialSet.h"
+#include "ccScalarField.h"
+#include "ccColorScalesManager.h"
 
 //CCLib
 #include <MeshSamplingTools.h>
@@ -42,8 +44,8 @@ ccGenericMesh::ccGenericMesh(QString name/*=QString()*/)
 	, m_showWired(false)
 	, m_stippling(false)
 {
-    setVisible(true);
-    lockVisibility(false);
+	setVisible(true);
+	lockVisibility(false);
 }
 
 void ccGenericMesh::showNormals(bool state)
@@ -149,14 +151,14 @@ unsigned ccGenericMesh::GET_MAX_LOD_FACES_NUMBER()
 
 void ccGenericMesh::handleColorRamp(CC_DRAW_CONTEXT& context)
 {
-    if (MACRO_Draw2D(context))
-    {
-        if (MACRO_Foreground(context) && !context.sfColorScaleToDisplay)
-        {
+	if (MACRO_Draw2D(context))
+	{
+		if (MACRO_Foreground(context) && !context.sfColorScaleToDisplay)
+		{
 			if (sfShown())
 			{
 				ccGenericPointCloud* vertices = getAssociatedCloud();
-				if (!vertices || !vertices->isA(CC_POINT_CLOUD))
+				if (!vertices || !vertices->isA(CC_TYPES::POINT_CLOUD))
 					return;
 
 				ccPointCloud* cloud = static_cast<ccPointCloud*>(vertices);
@@ -169,14 +171,14 @@ void ccGenericMesh::handleColorRamp(CC_DRAW_CONTEXT& context)
 				//we must also check that the parent is not a mesh itself with the same vertices! (in
 				//which case it will also take that in charge)
 				ccHObject* parent = getParent();
-				if (parent && parent->isKindOf(CC_MESH) && (ccHObjectCaster::ToGenericMesh(parent)->getAssociatedCloud() == vertices))
+				if (parent && parent->isKindOf(CC_TYPES::MESH) && (ccHObjectCaster::ToGenericMesh(parent)->getAssociatedCloud() == vertices))
 					return;
 
 				cloud->addColorRampInfo(context);
 				//cloud->drawScale(context);
 			}
-        }
-    }
+		}
+	}
 }
 
 void ccGenericMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
@@ -215,7 +217,7 @@ void ccGenericMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 		//per-triangle normals?
 		bool showTriNormals = (hasTriNormals() && triNormsShown());
 		//fix 'showNorms'
-        glParams.showNorms = showTriNormals || (vertices->hasNormals() && m_normalsDisplayed);
+		glParams.showNorms = showTriNormals || (vertices->hasNormals() && m_normalsDisplayed);
 
 		//materials & textures
 		bool applyMaterials = (hasMaterials() && materialsShown());
@@ -250,7 +252,7 @@ void ccGenericMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 		if (glParams.showSF)
 		{
-			assert(vertices->isA(CC_POINT_CLOUD));
+			assert(vertices->isA(CC_TYPES::POINT_CLOUD));
 			ccPointCloud* cloud = static_cast<ccPointCloud*>(vertices);
 
 			greyForNanScalarValues = (cloud->getCurrentDisplayedScalarField() && cloud->getCurrentDisplayedScalarField()->areNaNValuesShownInGrey());
@@ -293,7 +295,7 @@ void ccGenericMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 			}
 			else
 			{
-				assert(vertices->isA(CC_POINT_CLOUD));
+				assert(vertices->isA(CC_TYPES::POINT_CLOUD));
 				rgbColorsTable = static_cast<ccPointCloud*>(vertices)->rgbColors();
 			}
 		}
@@ -315,7 +317,7 @@ void ccGenericMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 		ccNormalVectors* compressedNormals = 0;
 		if (glParams.showNorms)
 		{
-			assert(vertices->isA(CC_POINT_CLOUD));
+			assert(vertices->isA(CC_TYPES::POINT_CLOUD));
 			normalsIndexesTable = static_cast<ccPointCloud*>(vertices)->normals();
 			compressedNormals = ccNormalVectors::GetUniqueInstance();
 		}
@@ -425,11 +427,11 @@ void ccGenericMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 						for (unsigned n=0; n<chunkSize; n+=decimStep)
 						{
 							const CCLib::TriangleSummitsIndexes* ti = getTriangleIndexes(chunkStart + n);
-							memcpy(_normals,vertices->getPointNormal(ti->i1),sizeof(PointCoordinateType)*3);
+							memcpy(_normals,vertices->getPointNormal(ti->i1).u,sizeof(PointCoordinateType)*3);
 							_normals+=3;
-							memcpy(_normals,vertices->getPointNormal(ti->i2),sizeof(PointCoordinateType)*3);
+							memcpy(_normals,vertices->getPointNormal(ti->i2).u,sizeof(PointCoordinateType)*3);
 							_normals+=3;
-							memcpy(_normals,vertices->getPointNormal(ti->i3),sizeof(PointCoordinateType)*3);
+							memcpy(_normals,vertices->getPointNormal(ti->i3).u,sizeof(PointCoordinateType)*3);
 							_normals+=3;
 						}
 					}
@@ -532,16 +534,16 @@ void ccGenericMesh::drawMeOnly(CC_DRAW_CONTEXT& context)
 						assert(triNormals);
 						int n1,n2,n3;
 						getTriangleNormalIndexes(n,n1,n2,n3);
-						N1 = (n1>=0 ? ccNormalVectors::GetNormal(triNormals->getValue(n1)) : 0);
-						N2 = (n1==n2 ? N1 : n1>=0 ? ccNormalVectors::GetNormal(triNormals->getValue(n2)) : 0);
-						N3 = (n1==n3 ? N1 : n3>=0 ? ccNormalVectors::GetNormal(triNormals->getValue(n3)) : 0);
+						N1 = (n1>=0 ? ccNormalVectors::GetNormal(triNormals->getValue(n1)).u : 0);
+						N2 = (n1==n2 ? N1 : n1>=0 ? ccNormalVectors::GetNormal(triNormals->getValue(n2)).u : 0);
+						N3 = (n1==n3 ? N1 : n3>=0 ? ccNormalVectors::GetNormal(triNormals->getValue(n3)).u : 0);
 
 					}
 					else
 					{
-						N1 = compressedNormals->getNormal(normalsIndexesTable->getValue(tsi->i1));
-						N2 = compressedNormals->getNormal(normalsIndexesTable->getValue(tsi->i2));
-						N3 = compressedNormals->getNormal(normalsIndexesTable->getValue(tsi->i3));
+						N1 = compressedNormals->getNormal(normalsIndexesTable->getValue(tsi->i1)).u;
+						N2 = compressedNormals->getNormal(normalsIndexesTable->getValue(tsi->i2)).u;
+						N3 = compressedNormals->getNormal(normalsIndexesTable->getValue(tsi->i3)).u;
 					}
 				}
 
@@ -750,9 +752,9 @@ ccPointCloud* ccGenericMesh::samplePoints(	bool densityBased,
 					unsigned triIndex = triIndices->getValue(i);
 					const CCVector3* P = cloud->getPoint(i);
 
-					CCVector3 N(0.0,0.0,1.0);
+					CCVector3 N(0,0,1);
 					interpolateNormals(triIndex,*P,N);
-					cloud->addNorm(N.u);
+					cloud->addNorm(N);
 				}
 
 				cloud->showNormals(true);
@@ -794,7 +796,7 @@ ccPointCloud* ccGenericMesh::samplePoints(	bool densityBased,
 					unsigned triIndex = triIndices->getValue(i);
 					const CCVector3* P = cloud->getPoint(i);
 
-					colorType C[3]={MAX_COLOR_COMP,MAX_COLOR_COMP,MAX_COLOR_COMP};
+					colorType C[3] = { MAX_COLOR_COMP, MAX_COLOR_COMP, MAX_COLOR_COMP };
 					interpolateColors(triIndex,*P,C);
 					cloud->addRGBColor(C);
 				}
@@ -821,6 +823,9 @@ ccPointCloud* ccGenericMesh::samplePoints(	bool densityBased,
 		double scale = getAssociatedCloud()->getGlobalScale();
 		cloud->setGlobalScale(scale);
 	}
+
+	if (triIndices)
+		triIndices->release();
 
 	return cloud;
 }

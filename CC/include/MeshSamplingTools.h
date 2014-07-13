@@ -18,11 +18,8 @@
 #ifndef MESH_SAMPLING_TOOLS_HEADER
 #define MESH_SAMPLING_TOOLS_HEADER
 
-#ifdef _MSC_VER
-//To get rid of the really annoying warnings about template class exportation
-#pragma warning( disable: 4530 )
-#endif
-
+//Local
+#include "CCCoreLib.h"
 #include "CCToolbox.h"
 #include "GenericChunkedArray.h"
 
@@ -37,14 +34,7 @@ class GenericMesh;
 class SimpleCloud;
 
 //! Mesh sampling algorithms
-
-#ifdef CC_USE_AS_DLL
-#include "CloudCompareDll.h"
-
-class CC_DLL_API MeshSamplingTools : public CCToolbox
-#else
-class MeshSamplingTools : public CCToolbox
-#endif
+class CC_CORE_LIB_API MeshSamplingTools : public CCToolbox
 {
 public:
 
@@ -60,7 +50,7 @@ public:
 		b=1-b. Let ABC be the triangle, then the new point P will be as
 		AP = a.AB+b.AC (AP,AB and AC are vectors here). The number of
 		points sampled on each triangle depends on the triangle's area.
-		Let s be this area, and µ the sampling density, then N = s*µ is
+		Let s be this area, and Âµ the sampling density, then N = s*Âµ is
 		the theoric (floating) number of points to sample. The floating
 		part of N (let's call it Nf, and let Ni be the integer part) is
 		handled by generating another random number between 0 and 1.
@@ -74,7 +64,7 @@ public:
 	**/
 	static SimpleCloud* samplePointsOnMesh(GenericMesh* theMesh,
 											double samplingDensity,
-                                            GenericProgressCallback* progressCb=0,
+											GenericProgressCallback* progressCb=0,
 											GenericChunkedArray<1,unsigned>* triIndices=0);
 
 	//! Samples points on a mesh
@@ -89,7 +79,7 @@ public:
 	**/
 	static SimpleCloud* samplePointsOnMesh(GenericMesh* theMesh,
 											unsigned numberOfPoints,
-                                            GenericProgressCallback* progressCb=0,
+											GenericProgressCallback* progressCb=0,
 											GenericChunkedArray<1,unsigned>* triIndices=0);
 
 protected:
@@ -104,9 +94,9 @@ protected:
 		\return the sampled points
 	**/
 	static SimpleCloud* samplePointsOnMesh(GenericMesh* theMesh,
-                                            double samplingDensity,
-                                            unsigned theoricNumberOfPoints,
-                                            GenericProgressCallback* progressCb=0,
+											double samplingDensity,
+											unsigned theoricNumberOfPoints,
+											GenericProgressCallback* progressCb=0,
 											GenericChunkedArray<1,unsigned>* triIndices=0);
 };
 

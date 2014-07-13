@@ -22,6 +22,7 @@
 #include "ccBasicTypes.h"
 #include "ccGenericPointCloud.h"
 #include "ccSphere.h"
+#include "ccGenericGLDisplay.h"
 
 //Qt
 #include <QSharedPointer>
@@ -36,8 +37,9 @@ cc2DLabel::cc2DLabel(QString name/*=QString()*/)
 	, m_dispIn3D(true)
 	, m_dispIn2D(true)
 {
-	m_screenPos[0]=m_screenPos[1]=0.05f;
-	clear();
+	m_screenPos[0] = m_screenPos[1] = 0.05f;
+
+	clear(false);
 
 	lockVisibility(false);
 	setEnabled(true);
@@ -72,57 +74,133 @@ QString cc2DLabel::getName() const
 
 void cc2DLabel::setPosition(float x, float y)
 {
-	m_screenPos[0]=x;
-	m_screenPos[1]=y;
+	m_screenPos[0] = x;
+	m_screenPos[1] = y;
 }
 
 bool cc2DLabel::move2D(int x, int y, int dx, int dy, int screenWidth, int screenHeight)
 {
 	assert(screenHeight > 0 && screenWidth > 0);
 	
-	m_screenPos[0] += (float)dx/(float)screenWidth;
-	m_screenPos[1] += (float)dy/(float)screenHeight;
+	m_screenPos[0] += static_cast<float>(dx)/static_cast<float>(screenWidth);
+	m_screenPos[1] += static_cast<float>(dy)/static_cast<float>(screenHeight);
 
 	return true;
 }
 
-void cc2DLabel::clear()
+void cc2DLabel::clear(bool ignoreDependencies)
 {
-	m_points.clear();
-	setVisible(false);
-	m_lastScreenPos[0]=m_lastScreenPos[1]=-1;
+	if (ignoreDependencies)
+	{
+		m_points.clear();
+	}
+	else
+	{
+		//remove all dependencies first!
+		while (!m_points.empty())
+		{
+			m_points.back().cloud->removeDependencyWith(this);
+			m_points.pop_back();
+		}
+	}
+
+	m_lastScreenPos[0] = m_lastScreenPos[1] = -1;
 	memset(m_labelROI,0,sizeof(int)*4);
+	setVisible(false);
+	setName("Label");
+}
+
+void cc2DLabel::onDeletionOf(const ccHObject* obj)
+{
+	ccHObject::onDeletionOf(obj); //remove dependencies, etc.
+
+	//check that associated clouds are not about to be deleted!
+	size_t pointsToRemove = 0;
+	{
+		for (size_t i=0; i<m_points.size(); ++i)
+			if (m_points[i].cloud == obj)
+				++pointsToRemove;
+	}
+
+	if (pointsToRemove == 0)
+		return;
+
+	if (pointsToRemove == m_points.size())
+	{
+		clear(true); //don't call clear as we don't want/need to update input object's dependencies!
+	}
+	else
+	{
+		//remove only the necessary points
+		size_t j=0;
+		for (size_t i=0; i<m_points.size(); ++i)
+		{
+			if (m_points[i].cloud != obj)
+			{
+				if (i != j)
+					std::swap(m_points[i],m_points[j]);
+				j++;
+			}
+		}
+		assert(j != 0);
+		m_points.resize(j);
+	}
+
+	updateName();
+}
+
+void cc2DLabel::updateName()
+{
+	switch(m_points.size())
+	{
+	case 0:
+		setName("Label");
+		break;
+	case 1:
+		setName("Point #pt_0_idx");
+		break;
+	case 2:
+		if (m_points[0].cloud == m_points[1].cloud)
+			setName("Vector #pt_0_idx - #pt_1_idx");
+		else
+			setName("Vector #pt_0_idx(@pt_0_cloud_id) - #pt_1_idx@(@pt_1_cloud_id)");
+		break;
+	case 3:
+		if (m_points[0].cloud == m_points[2].cloud && m_points[1].cloud == m_points[2].cloud)
+			setName("Triplet #pt_0_idx - #pt_1_idx - #pt_2_idx");
+		else
+			setName("Triplet #pt_0_idx(@pt_0_cloud_id) - #pt_1_idx(@pt_1_cloud_id) - #pt_2_idx(@pt_2_cloud_id)");
+		break;
+	}
 }
 
 bool cc2DLabel::addPoint(ccGenericPointCloud* cloud, unsigned pointIndex)
 {
 	assert(cloud && cloud->size()>pointIndex);
 
-	if (m_points.size()==3)
+	if (m_points.size() == 3)
 		return false;
 
-	m_points.resize(m_points.size()+1);
+	try
+	{
+		m_points.resize(m_points.size()+1);
+	}
+	catch(std::bad_alloc)
+	{
+		//not enough memory
+		return false;
+	}
+
 	m_points.back().cloud = cloud;
 	m_points.back().index = pointIndex;
 
-	switch(m_points.size())
-	{
-	case 1:
-		setName("Point #pt_0_idx");
-		break;
-	case 2:
-		if (m_points[0].cloud == cloud)
-			setName("Vector #pt_0_idx - #pt_1_idx");
-		else
-			setName("Vector #pt_0_idx(@pt_0_cloud_id) - #pt_1_idx@(@pt_1_cloud_id)");
-		break;
-	case 3:
-		if (m_points[0].cloud == cloud && m_points[1].cloud == cloud)
-			setName("Triplet #pt_0_idx - #pt_1_idx - #pt_2_idx");
-		else
-			setName("Triplet #pt_0_idx(@pt_0_cloud_id) - #pt_1_idx(@pt_1_cloud_id) - #pt_2_idx(@pt_2_cloud_id)");
-		break;
-	}
+	updateName();
+
+	//we want to be notified whenever an associated cloud is deleted (in which case
+	//we'll automatically clear the label)
+	cloud->addDependency(this,DP_NOTIFY_OTHER_ON_DELETE);
+	//we must also warn the cloud whenever we delete this label
+	//addDependency(cloud,DP_NOTIFY_OTHER_ON_DELETE); //DGM: automatically done by the previous call to addDependency!
 
 	return true;
 }
@@ -181,7 +259,7 @@ bool cc2DLabel::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 
 	//points & associated cloud ID (dataVersion>=20)
 	assert(m_points.empty());
-	for (uint32_t i=0;i<count;++i)
+	for (uint32_t i=0; i<count; ++i)
 	{
 		//point index
 		uint32_t index = 0;
@@ -237,12 +315,42 @@ double GetAngle_deg(CCVector3& AB, CCVector3& AC)
 	return 180.0*acos(dotprod)/M_PI;
 }
 
+void AddPointCoordinates(QStringList& body, unsigned pointIndex, ccGenericPointCloud* cloud, int precision)
+{
+	assert(cloud);
+	const CCVector3* P = cloud->getPointPersistentPtr(pointIndex);
+	const CCVector3d& shift = cloud->getGlobalShift();
+	bool isShifted = (shift.norm2() != 0);
+
+	QString coordStr = QString("P#%0:").arg(pointIndex);
+	if (isShifted)
+	{
+		body << coordStr;
+		coordStr = QString("  [shifted]");
+	}
+	
+	coordStr += QString(" (%1;%2;%3)").arg(P->x,0,'f',precision).arg(P->y,0,'f',precision).arg(P->z,0,'f',precision);
+	body << coordStr;
+	
+	if (isShifted)
+	{
+		CCVector3d Pg = CCVector3d::fromArray(P->u) + shift;
+		QString globCoordStr = QString("  [original] (%1;%2;%3)").arg(Pg.x,0,'f',precision).arg(Pg.y,0,'f',precision).arg(Pg.z,0,'f',precision);
+		body << globCoordStr;
+	}
+}
+
 QStringList cc2DLabel::getLabelContent(int precision)
 {
 	QStringList body;
 
 	switch(m_points.size())
 	{
+	case 0:
+		//can happen if the associated cloud(s) has(ve) been deleted!
+		body << "Deprecated";
+		break;
+
 	case 1: //point
 		{
 			//init title
@@ -254,16 +362,13 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			//coordinates
 			ccGenericPointCloud* cloud = m_points[0].cloud;
 			const unsigned& pointIndex = m_points[0].index;
-			const CCVector3* P = cloud->getPointPersistentPtr(pointIndex);
-			QString coordStr = QString("P#%0: (%1;%2;%3)").arg(pointIndex).arg(P->x,0,'f',precision).arg(P->y,0,'f',precision).arg(P->z,0,'f',precision);
-			body << coordStr;
+			AddPointCoordinates(body,pointIndex,cloud,precision);
 
 			//normal
 			if (cloud->hasNormals())
 			{
-				const PointCoordinateType* N = cloud->getPointNormal(pointIndex);
-				assert(N);
-				QString normStr = QString("Normal: (%1;%2;%3)").arg(N[0],0,'f',precision).arg(N[1],0,'f',precision).arg(N[2],0,'f',precision);
+				const CCVector3& N = cloud->getPointNormal(pointIndex);
+				QString normStr = QString("Normal: (%1;%2;%3)").arg(N.x,0,'f',precision).arg(N.y,0,'f',precision).arg(N.z,0,'f',precision);
 				body << normStr;
 			}
 			//color
@@ -283,6 +388,7 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			}
 		}
 		break;
+
 	case 2: //vector
 		{
 			//1st point
@@ -298,12 +404,11 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			QString distStr = QString("Distance = %1").arg(d,0,'f',precision);
 			body << distStr;
 
-			QString coordStr1 = QString("P#%0: (%1;%2;%3)").arg(pointIndex1).arg(P1->x,0,'f',precision).arg(P1->y,0,'f',precision).arg(P1->z,0,'f',precision);
-			body << coordStr1;
-			QString coordStr2 = QString("P#%0: (%1;%2;%3)").arg(pointIndex2).arg(P2->x,0,'f',precision).arg(P2->y,0,'f',precision).arg(P2->z,0,'f',precision);
-			body << coordStr2;
+			AddPointCoordinates(body,pointIndex1,cloud1,precision);
+			AddPointCoordinates(body,pointIndex2,cloud2,precision);
 		}
 		break;
+
 	case 3: //triangle/plane
 		{
 			//1st point
@@ -328,12 +433,9 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			body << areaStr;
 
 			//coordinates
-			QString coordStr1 = QString("A#%0: (%1;%2;%3)").arg(pointIndex1).arg(P1->x,0,'f',precision).arg(P1->y,0,'f',precision).arg(P1->z,0,'f',precision);
-			body << coordStr1;
-			QString coordStr2 = QString("B#%0: (%1;%2;%3)").arg(pointIndex2).arg(P2->x,0,'f',precision).arg(P2->y,0,'f',precision).arg(P2->z,0,'f',precision);
-			body << coordStr2;
-			QString coordStr3 = QString("C#%0: (%1;%2;%3)").arg(pointIndex3).arg(P3->x,0,'f',precision).arg(P3->y,0,'f',precision).arg(P3->z,0,'f',precision);
-			body << coordStr3;
+			AddPointCoordinates(body,pointIndex1,cloud1,precision);
+			AddPointCoordinates(body,pointIndex2,cloud2,precision);
+			AddPointCoordinates(body,pointIndex3,cloud3,precision);
 
 			//normal
 			N.normalize();
@@ -343,18 +445,19 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			//angle
 			CCVector3 P2P3 = *P3-*P2;
 
-            //negatives
-            CCVector3 _P1P2 = -P1P2;
-            CCVector3 _P1P3 = -P1P3;
-            CCVector3 _P2P3 = -P2P3;
+			//negatives
+			CCVector3 _P1P2 = -P1P2;
+			CCVector3 _P1P3 = -P1P3;
+			CCVector3 _P2P3 = -P2P3;
 
 			double angleAtP1 = GetAngle_deg(P1P2,P1P3);
-            double angleAtP2 = GetAngle_deg(P2P3,_P1P2);
-            double angleAtP3 = GetAngle_deg(_P1P3,_P2P3); //should be equal to 180-a1-a2!
+			double angleAtP2 = GetAngle_deg(P2P3,_P1P2);
+			double angleAtP3 = GetAngle_deg(_P1P3,_P2P3); //should be equal to 180-a1-a2!
 			QString angleStr = QString("Angles: A=%1 - B=%3 - C=%5 deg.").arg(angleAtP1,0,'f',precision).arg(angleAtP2,0,'f',precision).arg(angleAtP3,0,'f',precision);
 			body << angleStr;
 		}
 		break;
+
 	default:
 		assert(false);
 		break;
@@ -415,13 +518,13 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 		glPushName(getUniqueIDForDisplay());
 	}
 
-    const float c_sizeFactor = 4.0f;
-    bool loop=false;
+	const float c_sizeFactor = 4.0f;
+	bool loop = false;
 
 	size_t count = m_points.size();
-    switch (count)
-    {
-    case 3:
+	switch (count)
+	{
+	case 3:
 		{
 			glPushAttrib(GL_COLOR_BUFFER_BIT);
 			glEnable(GL_BLEND);
@@ -436,7 +539,7 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 			glPopAttrib();
 			loop=true;
 		}
-    case 2:
+	case 2:
 		{
 			//segment width
 			glPushAttrib(GL_LINE_BIT);
@@ -460,7 +563,7 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 			glPopAttrib();
 		}
 
-    case 1:
+	case 1:
 		{
 			//display point marker as spheres
 			{
@@ -507,12 +610,17 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 				{
 					const CCVector3* P = m_points[j].cloud->getPoint(m_points[j].index);
 					QString title = (count == 1 ? getName() : QString("P#%0").arg(m_points[j].index));
-					context._win->display3DLabel( title, *P+CCVector3(context.pickedPointsTextShift), ccColor::magenta, font);
+					context._win->display3DLabel(	title,
+													*P + CCVector3(	context.pickedPointsTextShift,
+																	context.pickedPointsTextShift,
+																	context.pickedPointsTextShift),
+													ccColor::magenta,
+													font );
 				}
 				glPopAttrib();
 			}
 		}
-    }
+	}
 
 	if (pushName)
 		glPopName();
@@ -585,11 +693,12 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 		if (!body.empty())
 		{
 			dy += c_margin;	//vertical margin above separator
-			for (int j=0;j<body.size();++j)
+			for (int j=0; j<body.size(); ++j)
 			{
 				dx = std::max(dx,bodyFontMetrics.width(body[j]));
-				dy += (c_margin+strHeight); //margin + body line height
+				dy += strHeight; //body line height
 			}
+			dy += c_margin;	//vertical margin below text
 		}
 		else
 		{
@@ -718,12 +827,12 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 
 	//main rectangle
 	glColor4ubv(defaultBkgColor);
-    glBegin(GL_QUADS);
-    glVertex2i(m_labelROI[0], -m_labelROI[1]);
-    glVertex2i(m_labelROI[0], -m_labelROI[3]);
-    glVertex2i(m_labelROI[2], -m_labelROI[3]);
-    glVertex2i(m_labelROI[2], -m_labelROI[1]);
-    glEnd();
+	glBegin(GL_QUADS);
+	glVertex2i(m_labelROI[0], -m_labelROI[1]);
+	glVertex2i(m_labelROI[0], -m_labelROI[3]);
+	glVertex2i(m_labelROI[2], -m_labelROI[3]);
+	glVertex2i(m_labelROI[2], -m_labelROI[1]);
+	glEnd();
 
 	//if (highlighted)
 	{
@@ -741,18 +850,18 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 
 	//draw close button
 	/*glColor3ubv(ccColor::black);
-    glBegin(GL_LINE_LOOP);
-    glVertex2i(m_closeButtonROI[0],-m_closeButtonROI[1]);
-    glVertex2i(m_closeButtonROI[0],-m_closeButtonROI[3]);
-    glVertex2i(m_closeButtonROI[2],-m_closeButtonROI[3]);
-    glVertex2i(m_closeButtonROI[2],-m_closeButtonROI[1]);
-    glEnd();
-    glBegin(GL_LINES);
-    glVertex2i(m_closeButtonROI[0]+2,-m_closeButtonROI[1]+2);
-    glVertex2i(m_closeButtonROI[2]-2,-m_closeButtonROI[3]-2);
-    glVertex2i(m_closeButtonROI[2]-2,-m_closeButtonROI[1]+2);
-    glVertex2i(m_closeButtonROI[0]+2,-m_closeButtonROI[3]-2);
-    glEnd();
+	glBegin(GL_LINE_LOOP);
+	glVertex2i(m_closeButtonROI[0],-m_closeButtonROI[1]);
+	glVertex2i(m_closeButtonROI[0],-m_closeButtonROI[3]);
+	glVertex2i(m_closeButtonROI[2],-m_closeButtonROI[3]);
+	glVertex2i(m_closeButtonROI[2],-m_closeButtonROI[1]);
+	glEnd();
+	glBegin(GL_LINES);
+	glVertex2i(m_closeButtonROI[0]+2,-m_closeButtonROI[1]+2);
+	glVertex2i(m_closeButtonROI[2]-2,-m_closeButtonROI[3]-2);
+	glVertex2i(m_closeButtonROI[2]-2,-m_closeButtonROI[1]+2);
+	glVertex2i(m_closeButtonROI[0]+2,-m_closeButtonROI[3]-2);
+	glEnd();
 	//*/
 
 	//display text
@@ -778,7 +887,7 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 
 			//display body
 			yStartRel -= c_margin;
-			for (int i=0;i<body.size();++i)
+			for (int i=0; i<body.size(); ++i)
 			{
 				yStartRel -= strHeight;
 				context._win->displayText(body[i],xStart+xStartRel,yStart+yStartRel,ccGenericGLDisplay::ALIGN_DEFAULT,0,defaultTextColor,&bodyFont);
