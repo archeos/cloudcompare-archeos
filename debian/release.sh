@@ -7,7 +7,7 @@ ppaversion=1
 for d in precise quantal raring saucy trusty
 do
     # Saucy package can be build from 'experimental' branch, with DXF support
-    if [ $d = "saucy" ]
+    if [ $d = "saucy" ] || [ $d = "trusty" ]
     then
         git checkout experimental
     fi
