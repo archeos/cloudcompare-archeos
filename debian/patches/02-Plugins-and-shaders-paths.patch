@@ -34,3 +34,77 @@ Subject: Plugins and shaders paths
  #endif
  
  	ccLog::Print(QString("Plugins lookup dir.: %1").arg(pluginsPath));
+--- a/qCC/CMakeLists.txt
++++ b/qCC/CMakeLists.txt
+@@ -119,7 +119,7 @@ if( WIN32 )
+ endif()
+ 
+ # install program
+-install_ext( TARGETS ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} )
++install_ext( TARGETS ${PROJECT_NAME} /usr/bin )
+ 
+ # Auxiliary files
+ # set( auxFiles bin_other/history.txt bin_other/license.txt bin_other/global_shift_list_template.txt )
+@@ -159,9 +159,9 @@ if( APPLE )
+    #install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.frag DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders/Rendering )
+    #install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.vert DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders/Rendering )
+ else()
+-   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders )
+-   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert ${CLOUDCOMPARE_DEST_FOLDER} /shaders )
+-   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders/ColorRamp )
++    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION /usr/local/share/cloudcompare/shaders/cloudcompare )
++    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION /usr/local/share/cloudcompare/shaders/cloudcompare )
++    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag DESTINATION /usr/local/share/cloudcompare/shaders/cloudcompare/ColorRamp )
+    #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
+    #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.vert ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
+ endif()
+--- a/ccViewer/CMakeLists.txt
++++ b/ccViewer/CMakeLists.txt
+@@ -115,7 +115,7 @@ if( WIN32 )
+ endif()
+ 
+ # install program
+-install_ext( TARGETS ccViewer ${CCVIEWER_DEST_FOLDER} )
++install_ext( TARGETS ccViewer /usr/bin )
+ 
+ # Auxiliary files
+ set( auxFiles bin_other/license.txt )
+@@ -153,5 +153,5 @@ endif( APPLE )
+ if( APPLE )
+    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/../qCC/shaders/ColorRamp/color_ramp.frag DESTINATION ${CCVIEWER_MAC_BASE_DIR}/Contents/Shaders/ColorRamp )
+ else()
+-   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/../qCC/shaders/ColorRamp/color_ramp.frag ${CCVIEWER_DEST_FOLDER} /shaders/ColorRamp )
++    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/../qCC/shaders/ColorRamp/color_ramp.frag DESTINATION /usr/share/cloudcompare/shaders/ccViewer/ColorRamp )
+ endif()
+--- a/plugins/CMakePluginTpl.cmake
++++ b/plugins/CMakePluginTpl.cmake
+@@ -75,7 +75,7 @@ if( APPLE )
+ 	install( TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Plugins/ccPlugins COMPONENT Runtime )
+ 	set( CLOUDCOMPARE_PLUGINS ${CLOUDCOMPARE_PLUGINS} ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Plugins/ccPlugins/lib${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "CloudCompare plugin list")
+ else()
+-	install_shared( ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} 1 /plugins )
++	install_shared( ${PROJECT_NAME} /usr/lib/cloudcompare/plugins 1 /CloudCompare )
+ endif()
+ 
+ #'GL filter' plugins specifics
+@@ -87,7 +87,7 @@ if( CC_SHADER_FOLDER )
+ 			install( TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${CCVIEWER_MAC_BASE_DIR}/Contents/Plugins/ccViewerPlugins COMPONENT Runtime )
+ 			set( CCVIEWER_PLUGINS ${CCVIEWER_PLUGINS} ${CCVIEWER_MAC_BASE_DIR}/Contents/Plugins/ccViewerPlugins/lib${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "ccViewer plugin list")
+ 		else()
+-			install_shared( ${PROJECT_NAME} ${CCVIEWER_DEST_FOLDER} 1 /plugins )
++			install_shared( ${PROJECT_NAME} /usr/lib/cloudcompare/plugins 1 /ccViewer )
+ 		endif()
+ 	endif()
+ 
+@@ -100,9 +100,9 @@ if( CC_SHADER_FOLDER )
+ 				install( FILES ${filename} DESTINATION ${CCVIEWER_MAC_BASE_DIR}/Contents/Shaders/${CC_SHADER_FOLDER} )
+ 			endif()
+ 		else()
+-			install_ext( FILES ${filename} ${CLOUDCOMPARE_DEST_FOLDER} /shaders/${CC_SHADER_FOLDER} )
++            install( FILES ${filename} DESTINATION /usr/share/cloudcompare/shaders/CloudCompare/${CC_SHADER_FOLDER} )
+ 			if( ${OPTION_BUILD_CCVIEWER} )
+-				install_ext( FILES ${filename} ${CCVIEWER_DEST_FOLDER} /shaders/${CC_SHADER_FOLDER} )
++                install( FILES ${filename} DESTINATION /usr/share/cloudcompare/shaders/ccViewer/${CC_SHADER_FOLDER} )
+ 			endif()
+ 		endif()
+ 	endforeach()
