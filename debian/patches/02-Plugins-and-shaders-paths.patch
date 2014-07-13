@@ -8,7 +8,7 @@ Subject: Plugins and shaders paths
  	return path + "Shaders";
  #else
 -	return QApplication::applicationDirPath() + "/shaders";
-+	return "/usr/share/cloudcompare/shaders";
++	return "/usr/share/cloudcompare/shaders/CloudCompare";
  #endif
  }
  
@@ -19,7 +19,7 @@ Subject: Plugins and shaders paths
  #else
  	//plugins are in bin/plugins
 -	m_pluginsPath = QCoreApplication::applicationDirPath()+QString("/plugins");
-+	m_pluginsPath = "/usr/lib/cloudcompare/plugins/cloudcompare";
++	m_pluginsPath = "/usr/lib/cloudcompare/plugins/CloudCompare";
  #endif
  
  	ccConsole::Print(QString("Plugins lookup dir.: %1").arg(m_pluginsPath));
@@ -52,9 +52,9 @@ Subject: Plugins and shaders paths
 -   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders )
 -   install_ext( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert ${CLOUDCOMPARE_DEST_FOLDER} /shaders )
 -   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders/ColorRamp )
-+    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION /usr/local/share/cloudcompare/shaders/cloudcompare )
-+    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION /usr/local/share/cloudcompare/shaders/cloudcompare )
-+    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag DESTINATION /usr/local/share/cloudcompare/shaders/cloudcompare/ColorRamp )
++    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.frag DESTINATION /usr/share/cloudcompare/shaders/CloudCompare )
++    install( FILES ${CC_FBO_LIB_SOURCE_DIR}/bilateral/bilateral.vert DESTINATION /usr/share/cloudcompare/shaders/CloudCompare )
++    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ColorRamp/color_ramp.frag DESTINATION /usr/share/cloudcompare/shaders/CloudCompare/ColorRamp )
     #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
     #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.vert ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
  endif()

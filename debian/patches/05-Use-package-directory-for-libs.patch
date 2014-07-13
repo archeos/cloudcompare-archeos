@@ -13,3 +13,15 @@ Subject: Use package directory for libs
  else()
  	foreach( dest ${INSTALL_DESTINATIONS} )
  		install_shared( CC_CORE_LIB ${dest} 1 )
+--- a/libs/qCC_db/CMakeLists.txt
++++ b/libs/qCC_db/CMakeLists.txt
+@@ -52,7 +52,8 @@ endif()
+ 
+ # install (shared) lib to specified destinations
+ if( UNIX )
+-	install_shared( ${PROJECT_NAME} lib 0 ) #default destination: /usr/lib
++	install_shared( ${PROJECT_NAME} /usr/lib/cloudcompare 0 ) #default destination: /usr/lib
++    SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")
+ else()
+ foreach( dest ${INSTALL_DESTINATIONS} )
+ 	install_shared( ${PROJECT_NAME} ${dest} 1 )
