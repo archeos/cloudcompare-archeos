@@ -35,3 +35,23 @@
  	dxf.writeView(*dw);
  	dxf.writeUcs(*dw);
  
+--- a/contrib/DxfLibSupport.cmake
++++ b/contrib/DxfLibSupport.cmake
+@@ -9,7 +9,7 @@ if( ${OPTION_USE_DXF_LIB} )
+ 	if ( NOT DXF_LIB_SRC_DIR )
+ 		message( SEND_ERROR "No DXF lib source dir specified (DXF_LIB_SRC_DIR)" )
+ 	else()
+-		add_subdirectory(contrib/dxflib)
++        # add_subdirectory(contrib/dxflib)
+ 		include_directories( ${DXF_LIB_SRC_DIR} )
+ 	endif()
+ 
+@@ -20,7 +20,7 @@ function( target_link_DXFLIB ) # 2 argum
+ 
+ if( ${OPTION_USE_DXF_LIB} )
+ 
+-	target_link_libraries( ${PROJECT_NAME} DXF_LIB )	
++	target_link_libraries( ${PROJECT_NAME} "-ldxflib" )	
+ 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_DXF_SUPPORT )
+ 
+ endif()
