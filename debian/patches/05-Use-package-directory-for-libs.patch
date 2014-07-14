@@ -3,25 +3,33 @@ Date: Fri, 15 Mar 2013 09:55:09 +0100
 Subject: Use package directory for libs
 --- a/CC/CMakeLists.txt
 +++ b/CC/CMakeLists.txt
-@@ -56,7 +56,8 @@ endif()
+@@ -56,7 +56,7 @@ endif()
  
  # Install (shared) library to specified destinations
  if( UNIX )
 -	install_shared( CC_CORE_LIB lib 0 ) #default destination: /usr/lib
-+	install_shared( CC_CORE_LIB lib/cloudcompare 0 ) #default destination: /usr/lib
-+    SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")
++	install_shared( CC_CORE_LIB /usr/lib/cloudcompare 0 ) #default destination: /usr/lib
  else()
  	foreach( dest ${INSTALL_DESTINATIONS} )
  		install_shared( CC_CORE_LIB ${dest} 1 )
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
-@@ -52,7 +52,8 @@ endif()
+@@ -52,7 +52,7 @@ endif()
  
  # install (shared) lib to specified destinations
  if( UNIX )
 -	install_shared( ${PROJECT_NAME} lib 0 ) #default destination: /usr/lib
 +	install_shared( ${PROJECT_NAME} /usr/lib/cloudcompare 0 ) #default destination: /usr/lib
-+    SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")
  else()
  foreach( dest ${INSTALL_DESTINATIONS} )
  	install_shared( ${PROJECT_NAME} ${dest} 1 )
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -19,6 +19,7 @@ if ( ${CMAKE_CURRENT_BINARY_DIR} STREQUA
+ 	endif()
+ endif()
+ 
++SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")
+ 
+ # Default debug suffix for libraries
+ if(MSVC)
