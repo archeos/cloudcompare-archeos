@@ -1,33 +1,6 @@
---- a/contrib/DxfLibSupport.cmake
-+++ b/contrib/DxfLibSupport.cmake
-@@ -6,10 +6,12 @@ OPTION( OPTION_USE_DXF_LIB "Build with R
- if( ${OPTION_USE_DXF_LIB} )
- 
- 	set( DXF_LIB_SRC_DIR "" CACHE PATH "DXF Lib SOURCE directory" )
-+	message( ${DXF_LIB_SRC_DIR})
-+	set(DXF_LIB_LIBRARY_FILE "-ldxflib")
- 	if ( NOT DXF_LIB_SRC_DIR )
- 		message( SEND_ERROR "No DXF lib source dir specified (DXF_LIB_SRC_DIR)" )
- 	else()
--		add_subdirectory(contrib/dxflib)
-+#		add_subdirectory(contrib/dxflib)
- 		include_directories( ${DXF_LIB_SRC_DIR} )
- 	endif()
- 
-@@ -19,8 +21,8 @@ endif()
- function( target_link_DXFLIB ) # 2 arguments: ARGV0 = project name
- 
- if( ${OPTION_USE_DXF_LIB} )
--
--	target_link_libraries( ${PROJECT_NAME} DXF_LIB )	
-+	target_link_libraries( ${PROJECT_NAME} "-ldxflib" )	
-+	
- 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_DXF_SUPPORT )
- 
- endif()
---- a/qCC/fileIO/DxfFilter.cpp
-+++ b/qCC/fileIO/DxfFilter.cpp
-@@ -582,8 +582,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+--- a/libs/qCC_io/DxfFilter.cpp
++++ b/libs/qCC_io/DxfFilter.cpp
+@@ -586,8 +586,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
  	dw->tableEnd();
  
  	//Writing Various Other Tables
@@ -38,8 +11,8 @@
  	dxf.writeView(*dw);
  	dxf.writeUcs(*dw);
  
---- a/qCC/plugins/qSRA/dxfProfilesExporter.cpp
-+++ b/qCC/plugins/qSRA/dxfProfilesExporter.cpp
+--- a/plugins/qSRA/dxfProfilesExporter.cpp
++++ b/plugins/qSRA/dxfProfilesExporter.cpp
 @@ -223,8 +223,8 @@ bool DxfProfilesExporter::SaveVerticalPr
  	dw->tableEnd();
  
