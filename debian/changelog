@@ -1,9 +1,15 @@
+cloudcompare (2.5.5-0archeos2) theodoric; urgency=low
+
+  * Fix a bug with rpath (patch #05)
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Mon, 14 Jul 2014 20:13:00 +0100
+
 cloudcompare (2.5.5-0archeos1) theodoric; urgency=low
 
   * New upstream version 2.5.5
     upstream changes are in the history.txt file.
 
- -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 10 JUL 2014 18:52:23 +0100
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sat, 12 Jul 2014 18:52:23 +0100
 
 cloudcompare (2.5.4.1-0archeos1) UNRELEASED; urgency=low
 
