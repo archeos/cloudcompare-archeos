@@ -2,7 +2,7 @@
 export DH_OPTIONS
 
 export DH_VERBOSE=1
-NPROCS:=2
+NPROCS:=$(shell grep -c ^processor /proc/cpuinfo)
 export DEB_BUILD_OPTIONS=parallel=$(NPROCS)
 
 %:
