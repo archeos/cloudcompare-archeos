@@ -122,6 +122,7 @@
 #include "ccAdjustZoomDlg.h"
 #include "ccBoundingBoxEditorDlg.h"
 #include "ccColorLevelsDlg.h"
+#include "ccSORFilterDlg.h"
 #include <ui_aboutDlg.h>
 
 //other
@@ -824,6 +825,7 @@ void MainWindow::connectActions()
 	connect(actionViewFromSensor,				SIGNAL(triggered()),	this,		SLOT(doActionSetViewFromSensor()));
 	//"Edit > Scalar fields" menu
 	connect(actionShowHistogram,				SIGNAL(triggered()),	this,		SLOT(showSelectedEntitiesHistogram()));
+	connect(actionComputeStatParams,			SIGNAL(triggered()),	this,		SLOT(doActionComputeStatParams()));
 	connect(actionSFGradient,					SIGNAL(triggered()),	this,		SLOT(doActionSFGradient()));
 	connect(actionGaussianFilter,				SIGNAL(triggered()),	this,		SLOT(doActionSFGaussianFilter()));
 	connect(actionBilateralFilter,				SIGNAL(triggered()),	this,		SLOT(doActionSFBilateralFilter()));
@@ -852,6 +854,9 @@ void MainWindow::connectActions()
 	connect(actionMatchBBCenters,				SIGNAL(triggered()),	this,		SLOT(doActionMatchBBCenters()));
 	connect(actionDelete,						SIGNAL(triggered()),	m_ccRoot,	SLOT(deleteSelectedEntities()));
 
+	//"Tools > Clean" menu
+	connect(actionNoiseFilter,					SIGNAL(triggered()),	this,		SLOT(doActionFilterNoise()));
+	
 	//"Tools > Projection" menu
 	connect(actionUnroll,						SIGNAL(triggered()),	this,		SLOT(doActionUnroll()));
 	connect(actionHeightGridGeneration,			SIGNAL(triggered()),	this,		SLOT(doActionHeightGridGeneration()));
@@ -864,7 +869,7 @@ void MainWindow::connectActions()
 	connect(actionCloudMeshDist,				SIGNAL(triggered()),	this,		SLOT(doActionCloudMeshDist()));
 	connect(actionCPS,							SIGNAL(triggered()),	this,		SLOT(doActionComputeCPS()));
 	//"Tools > Statistics" menu
-	connect(actionComputeStatParams,			SIGNAL(triggered()),	this,		SLOT(doActionComputeStatParams()));
+	connect(actionComputeStatParams2,			SIGNAL(triggered()),	this,		SLOT(doActionComputeStatParams())); //duplicated action --> we can't use the same otherwise we get an ugly console warning on Linux :(
 	connect(actionStatisticalTest,				SIGNAL(triggered()),	this,		SLOT(doActionStatisticalTest()));
 	//"Tools > Segmentation" menu
 	connect(actionLabelConnectedComponents,		SIGNAL(triggered()),	this,		SLOT(doActionLabelConnectedComponents()));
@@ -1031,9 +1036,19 @@ void MainWindow::doActionSetColor(bool colorize)
 			else if (cloud->getParent() && cloud->getParent()->isKindOf(CC_TYPES::MESH))
 				cloud->getParent()->showColors(true);
 		}
+		else if (ent->isKindOf(CC_TYPES::PRIMITIVE))
+		{
+			ccGenericPrimitive* prim = ccHObjectCaster::ToPrimitive(ent);
+			colorType col[3] = {static_cast<colorType>(newCol.red()),
+								static_cast<colorType>(newCol.green()),
+								static_cast<colorType>(newCol.blue()) };
+			prim->setColor(col);
+			ent->showColors(true);
+			ent->prepareDisplayForRefresh();
+		}
 		else if (ent->isA(CC_TYPES::POLY_LINE))
 		{
-			ccPolyline * poly = ccHObjectCaster::ToPolyline(ent);
+			ccPolyline* poly = ccHObjectCaster::ToPolyline(ent);
 			colorType col[3] = {static_cast<colorType>(newCol.red()),
 								static_cast<colorType>(newCol.green()),
 								static_cast<colorType>(newCol.blue()) };
@@ -3557,25 +3572,33 @@ void MainWindow::doActionAddIdField()
 	updateUI();
 }
 
+PointCoordinateType MainWindow::GetDefaultCloudKernelSize(ccGenericPointCloud* cloud)
+{
+	assert(cloud);
+	if (cloud && cloud->size() > 0)
+	{
+		//we get 1% of the cloud bounding box
+		//and we divide by the number of points / 10e6 (so that the kernel for a 20 M. points cloud is half the one of a 10 M. cloud)
+		return cloud->getBB().getDiagNorm() * static_cast<PointCoordinateType>(0.01/std::max(1.0,1.0e-7*static_cast<double>(cloud->size())));
+	}
+
+	return -PC_ONE;
+}
+
 PointCoordinateType MainWindow::GetDefaultCloudKernelSize(const ccHObject::Container& entities)
 {
-	PointCoordinateType sigma = -1;
+	PointCoordinateType sigma = -PC_ONE;
 
 	size_t selNum = entities.size();
 	//computation of a first sigma guess
 	for (size_t i=0; i<selNum; ++i)
 	{
 		ccPointCloud* pc = ccHObjectCaster::ToPointCloud(entities[i]);
-		if (pc && pc->size()>0)
-		{
-			//we get 1% of the cloud bounding box
-			//and we divide by the number of points / 10e6 (so that the kernel for a 20 M. points cloud is half the one of a 10 M. cloud)
-			PointCoordinateType sigmaCloud = pc->getBB().getDiagNorm() * static_cast<PointCoordinateType>(0.01/std::max(1.0,1.0e-7*static_cast<double>(pc->size())));
+		PointCoordinateType sigmaCloud = GetDefaultCloudKernelSize(pc);
 
-			//we keep the smallest value
-			if (sigma < 0 || sigmaCloud < sigma)
-				sigma = sigmaCloud;
-		}
+		//we keep the smallest value
+		if (sigma < 0 || sigmaCloud < sigma)
+			sigma = sigmaCloud;
 	}
 
 	return sigma;
@@ -5886,6 +5909,125 @@ void MainWindow::doActionMatchBBCenters()
 	updateUI();
 }
 
+static bool s_noiseFilterUseKnn = false;
+static int s_noiseFilterKnn = 6;
+static bool s_noiseFilterUseAbsError = false;
+static double s_noiseFilterAbsError = 1.0;
+static double s_noiseFilterNSigma = 1.0;
+static bool s_noiseFilterRemoveIsolatedPoints = false;
+
+void MainWindow::doActionFilterNoise()
+{
+	PointCoordinateType kernelRadius = GetDefaultCloudKernelSize(m_selectedEntities);
+
+	ccSORFilterDlg sorDlg(this);
+	
+	//set semi-persistent/dynamic parameters
+	sorDlg.radiusDoubleSpinBox->setValue(kernelRadius);
+	sorDlg.knnSpinBox->setValue(s_noiseFilterKnn);
+	sorDlg.nSigmaDoubleSpinBox->setValue(s_noiseFilterNSigma);
+	sorDlg.absErrorDoubleSpinBox->setValue(s_noiseFilterAbsError);
+	sorDlg.removeIsolatedPointsCheckBox->setChecked(s_noiseFilterRemoveIsolatedPoints);
+	if (s_noiseFilterUseAbsError)
+		sorDlg.absErrorRadioButton->setChecked(true);
+	else
+		sorDlg.relativeRadioButton->setChecked(true);
+	if (s_noiseFilterUseKnn)
+		sorDlg.knnRadioButton->setChecked(true);
+	else
+		sorDlg.radiusRadioButton->setChecked(true);
+
+	if (!sorDlg.exec())
+		return;
+
+	//update semi-persistent/dynamic parameters
+	kernelRadius = static_cast<PointCoordinateType>(sorDlg.radiusDoubleSpinBox->value());
+	s_noiseFilterUseKnn = sorDlg.knnRadioButton->isChecked();
+	s_noiseFilterKnn = sorDlg.knnSpinBox->value();
+	s_noiseFilterUseAbsError = sorDlg.absErrorRadioButton->isChecked();
+	s_noiseFilterNSigma = sorDlg.nSigmaDoubleSpinBox->value();
+	s_noiseFilterAbsError = sorDlg.absErrorDoubleSpinBox->value();
+	s_noiseFilterRemoveIsolatedPoints = sorDlg.removeIsolatedPointsCheckBox->isChecked();
+
+	ccProgressDialog pDlg(true,this);
+
+	size_t selNum = m_selectedEntities.size();
+	bool firstCloud = true;
+	
+	for (size_t i=0; i<selNum; ++i)
+	{
+		ccHObject* ent = m_selectedEntities[i];
+
+		//specific test for locked vertices
+		bool lockedVertices;
+		ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(ent,&lockedVertices);
+		if (cloud && lockedVertices)
+		{
+			DisplayLockedVerticesWarning(ent->getName(),selNum == 1);
+			continue;
+		}
+
+		//parameters
+		PointCoordinateType kernerRadius = GetDefaultCloudKernelSize(cloud);
+		double nSigma = 1.0;
+
+		//computation
+		CCLib::ReferenceCloud* selection = CCLib::CloudSamplingTools::sorFilter(cloud,
+																				kernelRadius,
+																				s_noiseFilterNSigma,
+																				s_noiseFilterRemoveIsolatedPoints,
+																				s_noiseFilterUseKnn,
+																				s_noiseFilterKnn,
+																				s_noiseFilterUseAbsError,
+																				s_noiseFilterAbsError,
+																				0,
+																				&pDlg);
+
+		if (selection)
+		{
+			if (selection->size() == cloud->size())
+			{
+				ccLog::Warning(QString("[doActionFilterNoise] No points were removed from cloud '%1'").arg(cloud->getName()));
+			}
+			else
+			{
+				ccPointCloud* cleanCloud = cloud->partialClone(selection);
+				if (cleanCloud)
+				{
+					cleanCloud->setName(cloud->getName()+QString(".clean"));
+					cleanCloud->setDisplay(cloud->getDisplay());
+					if (cloud->getParent())
+						cloud->getParent()->addChild(cleanCloud);
+					addToDB(cleanCloud);
+
+					cloud->setEnabled(false);
+					if (firstCloud)
+					{
+						ccConsole::Warning("Previously selected entities (sources) have been hidden!");
+						firstCloud = false;
+						m_ccRoot->selectEntity(cleanCloud,true);
+					}
+				}
+				else
+				{
+					ccConsole::Warning(QString("[doActionFilterNoise] Not enough memory to create clean version of cloud '%1'!").arg(cloud->getName()));
+				}
+			}
+			
+			delete selection;
+			selection = 0;
+		}
+		else
+		{
+			//no points fall inside selection!
+			ccConsole::Warning(QString("[doActionFilterNoise] Failed to apply SOR filter to cloud '%1'! (not enough memory?)").arg(cloud->getName()));
+		}
+	}
+
+	refreshAll();
+	updateUI();
+}
+
 void MainWindow::doActionUnroll()
 {
 	//there should be only one point cloud with sensor in current selection!
@@ -8114,7 +8256,7 @@ bool MainWindow::ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container
 	CCLib::Neighbourhood::CC_CURVATURE_TYPE curvType = CCLib::Neighbourhood::GAUSSIAN_CURV;
 
 	//computeScalarFieldGradient parameters
-	bool euclidian = false;
+	bool euclidean = false;
 
 	//computeRoughness parameters
 	PointCoordinateType roughnessKernelSize = PC_ONE;
@@ -8189,13 +8331,13 @@ bool MainWindow::ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container
 			//parameters already provided?
 			if (additionalParameters)
 			{
-				euclidian = *static_cast<bool*>(additionalParameters[0]);
+				euclidean = *static_cast<bool*>(additionalParameters[0]);
 			}
 			else //ask the user!
 			{
-				euclidian = (	QMessageBox::question(parent,
+				euclidean = (	QMessageBox::question(parent,
 								"Gradient",
-								"Is the scalar field composed of (euclidian) distances?",
+								"Is the scalar field composed of (euclidean) distances?",
 								QMessageBox::Yes | QMessageBox::No,
 								QMessageBox::No ) == QMessageBox::Yes );
 			}
@@ -8343,7 +8485,7 @@ bool MainWindow::ApplyCCLibAlgortihm(CC_LIB_ALGORITHM algo, ccHObject::Container
 
 			case CCLIB_ALGO_SF_GRADIENT:
 				result = CCLib::ScalarFieldTools::computeScalarFieldGradient(	cloud,
-																				euclidian,
+																				euclidean,
 																				false,
 																				&pDlg,
 																				octree);
@@ -9495,6 +9637,7 @@ void MainWindow::enableUIItems(dbTreeSelectionInfo& selInfo)
 	actionRenameSF->setEnabled(atLeastOneSF);
 	actionAddIdField->setEnabled(atLeastOneCloud);
 	actionComputeStatParams->setEnabled(atLeastOneSF);
+	actionComputeStatParams2->setEnabled(atLeastOneSF);
 	actionShowHistogram->setEnabled(atLeastOneSF);
 	actionGaussianFilter->setEnabled(atLeastOneSF);
 	actionBilateralFilter->setEnabled(atLeastOneSF);
