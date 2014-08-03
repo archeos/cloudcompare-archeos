@@ -7,3 +7,4 @@
 07-libfreenect-fix.patch
 08-Add-OpenMP-linker-flag.patch
 09-DXF_support.patch
+10-LIBLAS_support.patch
