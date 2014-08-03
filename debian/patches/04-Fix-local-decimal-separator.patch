@@ -1,9 +1,11 @@
 From: Romain Janvier <romain.janvier@hotmail.fr>
 Date: Fri, 15 Mar 2013 09:47:39 +0100
 Subject: Fix local decimal separator
---- a/ccViewer/main.cpp
-+++ b/ccViewer/main.cpp
-@@ -47,6 +47,7 @@ public:
+Index: cloudcompare-archeos/ccViewer/main.cpp
+===================================================================
+--- cloudcompare-archeos.orig/ccViewer/main.cpp	2014-08-03 18:01:14.257405245 +0200
++++ cloudcompare-archeos/ccViewer/main.cpp	2014-08-03 18:01:14.253405225 +0200
+@@ -47,6 +47,7 @@
  	{
  		setOrganizationName("CCCorp");
  		setApplicationName("CloudCompareViewer");
@@ -11,9 +13,11 @@ Subject: Fix local decimal separator
  #ifdef Q_OS_MAC
  		mViewer = NULL;
  
---- a/qCC/main.cpp
-+++ b/qCC/main.cpp
-@@ -53,6 +53,7 @@ public:
+Index: cloudcompare-archeos/qCC/main.cpp
+===================================================================
+--- cloudcompare-archeos.orig/qCC/main.cpp	2014-08-03 18:01:14.257405245 +0200
++++ cloudcompare-archeos/qCC/main.cpp	2014-08-03 18:01:14.253405225 +0200
+@@ -53,6 +53,7 @@
  	{
  		setOrganizationName("CCCorp");
  		setApplicationName("CloudCompare");
@@ -21,7 +25,7 @@ Subject: Fix local decimal separator
  #ifdef Q_OS_MAC
  		// Mac OS X apps don't show icons in menus
  		setAttribute( Qt::AA_DontShowIconsInMenus );
-@@ -152,7 +153,7 @@ int main(int argc, char **argv)
+@@ -152,7 +153,7 @@
  
  			mainWindow->addToDB(filenames,UNKNOWN_FILE);
  		}
@@ -29,4 +33,4 @@ Subject: Fix local decimal separator
 +
  		if (splash)
  		{
-             //we want the splash screen to be visible a minimum amount of time (1000 ms.)
+ 			//we want the splash screen to be visible a minimum amount of time (1000 ms.)

@@ -340,17 +340,17 @@ bool GeometricalAnalysisTools::computeApproxPointsDensityInACellAtLevel(const Dg
 	{
 		cell.points->getPoint(i,nNSS.queryPoint);
 
-        //the first point is always the point itself!
+		//the first point is always the point itself!
 		if (cell.parentOctree->findNearestNeighborsStartingFromCell(nNSS) > 1)
 		{
-            //DGM: now we only output the distance to the nearest neighbor
-            double R2 = nNSS.pointsInNeighbourhood[1].squareDistd; //R2 in fact
+			//DGM: now we only output the distance to the nearest neighbor
+			double R2 = nNSS.pointsInNeighbourhood[1].squareDistd; //R2 in fact
 			cell.points->setPointScalarValue(i,static_cast<ScalarType>(sqrt(R2)));
 		}
 		else
 		{
 			//shouldn't happen! Apart if the cloud has only one point...
-            cell.points->setPointScalarValue(i,NAN_VALUE);
+			cell.points->setPointScalarValue(i,NAN_VALUE);
 		}
 
 		if (nProgress && !nProgress->oneStep())
@@ -527,7 +527,7 @@ bool GeometricalAnalysisTools::computePointsRoughnessInACellAtLevel(const DgmOct
 	//for each point in the cell
 	for (unsigned i=0; i<n; ++i)
 	{
-        ScalarType d = NAN_VALUE;
+		ScalarType d = NAN_VALUE;
 		cell.points->getPoint(i,nNSS.queryPoint);
 
 		//look for neighbors inside a sphere
@@ -539,7 +539,7 @@ bool GeometricalAnalysisTools::computePointsRoughnessInACellAtLevel(const DgmOct
 			const unsigned globalIndex = cell.points->getPointGlobalIndex(i);
 			unsigned localIndex = 0;
 			while (localIndex < neighborCount && nNSS.pointsInNeighbourhood[localIndex].pointIndex != globalIndex)
-				++ localIndex;
+				++localIndex;
 			//the query point should be in the nearest neighbors set!
 			assert(localIndex < neighborCount);
 			if (localIndex+1 < neighborCount) //no need to swap with another point if it's already at the end!
@@ -550,9 +550,9 @@ bool GeometricalAnalysisTools::computePointsRoughnessInACellAtLevel(const DgmOct
 			DgmOctreeReferenceCloud neighboursCloud(&nNSS.pointsInNeighbourhood,neighborCount-1); //we don't take the query point into account!
 			Neighbourhood Z(&neighboursCloud);
 
-            const PointCoordinateType* lsq = Z.getLSQPlane();
-            if (lsq)
-                d = fabs(DistanceComputationTools::computePoint2PlaneDistance(&nNSS.queryPoint,lsq));
+			const PointCoordinateType* lsq = Z.getLSQPlane();
+			if (lsq)
+				d = fabs(DistanceComputationTools::computePoint2PlaneDistance(&nNSS.queryPoint,lsq));
 
 			//swap the points back to their original position (DGM: not necessary)
 			//if (localIndex+1 < neighborCount)
@@ -561,7 +561,7 @@ bool GeometricalAnalysisTools::computePointsRoughnessInACellAtLevel(const DgmOct
 			//}
 		}
 
-        cell.points->setPointScalarValue(i,d);
+		cell.points->setPointScalarValue(i,d);
 
 		if (nProgress && !nProgress->oneStep())
 			return false;
@@ -638,14 +638,11 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeCovarianceMatrix(GenericCl
 
 CCLib::SquareMatrixd GeometricalAnalysisTools::computeCrossCovarianceMatrix(GenericCloud* P,
 																			GenericCloud* Q,
-																			const PointCoordinateType* pGravityCenter,
-																			const PointCoordinateType* qGravityCenter)
+																			const CCVector3& Gp,
+																			const CCVector3& Gq)
 {
     assert(P && Q);
 	assert(Q->size() == P->size());
-
-	CCVector3 Gp = (pGravityCenter ? CCVector3(pGravityCenter) : computeGravityCenter(P));
-	CCVector3 Gq = (qGravityCenter ? CCVector3(qGravityCenter) : computeGravityCenter(Q));
 
 	//shortcuts to output matrix lines
 	CCLib::SquareMatrixd covMat(3);
@@ -658,7 +655,7 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeCrossCovarianceMatrix(Gene
 
 	//sums
 	unsigned count = P->size();
-	for (unsigned i=0;i<count;i++)
+	for (unsigned i=0; i<count; i++)
 	{
 		CCVector3 Pt = *P->getNextPoint() - Gp;
 		CCVector3 Qt = *Q->getNextPoint() - Gq;
@@ -681,18 +678,15 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeCrossCovarianceMatrix(Gene
 
 CCLib::SquareMatrixd GeometricalAnalysisTools::computeWeightedCrossCovarianceMatrix(GenericCloud* P,
 																					GenericCloud* Q,
-																					const PointCoordinateType* pGravityCenter/*=0*/,
-																					const PointCoordinateType* qGravityCenter/*=0*/,
+																					const CCVector3& Gp,
+																					const CCVector3& Gq,
 																					ScalarField* weightsP/*=0*/,
 																					ScalarField* weightsQ/*=0*/)
 {
     assert(P && Q);
 	assert(Q->size() == P->size());
 	assert(!weightsP || weightsP->currentSize() == P->size());
-	assert(!weightsQ || weightsQ->currentSize() == P->size());
-
-	CCVector3 Gp = (pGravityCenter ? CCVector3(pGravityCenter) : computeGravityCenter(P));
-	CCVector3 Gq = (qGravityCenter ? CCVector3(qGravityCenter) : computeGravityCenter(Q));
+	assert(!weightsQ || weightsQ->currentSize() == Q->size());
 
 	//shortcuts to output matrix lines
 	CCLib::SquareMatrixd covMat(3);
@@ -708,9 +702,11 @@ CCLib::SquareMatrixd GeometricalAnalysisTools::computeWeightedCrossCovarianceMat
 	double wSum = 0.0;
 	for (unsigned i=0; i<count; i++)
 	{
-		CCVector3 Pt = *P->getNextPoint()-Gp;
-		CCVector3 Qt = *Q->getNextPoint()-Gq;
+		CCVector3 Pt = *P->getNextPoint() - Gp;
+		CCVector3 Qt = *Q->getNextPoint() - Gq;
 
+		//Weighting scheme for cross-covariance is inspired from
+		//https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Weighted_sample_covariance
 		PointCoordinateType wi = PC_ONE;
 		if (weightsP)
 		{
