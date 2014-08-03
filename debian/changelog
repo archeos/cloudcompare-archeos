@@ -1,3 +1,9 @@
+cloudcompare (2.5.6~git20140801-1) UNRELEASED; urgency=medium
+
+  * Imported Upstream version 2.5.6~git20140801
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sun, 03 Aug 2014 17:49:28 +0200
+
 cloudcompare (2.5.5-0archeos2) theodoric; urgency=low
 
   * Fix a bug with rpath (patch #05)
