@@ -1,8 +1,8 @@
 #!/bin/bash
 
-version=2.5.5
+version=2.5.6~git20140801
 debversion=0
-ppaversion=2
+ppaversion=1
 
 for d in precise saucy trusty
 do
