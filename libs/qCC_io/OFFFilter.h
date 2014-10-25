@@ -23,13 +23,23 @@
 //! OFF file I/O filter
 /** See http://people.sc.fsu.edu/~jburkardt/data/off/off.html
 **/
-class OFFFilter : public FileIOFilter
+class QCC_IO_LIB_API OFFFilter : public FileIOFilter
 {
 public:
 
+	//static accessors
+	static inline QString GetFileFilter() { return "OFF mesh (*.off)"; }
+	static inline QString GetDefaultExtension() { return "off"; }
+
 	//inherited from FileIOFilter
-	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
+	virtual bool importSupported() const { return true; }
+	virtual bool exportSupported() const { return true; }
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
 	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
+	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
+	virtual bool canLoadExtension(QString upperCaseExt) const;
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const;
 
 };
 

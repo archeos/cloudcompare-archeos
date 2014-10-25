@@ -3,7 +3,7 @@ Date: Mon, 14 Jan 2013 20:50:53 +0100
 Subject: Aux files copy is not handled at cmake level
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -122,7 +122,7 @@ endif()
+@@ -123,7 +123,7 @@ endif()
  install_ext( TARGETS ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} )
  
  # Auxiliary files
@@ -12,7 +12,7 @@ Subject: Aux files copy is not handled at cmake level
  
  if( WIN32 )
  	# Export Qt dlls
-@@ -135,9 +135,9 @@ if( WIN32 )
+@@ -136,9 +136,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files
@@ -27,7 +27,7 @@ Subject: Aux files copy is not handled at cmake level
  if( APPLE )
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
-@@ -130,9 +130,9 @@ if( WIN32 )
+@@ -131,9 +131,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files

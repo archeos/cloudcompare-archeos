@@ -41,4 +41,4 @@ public:
 	unsigned char getFrameAveragingCount() const;
 };
 
-#endif
+#endif //CC_KINECT_DLG_HEADER

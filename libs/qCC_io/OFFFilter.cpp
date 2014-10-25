@@ -16,7 +16,6 @@
 //##########################################################################
 
 #include "OFFFilter.h"
-#include "ccCoordinatesShiftManager.h"
 
 //Qt
 #include <QApplication>
@@ -41,25 +40,44 @@
 //System
 #include <string.h>
 
+bool OFFFilter::canLoadExtension(QString upperCaseExt) const
+{
+	return (upperCaseExt == "OFF");
+}
+
+bool OFFFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	if (type == CC_TYPES::MESH)
+	{
+		multiple = false;
+		exclusive = true;
+		return true;
+	}
+	return false;
+}
+
 CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, QString filename)
 {
 	if (!entity)
 		return CC_FERR_BAD_ARGUMENT;
 
 	if (!entity->isKindOf(CC_TYPES::MESH))
+	{
+		ccLog::Warning("[OBJ] This filter can only save one mesh at a time!");
 		return CC_FERR_BAD_ENTITY_TYPE;
+	}
 
 	ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(entity);
-	if (mesh->size() == 0)
+	if (!mesh || mesh->size() == 0)
 	{
-		ccLog::Warning(QString("[OFF] No facet in mesh '%1'!").arg(mesh->getName()));
-		return CC_FERR_NO_ERROR;
+		ccLog::Warning("[OFF] Input mesh is empty!");
+		return CC_FERR_NO_SAVE;
 	}
 	ccGenericPointCloud* vertices = mesh->getAssociatedCloud();
 	if (!vertices || vertices->size() == 0)
 	{
-		ccLog::Warning(QString("[OFF] No vertices in mesh '%1'?!").arg(mesh->getName()));
-		return CC_FERR_NO_ERROR;
+		ccLog::Warning("[OFF] Input mesh has no vertices?!");
+		return CC_FERR_NO_SAVE;
 	}
 
 	//try to open file for saving
@@ -117,7 +135,7 @@ static QString GetNextLine(QTextStream& stream)
 	return currentLine;
 }
 
-CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
 	//try to open file
 	QFile fp(filename);
@@ -202,22 +220,10 @@ CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, bool a
 			//first point: check for 'big' coordinates
 			if (i == 0)
 			{
-				bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
-				if (shiftAlreadyEnabled)
-					Pshift = *coordinatesShift;
-				bool applyAll = false;
-				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
+				if (HandleGlobalShift(Pd,Pshift,parameters))
 				{
 					vertices->setGlobalShift(Pshift);
 					ccLog::Warning("[OFF] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
-
-					//we save coordinates shift information
-					if (applyAll && coordinatesShiftEnabled && coordinatesShift)
-					{
-						*coordinatesShiftEnabled = true;
-						*coordinatesShift = Pshift;
-					}
 				}
 			}
 

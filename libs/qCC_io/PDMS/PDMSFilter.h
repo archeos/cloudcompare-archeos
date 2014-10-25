@@ -18,19 +18,29 @@
 #ifndef CC_PDMS_FILTER_HEADER
 #define CC_PDMS_FILTER_HEADER
 
+#ifdef CC_PDMS_SUPPORT
+
 #include "../FileIOFilter.h"
 
 //! PDMS .mac file I/O filter
-class PDMSFilter : public FileIOFilter
+class QCC_IO_LIB_API PDMSFilter : public FileIOFilter
 {
 public:
 
-	//inherited from FileIOFilter
-	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
-	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	//static accessors
+	static inline QString GetFileFilter() { return "PDMS primitives (*.pdms *.pdmsmac *.mac)"; }
+	static inline QString GetDefaultExtension() { return "pdms"; }
 
-protected:
+	//inherited from FileIOFilter
+	virtual bool importSupported() const { return true; }
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
+	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
+	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
+	virtual bool canLoadExtension(QString upperCaseExt) const;
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const;
 
 };
 
-#endif
+#endif //CC_PDMS_SUPPORT
+
+#endif //CC_PDMS_FILTER_HEADER

@@ -19,28 +19,52 @@
 
 #include "FBXFilter.h"
 
-//qCC
-#include "ccCoordinatesShiftManager.h"
-
 //qCC_db
 #include <ccPointCloud.h>
 #include <ccMesh.h>
 #include <ccNormalVectors.h>
+#include <ccMaterialSet.h>
 
 //FBX SDK
 #include <fbxsdk.h>
+
+//Qt
+#include <QFileInfo>
+#include <QDir>
+#include <QMap>
+#include <QMessageBox>
+#include <QPushButton>
 
 //System
 #include <vector>
 #include <assert.h>
 
+bool FBXFilter::canLoadExtension(QString upperCaseExt) const
+{
+	return (upperCaseExt == "FBX");
+}
+
+bool FBXFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	if (type == CC_TYPES::MESH)
+	{
+		multiple = true;
+		exclusive = true;
+		return true;
+	}
+	return false;
+}
+
 // Converts a CC mesh to an FBX mesh
-static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene)
+static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene, QString filename, size_t meshIndex)
 {
 	if (!mesh)
 		return 0;
 
+	FbxNode* lNode = FbxNode::Create(pScene,qPrintable(mesh->getName()));
 	FbxMesh* lMesh = FbxMesh::Create(pScene, qPrintable(mesh->getName()));
+	lNode->SetNodeAttribute(lMesh);
+
 
 	ccGenericPointCloud* cloud = mesh->getAssociatedCloud();
 	if (!cloud)
@@ -133,46 +157,219 @@ static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene)
 		ccLog::Warning("[FBX] Mesh has no normal! You can manually compute them (select it then call \"Edit > Normals > Compute\")");
 	}
 
+	// Set material mapping.
+	bool hasMaterial = false;
+	if (asCCMesh && asCCMesh->hasMaterials())
+	{
+		const ccMaterialSet* matSet = asCCMesh->getMaterialSet();
+		size_t matCount = matSet->size();
+
+		//check if we have textures
+		bool hasTextures = asCCMesh->hasTextures();
+		if (hasTextures)
+		{
+			//check that we actually have materials with textures as well!
+			hasTextures = false;
+			for (size_t i=0; i<matCount; ++i)
+			{
+				const ccMaterial& mat = matSet->at(i);
+				if (mat.hasTexture())
+				{
+					hasTextures = true;
+					break;
+				}
+			}
+		}
+
+		static const char gDiffuseElementName[] = "DiffuseUV";
+
+		// Create UV for Diffuse channel
+		if (hasTextures)
+		{
+			FbxGeometryElementUV* lUVDiffuseElement = lMesh->CreateElementUV(gDiffuseElementName);
+			assert(lUVDiffuseElement != 0);
+			lUVDiffuseElement->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
+			lUVDiffuseElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+
+			//fill Direct Array
+			const TextureCoordsContainer* texCoords = asCCMesh->getTexCoordinatesTable();
+			assert(texCoords);
+			if (texCoords)
+			{
+				unsigned count = texCoords->currentSize();
+				lUVDiffuseElement->GetDirectArray().SetCount(static_cast<int>(count));
+				for (unsigned i=0; i<count; ++i)
+				{
+					const float* uv = texCoords->getValue(i);
+					lUVDiffuseElement->GetDirectArray().SetAt(i,FbxVector2(uv[0],uv[1]));
+				}
+			}
+
+			//fill Indexes Array
+			assert(asCCMesh->hasPerTriangleTexCoordIndexes());
+			if (asCCMesh->hasPerTriangleTexCoordIndexes())
+			{
+				unsigned triCount = asCCMesh->size();
+				lUVDiffuseElement->GetIndexArray().SetCount(static_cast<int>(3*triCount));
+				for (unsigned j=0; j<triCount; ++j)
+				{
+					int t1=0, t2=0, t3=0;
+					asCCMesh->getTriangleTexCoordinatesIndexes(j, t1, t2, t3);
+
+					lUVDiffuseElement->GetIndexArray().SetAt(j*3+0,t1);
+					lUVDiffuseElement->GetIndexArray().SetAt(j*3+1,t2);
+					lUVDiffuseElement->GetIndexArray().SetAt(j*3+2,t3);
+				}
+			}
+		}
+
+		//Textures used in this file
+		QMap<QString,QString> texFilenames;
+		//directory to save textures (if any)
+		QFileInfo info(filename);
+		QString textDirName = info.baseName() + QString(".fbm");
+		QDir baseDir = info.absoluteDir();
+		QDir texDir = QDir(baseDir.absolutePath() + QString("/") + textDirName);
+
+		for (size_t i=0; i<matCount; ++i)
+		{
+			const ccMaterial& mat = matSet->at(i);
+			FbxSurfacePhong *lMaterial = FbxSurfacePhong::Create(pScene, qPrintable(mat.name));
+
+			lMaterial->Emissive.Set(FbxDouble3(mat.emission[0],mat.emission[1],mat.emission[2]));
+			lMaterial->Ambient.Set(FbxDouble3(mat.ambient[0],mat.ambient[1],mat.ambient[2]));
+			lMaterial->Diffuse.Set(FbxDouble3(mat.diffuseFront[0],mat.diffuseFront[1],mat.diffuseFront[2]));
+			lMaterial->Specular.Set(FbxDouble3(mat.specular[0],mat.specular[1],mat.specular[2]));
+			lMaterial->Shininess = mat.shininessFront;
+			lMaterial->ShadingModel.Set("Phong");
+
+			if (hasTextures && mat.hasTexture())
+			{
+				QString texFilename = mat.getAbsoluteFilename();
+				
+				//texture has not already been processed
+				if (!texFilenames.contains(texFilename))
+				{
+					//if necessary, we (try to) create a subfolder to store textures
+					if (!texDir.exists())
+					{
+						texDir = baseDir;
+						if (texDir.mkdir(textDirName))
+						{
+							texDir.cd(textDirName);
+						}
+						else
+						{
+							textDirName = QString();
+							ccLog::Warning("[FBX] Failed to create subfolder '%1' to store texture files (files will be stored next to the .fbx file)");
+						}
+					}
+
+					QFileInfo fileInfo(texFilename);
+					QString baseTexName = fileInfo.fileName();
+					//add extension
+					QString extension = QFileInfo(texFilename).suffix();
+					if (fileInfo.suffix().isEmpty())
+						baseTexName += QString(".png");
+
+					QString absoluteFilename = texDir.absolutePath() + QString("/") + baseTexName;
+					ccLog::PrintDebug(QString("[FBX] Material '%1' texture: %2").arg(mat.name).arg(absoluteFilename));
+
+					texFilenames[texFilename] = absoluteFilename;
+				}
+				//mat.texture.save(absoluteFilename);
+
+				// Set texture properties.
+				FbxFileTexture* lTexture = FbxFileTexture::Create(pScene,"DiffuseTexture");
+				assert(!texFilenames[texFilename].isEmpty());
+				lTexture->SetFileName(qPrintable(texFilenames[texFilename]));
+				lTexture->SetTextureUse(FbxTexture::eStandard);
+				lTexture->SetMappingType(FbxTexture::eUV);
+				lTexture->SetMaterialUse(FbxFileTexture::eModelMaterial);
+				lTexture->SetSwapUV(false);
+				lTexture->SetTranslation(0.0, 0.0);
+				lTexture->SetScale(1.0, 1.0);
+				lTexture->SetRotation(0.0, 0.0);
+				lTexture->UVSet.Set(FbxString(gDiffuseElementName)); // Connect texture to the proper UV
+
+				// don't forget to connect the texture to the corresponding property of the material
+				lMaterial->Diffuse.ConnectSrcObject(lTexture);
+			}
+
+			int matIndex = lNode->AddMaterial(lMaterial);
+			assert(matIndex  == static_cast<int>(i));
+		}
+
+		//don't forget to save the texture files
+		{
+			for (QMap<QString,QString>::ConstIterator it = texFilenames.begin(); it != texFilenames.end(); ++it)
+			{
+				const QImage image = ccMaterial::GetTexture(it.key());
+				image.mirrored().save(it.value());
+			}
+			
+			texFilenames.clear(); //don't need this anymore!
+		}
+
+		// Create 'triangle to material index' mapping
+		{
+			FbxGeometryElementMaterial* lMaterialElement = lMesh->CreateElementMaterial();
+			lMaterialElement->SetMappingMode(FbxGeometryElement::eByPolygon);
+			lMaterialElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+		}
+
+		hasMaterial = true;
+	}
+
 	// colors
 	if (cloud->hasColors())
 	{
 		FbxGeometryElementVertexColor* lGeometryElementVertexColor = lMesh->CreateElementVertexColor();
 		lGeometryElementVertexColor->SetMappingMode(FbxGeometryElement::eByControlPoint);
 		lGeometryElementVertexColor->SetReferenceMode(FbxGeometryElement::eDirect);
+		lGeometryElementVertexColor->GetDirectArray().SetCount(vertCount);
 		for (unsigned i=0; i<vertCount; ++i)
 		{
 			const colorType* C = cloud->getPointColor(i);
-			FbxColor col( FbxDouble3(	static_cast<double>(C[0])/MAX_COLOR_COMP,
-										static_cast<double>(C[1])/MAX_COLOR_COMP,
-										static_cast<double>(C[2])/MAX_COLOR_COMP ) );
-			lGeometryElementVertexColor->GetDirectArray().Add(col);
+			FbxColor col(	static_cast<double>(C[0])/MAX_COLOR_COMP,
+							static_cast<double>(C[1])/MAX_COLOR_COMP,
+							static_cast<double>(C[2])/MAX_COLOR_COMP );
+			lGeometryElementVertexColor->GetDirectArray().SetAt(i,col);
+		}
+
+		if (!hasMaterial)
+		{
+			//it seems that we have to create a fake material in order for the colors to be displayed (in Unity and FBX Review at least)!
+			FbxSurfacePhong *lMaterial = FbxSurfacePhong::Create(pScene, "ColorMaterial");
+
+			lMaterial->Emissive.Set(FbxDouble3(0,0,0));
+			lMaterial->Ambient.Set(FbxDouble3(0,0,0));
+			lMaterial->Diffuse.Set(FbxDouble3(1,1,1));
+			lMaterial->Specular.Set(FbxDouble3(0,0,0));
+			lMaterial->Shininess = 0;
+			lMaterial->ShadingModel.Set("Phong");
+
+			FbxGeometryElementMaterial* lMaterialElement = lMesh->CreateElementMaterial();
+			lMaterialElement->SetMappingMode(FbxGeometryElement::eAllSame);
+			lMaterialElement->SetReferenceMode(FbxGeometryElement::eDirect);
+			lNode->AddMaterial(lMaterial);
 		}
 	}
 
-	// Set material mapping.
-	//FbxGeometryElementMaterial* lMaterialElement = lMesh->CreateElementMaterial();
-	//lMaterialElement->SetMappingMode(FbxGeometryElement::eByPolygon);
-	//lMaterialElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
-
-	// Create polygons. Assign material indices.
+	// Create polygons
 	{
 		for (unsigned j=0; j<faceCount; ++j)
 		{
 			const CCLib::TriangleSummitsIndexes* tsi = mesh->getTriangleIndexes(j);
 
-			lMesh->BeginPolygon(static_cast<int>(j));
+			int matIndex = hasMaterial ? asCCMesh->getTriangleMtlIndex(j) : -1;
+			lMesh->BeginPolygon(matIndex);
 			lMesh->AddPolygon(tsi->i1);
 			lMesh->AddPolygon(tsi->i2);
 			lMesh->AddPolygon(tsi->i3);
 			lMesh->EndPolygon();
 		}
 	}
-
-	FbxNode* lNode = FbxNode::Create(pScene,qPrintable(mesh->getName()));
-
-	lNode->SetNodeAttribute(lMesh);
-
-	//CreateMaterials(pScene, lMesh);
 
 	return lNode;
 }
@@ -233,6 +430,22 @@ static bool SaveScene(FbxManager* pManager, FbxDocument* pScene, const char* pFi
 	return lStatus;
 }
 
+static QString s_defaultOutputFormat;
+
+void FBXFilter::SetDefaultOutputFormat(QString format)
+{
+	s_defaultOutputFormat = format;
+}
+
+QString SanitizeFBXFormatString(QString format)
+{
+	format.replace("(*.fbx)","");
+	format = format.trimmed();
+	format.replace(" ","_");
+	
+	return format;
+}
+
 CC_FILE_ERROR FBXFilter::saveToFile(ccHObject* entity, QString filename)
 {
 	if (!entity)
@@ -270,70 +483,147 @@ CC_FILE_ERROR FBXFilter::saveToFile(ccHObject* entity, QString filename)
 		ccLog::Print("[FBX] Autodesk FBX SDK version %s", lSdkManager->GetVersion());
 	}
 
-	//Create an IOSettings object. This object holds all import/export settings.
-	FbxIOSettings* ios = FbxIOSettings::Create(lSdkManager, IOSROOT);
-	lSdkManager->SetIOSettings(ios);
-
-	//Load plugins from the executable directory (optional)
-	//FbxString lPath = FbxGetApplicationDirectory();
-	//lSdkManager->LoadPluginsDirectory(lPath.Buffer());
-
-	//Create an FBX scene. This object holds most objects imported/exported from/to files.
-	FbxScene* lScene = FbxScene::Create(lSdkManager, "My Scene");
-	if( !lScene )
+	try
 	{
-		ccLog::Warning("[FBX] Error: Unable to create FBX scene!");
-		return CC_FERR_CONSOLE_ERROR;
-	}
+		//Create an IOSettings object. This object holds all import/export settings.
+		FbxIOSettings* ios = FbxIOSettings::Create(lSdkManager, IOSROOT);
+		lSdkManager->SetIOSettings(ios);
 
-	// create scene info
-	{
-		FbxDocumentInfo* sceneInfo = FbxDocumentInfo::Create(lSdkManager,"SceneInfo");
-		sceneInfo->mTitle = qPrintable(QString("Mesh: ") + (meshes.size() == 1 ? meshes[0]->getName() : QString("Multiple meshes")));
-		sceneInfo->mAuthor = "CloudCompare";
-		sceneInfo->mRevision = "rev. 1.0";
-		sceneInfo->mKeywords = "cloudcompare mesh";
+		//Load plugins from the executable directory (optional)
+		//FbxString lPath = FbxGetApplicationDirectory();
+		//lSdkManager->LoadPluginsDirectory(lPath.Buffer());
 
-		// we need to add the sceneInfo before calling AddThumbNailToScene because
-		// that function is asking the scene for the sceneInfo.
-		lScene->SetSceneInfo(sceneInfo);
-	}
-
-	//create thumbnail
-	//{
-	//	FbxThumbnail* lThumbnail = FbxThumbnail::Create(lScene,"");
-
-	//	lThumbnail->SetDataFormat(FbxThumbnail::eRGB_24);
-	//	lThumbnail->SetSize(FbxThumbnail::e64x64);
-	//	lThumbnail->SetThumbnailImage(cSceneThumbnail);
-
-	//	if (lScene->GetSceneInfo())
-	//	{
-	//		lScene->GetSceneInfo()->SetSceneThumbnail(lThumbnail);
-	//	}
-	//}
-
-	// Build the node tree.
-	FbxNode* lRootNode = lScene->GetRootNode();
-	{
-		for (size_t i=0; i<meshes.size(); ++i)
+		//Create an FBX scene. This object holds most objects imported/exported from/to files.
+		FbxScene* lScene = FbxScene::Create(lSdkManager, "My Scene");
+		if( !lScene )
 		{
-			FbxNode* meshNode = ToFbxMesh(meshes[i],lScene);
-			if (meshNode)
-				lRootNode->AddChild(meshNode);
-			else
-				ccLog::Warning(QString("[FBX] Failed to convert mesh '%1' to FBX mesh/node!").arg(meshes[i]->getName()));
+			ccLog::Warning("[FBX] Error: Unable to create FBX scene!");
+			return CC_FERR_CONSOLE_ERROR;
 		}
+
+		// create scene info
+		{
+			FbxDocumentInfo* sceneInfo = FbxDocumentInfo::Create(lSdkManager,"SceneInfo");
+			sceneInfo->mTitle = qPrintable(QString("Mesh: ") + (meshes.size() == 1 ? meshes[0]->getName() : QString("Multiple meshes")));
+			sceneInfo->mAuthor = "CloudCompare";
+			sceneInfo->mRevision = "rev. 1.0";
+			sceneInfo->mKeywords = "cloudcompare mesh";
+
+			// we need to add the sceneInfo before calling AddThumbNailToScene because
+			// that function is asking the scene for the sceneInfo.
+			lScene->SetSceneInfo(sceneInfo);
+		}
+
+		//create thumbnail
+		//{
+		//	FbxThumbnail* lThumbnail = FbxThumbnail::Create(lScene,"");
+
+		//	lThumbnail->SetDataFormat(FbxThumbnail::eRGB_24);
+		//	lThumbnail->SetSize(FbxThumbnail::e64x64);
+		//	lThumbnail->SetThumbnailImage(cSceneThumbnail);
+
+		//	if (lScene->GetSceneInfo())
+		//	{
+		//		lScene->GetSceneInfo()->SetSceneThumbnail(lThumbnail);
+		//	}
+		//}
+
+		// Build the node tree.
+		FbxNode* lRootNode = lScene->GetRootNode();
+		{
+			for (size_t i=0; i<meshes.size(); ++i)
+			{
+				FbxNode* meshNode = ToFbxMesh(meshes[i],lScene,filename,i);
+				if (meshNode)
+					lRootNode->AddChild(meshNode);
+				else
+					ccLog::Warning(QString("[FBX] Failed to convert mesh '%1' to FBX mesh/node!").arg(meshes[i]->getName()));
+			}
+		}
+
+		int fileFormat = -1;
+
+		//Display a combox box to let the user choose the export file format
+		{
+			FbxManager* pSdkManager = FbxManager::GetDefaultManager();
+			int lFormatCount = pSdkManager ? pSdkManager->GetIOPluginRegistry()->GetWriterFormatCount() : 0;
+
+			if (lFormatCount > 0)
+			{
+				if (s_defaultOutputFormat.isEmpty())
+				{
+					try
+					{
+						QMessageBox msgBox(QMessageBox::Question,"FBX format","Choose output format:");
+						QMap<QAbstractButton*,int> buttons;
+						for (int lFormatIndex=0; lFormatIndex<lFormatCount; lFormatIndex++)
+						{
+							if (pSdkManager->GetIOPluginRegistry()->WriterIsFBX(lFormatIndex))
+							{
+								FbxString lDesc = pSdkManager->GetIOPluginRegistry()->GetWriterFormatDescription(lFormatIndex);
+								QPushButton *button = msgBox.addButton(lDesc.Buffer(), QMessageBox::AcceptRole);
+								buttons[button] = lFormatIndex;
+							}
+						}
+						msgBox.exec();
+						//get the right format
+						fileFormat = buttons[msgBox.clickedButton()];
+					}
+					catch(...)
+					{
+					}
+				}
+				else
+				{
+					//try to find the default output format as set by the user
+					for (int lFormatIndex=0; lFormatIndex<lFormatCount; lFormatIndex++)
+					{
+						if (pSdkManager->GetIOPluginRegistry()->WriterIsFBX(lFormatIndex))
+						{
+							FbxString lDesc = pSdkManager->GetIOPluginRegistry()->GetWriterFormatDescription(lFormatIndex);
+							QString sanitizedDesc = SanitizeFBXFormatString(lDesc.Buffer());
+							if (s_defaultOutputFormat == sanitizedDesc)
+							{
+								ccLog::Print(QString("[FBX] Default output file format: %1").arg(sanitizedDesc));
+								fileFormat = lFormatIndex;
+								break;
+							}
+						}
+					}
+
+					//if we failed to find the specified file format, warn the user and display the list of supported formats
+					if (fileFormat < 0)
+					{
+						ccLog::Warning(QString("[FBX] File format '%1' not supported").arg(s_defaultOutputFormat));
+						ccLog::Print("[FBX] Supported output formats:");
+						for (int lFormatIndex=0; lFormatIndex<lFormatCount; lFormatIndex++)
+						{
+							if (pSdkManager->GetIOPluginRegistry()->WriterIsFBX(lFormatIndex))
+							{
+								FbxString lDesc = pSdkManager->GetIOPluginRegistry()->GetWriterFormatDescription(lFormatIndex);
+								ccLog::Print(QString("\t- %1").arg(SanitizeFBXFormatString(lDesc.Buffer())));
+							}
+						}
+					}
+
+				}
+			}
+		}
+
+		// Save the scene.
+		bool lResult = SaveScene(lSdkManager, lScene, qPrintable(filename),fileFormat);
+
+		// Destroy all objects created by the FBX SDK.
+		if( lSdkManager )
+			lSdkManager->Destroy();
+
+		return lResult ? CC_FERR_NO_ERROR : CC_FERR_CONSOLE_ERROR;
 	}
-
-	// Save the scene.
-	bool lResult = SaveScene(lSdkManager, lScene, qPrintable(filename));
-
-	// Destroy all objects created by the FBX SDK.
-	if( lSdkManager )
-		lSdkManager->Destroy();
-
-	return lResult ? CC_FERR_NO_ERROR : CC_FERR_CONSOLE_ERROR;
+	catch(...)
+	{
+		ccLog::Warning("[FBX] FBX SDK has thrown an unknown exception!");
+		return CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+	}
 }
 
 QString GetAttributeTypeName(FbxNodeAttribute::EType type)
@@ -368,7 +658,7 @@ QString GetAttributeTypeName(FbxNodeAttribute::EType type)
 }
 
 //converts a FBX mesh to a CC mesh
-static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& parameters)
 {
 	if (!fbxMesh)
 		return 0;
@@ -496,7 +786,6 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true
 		}
 	}
 
-
 	//normals can be per vertices or per-triangle
 	int perPointNormals = -1;
 	int perVertexNormals = -1;
@@ -581,67 +870,177 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true
 		}
 	}
 
+	//materials
+	ccMaterialSet* materials = 0;
+	{
+		FbxNode* lNode = fbxMesh->GetNode();
+		int lMaterialCount = lNode ? lNode->GetMaterialCount() : 0;
+		for (int i=0; i<lMaterialCount; i++)
+		{
+			FbxSurfaceMaterial *lBaseMaterial = lNode->GetMaterial(i);
+
+			bool isLambert = lBaseMaterial->GetClassId().Is(FbxSurfaceLambert::ClassId);
+			bool isPhong = lBaseMaterial->GetClassId().Is(FbxSurfacePhong::ClassId);
+			if (isLambert || isPhong)
+			{
+				ccMaterial mat(lBaseMaterial->GetName());
+
+				FbxSurfaceLambert* lLambertMat = static_cast<FbxSurfaceLambert*>(lBaseMaterial);
+			
+				for (int k=0; k<3; ++k)
+				{
+					mat.ambient[k]		= static_cast<float>(lLambertMat->Ambient.Get()[k]);
+					mat.diffuseBack[k]	= static_cast<float>(lLambertMat->Diffuse.Get()[k]);
+					mat.diffuseFront[k]	= mat.diffuseBack[k];
+					mat.emission[k]		= static_cast<float>(lLambertMat->Emissive.Get()[k]);
+
+					if (isPhong)
+					{
+						FbxSurfacePhong* lPhongMat = static_cast<FbxSurfacePhong*>(lBaseMaterial);
+						mat.specular[k]		= static_cast<float>(lPhongMat->Specular.Get()[k]);
+						mat.shininessBack	= static_cast<float>(lPhongMat->Shininess);
+						mat.shininessFront	= mat.shininessBack;
+					}
+				}
+
+				//import associated texture (if any)
+				{
+					int lTextureIndex;
+					FBXSDK_FOR_EACH_TEXTURE(lTextureIndex)
+					{
+						FbxProperty lProperty = lBaseMaterial->FindProperty(FbxLayerElement::sTextureChannelNames[lTextureIndex]);
+						if( lProperty.IsValid() )
+						{
+							int lTextureCount = lProperty.GetSrcObjectCount<FbxTexture>();
+							FbxTexture* texture = 0; //we can handle only one texture per material! We'll take the non layered one by default (if any)
+							for (int j = 0; j < lTextureCount; ++j)
+							{
+								//Here we have to check if it's layeredtextures, or just textures:
+								FbxLayeredTexture *lLayeredTexture = lProperty.GetSrcObject<FbxLayeredTexture>(j);
+								if (lLayeredTexture)
+								{
+									//we don't handle layered textures!
+									/*int lNbTextures = lLayeredTexture->GetSrcObjectCount<FbxTexture>();
+									for (int k=0; k<lNbTextures; ++k)
+									{
+										FbxTexture* lTexture = lLayeredTexture->GetSrcObject<FbxTexture>(k);
+										if(lTexture)
+										{
+										}
+									}
+									//*/
+								}
+								else
+								{
+									//non-layered texture
+									FbxTexture* lTexture = lProperty.GetSrcObject<FbxTexture>(j);
+									if(lTexture)
+									{
+										//we take the first non layered texture by default
+										texture = lTexture;
+										break;
+									}
+								}
+							}
+
+							if (texture)
+							{
+								FbxFileTexture *lFileTexture = FbxCast<FbxFileTexture>(texture);
+								if (lFileTexture)
+								{
+									const char* texAbsoluteFilename = lFileTexture->GetFileName();
+									ccLog::PrintDebug(QString("[FBX] Texture absolue filename: %1").arg(texAbsoluteFilename));
+									if (texAbsoluteFilename != 0 && texAbsoluteFilename[0] != 0)
+									{
+										if (!mat.setTexture(texAbsoluteFilename))
+										{
+											ccLog::Warning(QString("[FBX] Failed to load texture file: %1").arg(texAbsoluteFilename));
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				if (!materials)
+				{
+					materials = new ccMaterialSet("materials");
+					mesh->addChild(materials);
+				}
+				materials->addMaterial(mat);
+			}
+			else
+			{
+				ccLog::Warning(QString("[FBX] Material '%1' has an unhandled type").arg(lBaseMaterial->GetName()));
+			}
+		}
+	}
+
 	//import textures UV
-	int perVertexUV = -1;
-	bool hasTexUV = false;
+	TextureCoordsContainer* vertTexUVTable = 0;
+	bool hasTexUVIndexes = false;
 	{
 		for (int l=0; l<fbxMesh->GetElementUVCount(); ++l)
 		{
 			FbxGeometryElementUV* leUV = fbxMesh->GetElementUV(l);
 			//per-point UV coordinates
-			if (leUV->GetMappingMode() == FbxGeometryElement::eByControlPoint)
+			if (leUV->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
 			{
-				TextureCoordsContainer* vertTexUVTable = new TextureCoordsContainer();
-				if (!vertTexUVTable->reserve(vertCount) || !mesh->reservePerTriangleTexCoordIndexes())
+				vertTexUVTable = new TextureCoordsContainer();
+				int uvCount = leUV->GetDirectArray().GetCount();
+
+				if (!vertTexUVTable->reserve(uvCount) || !mesh->reservePerTriangleTexCoordIndexes())
 				{
 					vertTexUVTable->release();
+					vertTexUVTable = 0;
 					ccLog::Warning(QString("[FBX] Not enough memory to load mesh '%1' UV coordinates!").arg(fbxMesh->GetName()));
 				}
 				else
 				{
 					FbxLayerElement::EReferenceMode refMode = leUV->GetReferenceMode();
-					for (int i=0; i<vertCount; ++i)
+					for (int i=0; i<uvCount; ++i)
 					{
-						int id = refMode != FbxGeometryElement::eDirect ? leUV->GetIndexArray().GetAt(i) : i;
-						FbxVector2 uv = leUV->GetDirectArray().GetAt(id);
+						FbxVector2 uv = leUV->GetDirectArray().GetAt(i);
 						//convert to CC-structure
 						float uvf[2] = {static_cast<float>(uv.Buffer()[0]),
 										static_cast<float>(uv.Buffer()[1])};
 						vertTexUVTable->addElement(uvf);
 					}
-					mesh->addChild(vertTexUVTable);
-					hasTexUV = true;
-				}
-				perVertexUV = -1;
-				break; //no need to look to the other UV fields (can't handle them!)
-			}
-			else if (leUV->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
-			{
-				//per-vertex UV coordinates
-				perVertexUV = l;
-			}
-		}
-	}
 
-	//per-vertex UV coordinates
-	TextureCoordsContainer* texUVTable = 0;
-	if (perVertexUV >= 0)
-	{
-		texUVTable = new TextureCoordsContainer();
-		if (!texUVTable->reserve(polyVertCount) || !mesh->reservePerTriangleTexCoordIndexes())
-		{
-			texUVTable->release();
-			ccLog::Warning(QString("[FBX] Not enough memory to load mesh '%1' UV coordinates!").arg(fbxMesh->GetName()));
-		}
-		else
-		{
-			mesh->addChild(texUVTable);
-			hasTexUV = true;
+					int indexCount = leUV->GetIndexArray().GetCount();
+					if (refMode == FbxGeometryElement::eIndexToDirect)
+					{
+						hasTexUVIndexes = true;
+						//for (int i=0; i<polyCount; ++i)
+						//{
+						//	mesh->addTriangleTexCoordIndexes(leUV->GetIndexArray().GetAt(3*i),leUV->GetIndexArray().GetAt(3*i+1),leUV->GetIndexArray().GetAt(3*i+2));
+						//}
+					}
+					else if (refMode == FbxGeometryElement::eDirect)
+					{
+						//for (int i=0; i<polyCount; ++i)
+						//{
+						//	mesh->addTriangleTexCoordIndexes(3*i,3*i+1,3*i+2);
+						//}
+					}
+					else
+					{
+						ccLog::Warning(QString("[FBX] UV coordinates for mesh '%1' are encoded in an unhandled mode!") .arg(fbxMesh->GetName()));
+						vertTexUVTable->release();
+						vertTexUVTable = 0;
+					}
+				}
+
+				if (vertTexUVTable)
+					break; //no need to look to the other UV fields (can't handle them!)
+			}
 		}
 	}
 
 	//import polygons
 	{
+		int uvIndex = 0;
 		for (int i=0; i<polyCount; ++i)
 		{
 			int pSize = fbxMesh->GetPolygonSize(i);
@@ -649,6 +1048,8 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true
 			if (pSize > 4)
 			{
 				//not handled for the moment
+				if (!hasTexUVIndexes)
+					uvIndex += pSize;
 				continue;
 			}
 			//we split quads into two triangles
@@ -666,32 +1067,47 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true
 				mesh->addTriangle(i1,i3,i4);
 			}
 
-			if (hasTexUV)
+			if (vertTexUVTable)
 			{
-				if (texUVTable)
+				if (hasTexUVIndexes)
 				{
-					assert(perVertexUV >= 0);
-
-					int uvIndex = static_cast<int>(texUVTable->currentSize());
-					for (int j=0; j<pSize; ++j)
-					{
-						int lTextureUVIndex = fbxMesh->GetTextureUVIndex(i, j);
-						FbxGeometryElementUV* leUV = fbxMesh->GetElementUV(perVertexUV);
-						FbxVector2 uv = leUV->GetDirectArray().GetAt(lTextureUVIndex);
-						//convert to CC-structure
-						float uvf[2] = {static_cast<float>(uv.Buffer()[0]),
-										static_cast<float>(uv.Buffer()[1])};
-						texUVTable->addElement(uvf);
-					}
-					mesh->addTriangleTexCoordIndexes(uvIndex,uvIndex+1,uvIndex+2);
-					if (pSize == 4)
-						mesh->addTriangleTexCoordIndexes(uvIndex,uvIndex+2,uvIndex+3);
+					i1 = fbxMesh->GetTextureUVIndex(i, 0);
+					if (i1 > uvIndex)
+						uvIndex = i1;
+					i2 = fbxMesh->GetTextureUVIndex(i, 1);
+					if (i2 > uvIndex)
+						uvIndex = i2;
+					i3 = fbxMesh->GetTextureUVIndex(i, 2);
+					if (i3 > uvIndex)
+						uvIndex = i3;
 				}
 				else
 				{
-					mesh->addTriangleTexCoordIndexes(i1,i2,i3);
-					if (pSize == 4)
-						mesh->addTriangleTexCoordIndexes(i1,i3,i4);
+					i1 = uvIndex++;
+					i2 = uvIndex++;
+					i3 = uvIndex++;
+				}
+				mesh->addTriangleTexCoordIndexes(i1,i2,i3);
+				if (pSize == 4)
+				{
+					if (hasTexUVIndexes)
+					{
+						i4 = fbxMesh->GetTextureUVIndex(i, 3);
+						if (i4 > uvIndex)
+							uvIndex = i4;
+					}
+					else
+					{
+						i4 = uvIndex++;
+					}
+					mesh->addTriangleTexCoordIndexes(i1,i3,i4);
+				}
+
+				if (uvIndex >= static_cast<int>(vertTexUVTable->currentSize()))
+				{
+					ccLog::Warning(QString("[FBX] Mesh '%1': UV coordinates indexes mismatch!") .arg(fbxMesh->GetName()));
+					vertTexUVTable->release();
+					vertTexUVTable = 0;
 				}
 			}
 
@@ -715,6 +1131,12 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true
 			}
 		}
 		
+		if (vertTexUVTable)
+		{
+			mesh->setTexCoordinatesTable(vertTexUVTable);
+			mesh->addChild(vertTexUVTable);
+		}
+
 		if (mesh->size() == 0)
 		{
 			ccLog::Warning(QString("[FBX] No triangle found in mesh '%1'! (only triangles are supported for the moment)").arg(fbxMesh->GetName()));
@@ -736,22 +1158,10 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true
 			//coordinate shift management
 			if (i == 0)
 			{
-				bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
-				if (shiftAlreadyEnabled)
-					Pshift = *coordinatesShift;
-				bool applyAll = false;
-				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(P,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
+				if (FileIOFilter::HandleGlobalShift(P,Pshift,parameters))
 				{
 					vertices->setGlobalShift(Pshift);
 					ccLog::Warning("[FBX] Mesh has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
-
-					//we save coordinates shift information
-					if (applyAll && coordinatesShiftEnabled && coordinatesShift)
-					{
-						*coordinatesShiftEnabled = true;
-						*coordinatesShift = Pshift;
-					}
 				}
 			}
 
@@ -763,142 +1173,214 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, bool alwaysDisplayLoadDialog/*=true
 		}
 	}
 
-	//import textures
+	//import material mapping (AFTER LOADING THE POLYGONS!)
+	if (materials)
 	{
-		//TODO
+		int fbxMatCount = fbxMesh->GetElementMaterialCount();
+		for (int i=0; i<fbxMatCount; ++i)
+		{
+			FbxGeometryElementMaterial* lMaterialElement = fbxMesh->GetElementMaterial(i);
+			if (	lMaterialElement->GetMappingMode() == FbxGeometryElement::eByPolygon
+				&&	lMaterialElement->GetReferenceMode() == FbxGeometryElement::eIndexToDirect
+				&&	lMaterialElement->GetIndexArray().GetCount() == fbxMesh->GetPolygonCount() )
+			{
+				if (mesh->reservePerTriangleMtlIndexes())
+				{
+					int maxMaterialIndex = static_cast<int>(materials->size());
+					int matElemCount = lMaterialElement->GetIndexArray().GetCount();
+					for (int j=0; j<matElemCount; ++j)
+					{
+						int mtlIndex = lMaterialElement->GetIndexArray().GetAt(j);
+						mesh->addTriangleMtlIndex(mtlIndex < maxMaterialIndex ? mtlIndex : -1);
+					}
+				}
+				else
+				{
+					ccLog::Warning("[FBX] Not enough memory to load materials!");
+				}
+				break;
+			}
+			else if (	lMaterialElement->GetMappingMode() == FbxGeometryElement::eAllSame
+					/*&&	lMaterialElement->GetReferenceMode() == FbxGeometryElement::eIndexToDirect*/ )
+			{
+				int mtlIndex = 0;
+				if (lMaterialElement->GetReferenceMode() == FbxGeometryElement::eIndexToDirect)
+				{
+					assert(lMaterialElement->GetIndexArray().GetCount() > 0); 
+					mtlIndex = lMaterialElement->GetIndexArray().GetAt(0);
+				}
+
+				if (mesh->reservePerTriangleMtlIndexes())
+				{
+					for (unsigned j=0; j<mesh->size(); ++j)
+					{
+						mesh->addTriangleMtlIndex(mtlIndex);
+					}
+				}
+				else
+				{
+					ccLog::Warning("[FBX] Not enough memory to load materials!");
+				}
+			}
+		}
+
+		if (mesh->hasPerTriangleMtlIndexes())
+		{
+			mesh->setMaterialSet(materials);
+			//mesh->addChild(materials);
+			mesh->showMaterials(true);
+		}
+		else
+		{
+			//we failed to load material mapping! No need to kepp the materials...
+			mesh->removeChild(materials);
+			//materials->release();
+			materials = 0;
+		}
 	}
 
 	return mesh;
 }
 
 
-CC_FILE_ERROR FBXFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR FBXFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
-	// Initialize the SDK manager. This object handles memory management.
-	FbxManager* lSdkManager = FbxManager::Create();
-
-	// Create the IO settings object.
-	FbxIOSettings *ios = FbxIOSettings::Create(lSdkManager, IOSROOT);
-	lSdkManager->SetIOSettings(ios);
-	
-	// Import options determine what kind of data is to be imported.
-	// True is the default, but here we’ll set some to true explicitly, and others to false.
-	//(*(lSdkManager->GetIOSettings())).SetBoolProp(IMP_FBX_MATERIAL,	true);
-	//(*(lSdkManager->GetIOSettings())).SetBoolProp(IMP_FBX_TEXTURE,	true);
-	
-	// Create an importer using the SDK manager.
-	FbxImporter* lImporter = FbxImporter::Create(lSdkManager,"");
-
 	CC_FILE_ERROR result = CC_FERR_NO_ERROR;
-	
-	// Use the first argument as the filename for the importer.
-	if (!lImporter->Initialize(qPrintable(filename), -1, lSdkManager->GetIOSettings()))
-	{ 
-		ccLog::Warning(QString("[FBX] Error: %1").arg(lImporter->GetStatus().GetErrorString()));
-		result = CC_FERR_READING;
-	}
-	else
+
+	try
 	{
-		// Create a new scene so that it can be populated by the imported file.
-		FbxScene* lScene = FbxScene::Create(lSdkManager,"myScene");
+		// Initialize the SDK manager. This object handles memory management.
+		FbxManager* lSdkManager = FbxManager::Create();
 
-		// Import the contents of the file into the scene.
-		if (lImporter->Import(lScene))
+		// Create the IO settings object.
+		FbxIOSettings *ios = FbxIOSettings::Create(lSdkManager, IOSROOT);
+		lSdkManager->SetIOSettings(ios);
+	
+		// Import options determine what kind of data is to be imported.
+		// True is the default, but here we’ll set some to true explicitly, and others to false.
+		//(*(lSdkManager->GetIOSettings())).SetBoolProp(IMP_FBX_MATERIAL,	true);
+		//(*(lSdkManager->GetIOSettings())).SetBoolProp(IMP_FBX_TEXTURE,	true);
+	
+		// Create an importer using the SDK manager.
+		FbxImporter* lImporter = FbxImporter::Create(lSdkManager,"");
+
+		// Use the first argument as the filename for the importer.
+		if (!lImporter->Initialize(qPrintable(filename), -1, lSdkManager->GetIOSettings()))
+		{ 
+			ccLog::Warning(QString("[FBX] Error: %1").arg(lImporter->GetStatus().GetErrorString()));
+			result = CC_FERR_READING;
+		}
+		else
 		{
-			// Print the nodes of the scene and their attributes recursively.
-			// Note that we are not printing the root node because it should
-			// not contain any attributes.
-			FbxNode* lRootNode = lScene->GetRootNode();
-			std::vector<FbxNode*> nodes;
-			nodes.push_back(lRootNode);
+			// Create a new scene so that it can be populated by the imported file.
+			FbxScene* lScene = FbxScene::Create(lSdkManager,"myScene");
 
-			while (!nodes.empty())
+			// Import the contents of the file into the scene.
+			if (lImporter->Import(lScene))
 			{
-				FbxNode* lNode = nodes.back();
-				nodes.pop_back();
+				// Print the nodes of the scene and their attributes recursively.
+				// Note that we are not printing the root node because it should
+				// not contain any attributes.
+				FbxNode* lRootNode = lScene->GetRootNode();
+				std::vector<FbxNode*> nodes;
+				nodes.push_back(lRootNode);
 
-				const char* nodeName = lNode->GetName();
-#ifdef _DEBUG
-				ccLog::Print(QString("Node: %1 - %2 properties").arg(nodeName).arg(lNode->GetNodeAttributeCount()));
-#endif
-				// scan the node's attributes.
-				for(int i=0; i<lNode->GetNodeAttributeCount(); i++)
+				while (!nodes.empty())
 				{
-					FbxNodeAttribute* pAttribute = lNode->GetNodeAttributeByIndex(i);
-					FbxNodeAttribute::EType type = pAttribute->GetAttributeType();
+					FbxNode* lNode = nodes.back();
+					nodes.pop_back();
+
+					const char* nodeName = lNode->GetName();
 #ifdef _DEBUG
-					ccLog::Print(QString("\tProp. #%1").arg(GetAttributeTypeName(type)));
+					ccLog::Print(QString("Node: %1 - %2 properties").arg(nodeName).arg(lNode->GetNodeAttributeCount()));
+#endif
+					// scan the node's attributes.
+					for(int i=0; i<lNode->GetNodeAttributeCount(); i++)
+					{
+						FbxNodeAttribute* pAttribute = lNode->GetNodeAttributeByIndex(i);
+						FbxNodeAttribute::EType type = pAttribute->GetAttributeType();
+#ifdef _DEBUG
+						ccLog::Print(QString("\tProp. #%1").arg(GetAttributeTypeName(type)));
 #endif
 
-					switch(type)
-					{ 
-					case FbxNodeAttribute::eMesh:
-						{
-							ccMesh* mesh = FromFbxMesh(static_cast<FbxMesh*>(pAttribute),alwaysDisplayLoadDialog,coordinatesShiftEnabled,coordinatesShift);
-							if (mesh)
+						switch(type)
+						{ 
+						case FbxNodeAttribute::eMesh:
 							{
-								//apply transformation
-								FbxAMatrix& transform = lNode->EvaluateGlobalTransform();
-								ccGLMatrix mat;
-								float* data = mat.data();
-								for (int c=0; c<4; ++c)
+								ccMesh* mesh = FromFbxMesh(static_cast<FbxMesh*>(pAttribute),parameters);
+								if (mesh)
 								{
-									FbxVector4 C = transform.GetColumn(c);
-									*data++ = static_cast<float>(C[0]);
-									*data++ = static_cast<float>(C[1]);
-									*data++ = static_cast<float>(C[2]);
-									*data++ = static_cast<float>(C[3]);
+									//apply transformation
+									FbxAMatrix& transform = lNode->EvaluateGlobalTransform();
+									ccGLMatrix mat;
+									float* data = mat.data();
+									for (int c=0; c<4; ++c)
+									{
+										FbxVector4 C = transform.GetColumn(c);
+										*data++ = static_cast<float>(C[0]);
+										*data++ = static_cast<float>(C[1]);
+										*data++ = static_cast<float>(C[2]);
+										*data++ = static_cast<float>(C[3]);
+									}
+									mesh->applyGLTransformation_recursive(&mat);
+
+									if (mesh->getName().isEmpty())
+										mesh->setName(nodeName);
+
+									container.addChild(mesh);
 								}
-								mesh->applyGLTransformation_recursive(&mat);
-
-								if (mesh->getName().isEmpty())
-									mesh->setName(nodeName);
-
-								container.addChild(mesh);
 							}
-						}
-						break;
+							break;
 
-					case FbxNodeAttribute::eUnknown: 
-					case FbxNodeAttribute::eNull:
-					case FbxNodeAttribute::eMarker:
-					case FbxNodeAttribute::eSkeleton:
-					case FbxNodeAttribute::eNurbs:
-					case FbxNodeAttribute::ePatch:
-					case FbxNodeAttribute::eCamera:
-					case FbxNodeAttribute::eCameraStereo:
-					case FbxNodeAttribute::eCameraSwitcher:
-					case FbxNodeAttribute::eLight:
-					case FbxNodeAttribute::eOpticalReference:
-					case FbxNodeAttribute::eOpticalMarker:
-					case FbxNodeAttribute::eNurbsCurve:
-					case FbxNodeAttribute::eTrimNurbsSurface:
-					case FbxNodeAttribute::eBoundary:
-					case FbxNodeAttribute::eNurbsSurface:
-					case FbxNodeAttribute::eShape:
-					case FbxNodeAttribute::eLODGroup:
-					case FbxNodeAttribute::eSubDiv:
-					default:
-						//not handled yet
-						break;
+						case FbxNodeAttribute::eUnknown: 
+						case FbxNodeAttribute::eNull:
+						case FbxNodeAttribute::eMarker:
+						case FbxNodeAttribute::eSkeleton:
+						case FbxNodeAttribute::eNurbs:
+						case FbxNodeAttribute::ePatch:
+						case FbxNodeAttribute::eCamera:
+						case FbxNodeAttribute::eCameraStereo:
+						case FbxNodeAttribute::eCameraSwitcher:
+						case FbxNodeAttribute::eLight:
+						case FbxNodeAttribute::eOpticalReference:
+						case FbxNodeAttribute::eOpticalMarker:
+						case FbxNodeAttribute::eNurbsCurve:
+						case FbxNodeAttribute::eTrimNurbsSurface:
+						case FbxNodeAttribute::eBoundary:
+						case FbxNodeAttribute::eNurbsSurface:
+						case FbxNodeAttribute::eShape:
+						case FbxNodeAttribute::eLODGroup:
+						case FbxNodeAttribute::eSubDiv:
+						default:
+							//not handled yet
+							break;
+						}
+					}
+
+					// Recursively add the children.
+					for(int j=0; j<lNode->GetChildCount(); j++)
+					{
+						nodes.push_back(lNode->GetChild(j));
 					}
 				}
-
-				// Recursively add the children.
-				for(int j=0; j<lNode->GetChildCount(); j++)
-				{
-					nodes.push_back(lNode->GetChild(j));
-				}
 			}
+			
+			if (container.getChildrenNumber() == 0)
+				result = CC_FERR_NO_LOAD;
 		}
+
+		// The file is imported, so get rid of the importer.
+		lImporter->Destroy();
+		// Destroy the SDK manager and all the other objects it was handling.
+		lSdkManager->Destroy();
+	}
+	catch(...)
+	{
+		ccLog::Warning("[FBX] FBX SDK has thrown an unknown exception!");
+		result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
 	}
 
-	// The file is imported, so get rid of the importer.
-	lImporter->Destroy();
-	// Destroy the SDK manager and all the other objects it was handling.
-	lSdkManager->Destroy();
-
-	return container.getChildrenNumber() == 0 ? CC_FERR_NO_LOAD : CC_FERR_NO_ERROR;
+	return result;
 }
 
 #endif

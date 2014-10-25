@@ -25,7 +25,7 @@ Subject: Use package directory for libs
  	install_shared( ${PROJECT_NAME} ${dest} 1 )
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -19,6 +19,7 @@ if ( ${CMAKE_CURRENT_BINARY_DIR} STREQUA
+@@ -28,6 +28,7 @@ if ( ${CMAKE_CURRENT_BINARY_DIR} STREQUA
  	endif()
  endif()
  

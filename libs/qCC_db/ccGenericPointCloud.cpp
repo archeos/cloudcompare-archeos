@@ -147,7 +147,10 @@ CCLib::ReferenceCloud* ccGenericPointCloud::getTheVisiblePoints() const
 	assert(count == m_pointsVisibility->currentSize());
 
 	if (!m_pointsVisibility || m_pointsVisibility->currentSize() != count)
+	{
+		ccLog::Warning("[ccGenericPointCloud::getTheVisiblePoints] No visibility table instantiated!");
 		return 0;
+	}
 
 	//count the number of points to copy
 	unsigned pointCount = 0;
@@ -159,7 +162,7 @@ CCLib::ReferenceCloud* ccGenericPointCloud::getTheVisiblePoints() const
 
 	if (pointCount == 0)
 	{
-		ccLog::Error("[ccGenericPointCloud::getTheVisiblePoints] No point in selection!");
+		ccLog::Warning("[ccGenericPointCloud::getTheVisiblePoints] No point in selection");
 		return 0;
 	}
 
@@ -223,16 +226,16 @@ bool ccGenericPointCloud::toFile_MeOnly(QFile& out) const
 		return false;
 
 	//'global shift' (dataVersion>=20)
-	if (out.write((const char*)m_globalShift.u,sizeof(double)*3)<0)
+	if (out.write((const char*)m_globalShift.u,sizeof(double)*3) < 0)
 		return WriteError();
 
 	//'global scale' (dataVersion>=32)
-	if (out.write((const char*)&m_globalScale,sizeof(double))<0)
+	if (out.write((const char*)&m_globalScale,sizeof(double)) < 0)
 		return WriteError();
 
 	//'visibility' array (dataVersion>=20)
 	bool hasVisibilityArray = isVisibilityTableInstantiated();
-	if (out.write((const char*)&hasVisibilityArray,sizeof(bool))<0)
+	if (out.write((const char*)&hasVisibilityArray,sizeof(bool)) < 0)
 		return WriteError();
 	if (hasVisibilityArray)
 	{
@@ -242,7 +245,7 @@ bool ccGenericPointCloud::toFile_MeOnly(QFile& out) const
 	}
 
 	//'point size' (dataVersion>=24)
-	if (out.write((const char*)&m_pointSize,1)<0)
+	if (out.write((const char*)&m_pointSize,1) < 0)
 		return WriteError();
 
 	return true;
@@ -257,13 +260,13 @@ bool ccGenericPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flag
 		return CorruptError();
 
 	//'coordinates shift' (dataVersion>=20)
-	if (in.read((char*)m_globalShift.u,sizeof(double)*3)<0)
+	if (in.read((char*)m_globalShift.u,sizeof(double)*3) < 0)
 		return ReadError();
 
 	//'global scale' (dataVersion>=33)
 	if (dataVersion >= 33)
 	{
-		if (in.read((char*)&m_globalScale,sizeof(double))<0)
+		if (in.read((char*)&m_globalScale,sizeof(double)) < 0)
 			return ReadError();
 	}
 	else
@@ -273,7 +276,7 @@ bool ccGenericPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flag
 
 	//'visibility' array (dataVersion>=20)
 	bool hasVisibilityArray = false;
-	if (in.read((char*)&hasVisibilityArray,sizeof(bool))<0)
+	if (in.read((char*)&hasVisibilityArray,sizeof(bool)) < 0)
 		return ReadError();
 	if (hasVisibilityArray)
 	{
@@ -292,7 +295,7 @@ bool ccGenericPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flag
 	//'point size' (dataVersion>=24)
 	if (dataVersion >= 24)
 	{
-		if (in.read((char*)&m_pointSize,1)<0)
+		if (in.read((char*)&m_pointSize,1) < 0)
 			return WriteError();
 	}
 	else

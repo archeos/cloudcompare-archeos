@@ -18,6 +18,9 @@
 //qCC_io
 #include <BundlerFilter.h>
 #include <AsciiFilter.h>
+#include <FBXFilter.h>
+#include <PTXFilter.h>
+#include <BinFilter.h>
 
 //qCC
 #include "ccCommon.h"
@@ -40,9 +43,12 @@
 static const char COMMAND_SILENT_MODE[]						= "SILENT";
 static const char COMMAND_OPEN[]							= "O";				//+file name
 static const char COMMAND_OPEN_SKIP_LINES[]					= "SKIP";			//+number of lines to skip
+static const char COMMAND_OPEN_SHIFT_ON_LOAD[]				= "GLOBAL_SHIFT";	//+global shift
+static const char COMMAND_KEYWORD_AUTO[]					= "AUTO";			//"AUTO" keyword
 static const char COMMAND_SUBSAMPLE[]						= "SS";				//+ method (RANDOM/SPATIAL/OCTREE) + parameter (resp. point count / spatial step / octree level)
 static const char COMMAND_CURVATURE[]						= "CURV";			//+ curvature type (MEAN/GAUSS) +
 static const char COMMAND_DENSITY[]							= "DENSITY";		//+ sphere radius
+static const char COMMAND_DENSITY_TYPE[]					= "TYPE";			//+ density type
 static const char COMMAND_APPROX_DENSITY[]					= "APPROX_DENSITY";
 static const char COMMAND_SF_GRADIENT[]						= "SF_GRAD";
 static const char COMMAND_ROUGHNESS[]						= "ROUGH";
@@ -79,6 +85,7 @@ static const char COMMAND_ICP_ENABLE_FARTHEST_REMOVAL[]		= "FARTHEST_REMOVAL";
 static const char COMMAND_CLOUD_EXPORT_FORMAT[]				= "C_EXPORT_FMT";
 static const char COMMAND_ASCII_EXPORT_PRECISION[]			= "PREC";
 static const char COMMAND_ASCII_EXPORT_SEPARATOR[]			= "SEP";
+static const char COMMAND_FBX_EXPORT_FORMAT[]				= "FBX_EXPORT_FMT";
 static const char COMMAND_MESH_EXPORT_FORMAT[]				= "M_EXPORT_FMT";
 static const char COMMAND_EXPORT_EXTENSION[]				= "EXT";
 static const char COMMAND_NO_TIMESTAMP[]					= "NO_TIMESTAMP";
@@ -87,22 +94,49 @@ static const char COMMAND_CROP_2D[]							= "CROP2D";
 static const char COMMAND_CROP_OUTSIDE[]					= "OUTSIDE";
 static const char COMMAND_SAVE_CLOUDS[]						= "SAVE_CLOUDS";
 static const char COMMAND_SAVE_MESHES[]						= "SAVE_MESHES";
+static const char COMMAND_AUTO_SAVE[]						= "AUTO_SAVE";
 static const char COMMAND_SET_ACTIVE_SF[]					= "SET_ACTIVE_SF";
+static const char COMMAND_PTX_COMPUTE_NORMALS[]				= "COMPUTE_PTX_NORMALS";
+
+static const char OPTION_ALL_AT_ONCE[]						= "ALL_AT_ONCE";
+static const char OPTION_ON[]								= "ON";
+static const char OPTION_OFF[]								= "OFF";
 
 //Current cloud(s) export format (can be modified with the 'COMMAND_CLOUD_EXPORT_FORMAT' option)
-static CC_FILE_TYPES s_CloudExportFormat = BIN;
+static QString s_CloudExportFormat(BinFilter::GetFileFilter());
 //Current cloud(s) export extension (warning: can be anything)
-static QString s_CloudExportExt(CC_FILE_TYPE_DEFAULT_EXTENSION[s_CloudExportFormat]);
+static QString s_CloudExportExt(BinFilter::GetDefaultExtension());
 //Current mesh(es) export format (can be modified with the 'COMMAND_MESH_EXPORT_FORMAT' option)
-static CC_FILE_TYPES s_MeshExportFormat = BIN;
+static QString s_MeshExportFormat(BinFilter::GetFileFilter());
 //Current mesh(es) export extension (warning: can be anything)
-static QString s_MeshExportExt(CC_FILE_TYPE_DEFAULT_EXTENSION[s_MeshExportFormat]);
+static QString s_MeshExportExt(BinFilter::GetDefaultExtension());
 //Default numerical precision for ASCII output
 static int s_precision = 12;
 //Whether a timestamp should be automatically added to output files or not
 static bool s_addTimestamp = true;
 //Whether silent mode is activated or not
 static bool s_silentMode = false;
+//Whether files should be automatically saved (after each process) or not
+static bool s_autoSaveMode = true;
+
+//Loading parameters
+struct CmdLineLoadParameters : public FileIOFilter::LoadParameters
+{
+	CmdLineLoadParameters()
+		: FileIOFilter::LoadParameters()
+		, m_coordinatesShiftEnabled(false)
+		, m_coordinatesShift(0,0,0)
+	{
+		shiftHandlingMode = ccGlobalShiftManager::NO_DIALOG;
+		alwaysDisplayLoadDialog = false;
+		coordinatesShiftEnabled = &m_coordinatesShiftEnabled;
+		coordinatesShift = &m_coordinatesShift;
+	}
+
+	bool m_coordinatesShiftEnabled;
+	CCVector3d m_coordinatesShift;
+};
+static CmdLineLoadParameters s_loadParameters;
 
 
 bool IsCommand(const QString& token, const char* command)
@@ -118,6 +152,16 @@ int ccCommandLineParser::Parse(int nargs, char** args)
 		return EXIT_SUCCESS;
 	}
 
+	//reset default behavior(s)
+	PTXFilter::SetNormalsComputationBehavior(PTXFilter::NEVER);
+	s_MeshExportFormat = s_CloudExportFormat = BinFilter::GetFileFilter();
+	s_MeshExportExt = s_CloudExportExt = BinFilter::GetDefaultExtension();
+	s_precision = 12;
+	s_addTimestamp = true;
+	s_silentMode = false;
+	s_autoSaveMode = true;
+
+	//load arguments
 	QStringList arguments;
 	{
 		for (int i=1; i<nargs; ++i) //'i=1' because first argument is always program executable file!
@@ -126,7 +170,6 @@ int ccCommandLineParser::Parse(int nargs, char** args)
 	assert(!arguments.empty());
 
 	//specific command: silent mode (will prevent the console dialog from appearing!
-	s_silentMode = false;
 	if (IsCommand(arguments.front(),COMMAND_SILENT_MODE))
 	{
 		arguments.pop_front();
@@ -136,12 +179,14 @@ int ccCommandLineParser::Parse(int nargs, char** args)
 	QDialog consoleDlg;
 	if (!s_silentMode)
 	{
+		//show console
 		Ui_commandLineDlg commandLineDlg;
 		commandLineDlg.setupUi(&consoleDlg);
 		consoleDlg.show();
 		ccConsole::Init(commandLineDlg.consoleWidget,&consoleDlg);
 	}
 
+	//parse input
 	int result = ccCommandLineParser().parse(arguments,&consoleDlg);
 
 	if (!s_silentMode)
@@ -203,27 +248,93 @@ void ccCommandLineParser::removeMeshes()
 	}
 }
 
-bool ccCommandLineParser::saveClouds(QString suffix/*=QString()*/)
+bool ccCommandLineParser::saveClouds(QString suffix/*=QString()*/, bool allAtOnce/*=false*/)
 {
-	for (unsigned i=0; i<m_clouds.size(); ++i)
+	//all-at-once: all clouds in a single file
+	if (allAtOnce)
 	{
-		//save output
-		QString errorStr = Export(m_clouds[i],suffix);
-		if (!errorStr.isEmpty())
-			return Error(errorStr);
+		FileIOFilter::Shared filter = FileIOFilter::GetFilter(s_CloudExportFormat,false);
+		bool multiple = false, exclusive = true;
+		if (filter)
+			filter->canSave(CC_TYPES::POINT_CLOUD,multiple,exclusive);
+		
+		if (multiple)
+		{
+			ccHObject tempContainer("Clouds");
+			{
+				for (unsigned i=0; i<m_clouds.size(); ++i)
+					tempContainer.addChild(m_clouds[i].getEntity(),ccHObject::DP_NONE);
+			}
+			//save output
+			GroupDesc desc(&tempContainer,"AllClouds",m_clouds.front().path);
+			QString errorStr = Export(desc,suffix,0,true);
+			if (!errorStr.isEmpty())
+				return Error(errorStr);
+			else
+				return true;
+		}
+		else
+		{
+			ccConsole::Error(QString("The currently selected ouput format for clouds (%1) doesn't handle multiple entities at once!").arg(s_CloudExportFormat));
+			//will proceed with the standard way
+		}
+	}
+
+	//standard way: one file per cloud
+	{
+		for (unsigned i=0; i<m_clouds.size(); ++i)
+		{
+			//save output
+			QString errorStr = Export(m_clouds[i],suffix);
+			if (!errorStr.isEmpty())
+				return Error(errorStr);
+		}
 	}
 
 	return true;
 }
 
-bool ccCommandLineParser::saveMeshes(QString suffix/*=QString()*/)
+bool ccCommandLineParser::saveMeshes(QString suffix/*=QString()*/, bool allAtOnce/*=false*/)
 {
-	for (unsigned i=0; i<m_meshes.size(); ++i)
+	//all-at-once: all meshes in a single file
+	if (allAtOnce)
 	{
-		//save output
-		QString errorStr = Export(m_meshes[i],suffix);
-		if (!errorStr.isEmpty())
-			return Error(errorStr);
+		FileIOFilter::Shared filter = FileIOFilter::GetFilter(s_MeshExportFormat,false);
+		bool multiple = false, exclusive = true;
+		if (filter)
+			filter->canSave(CC_TYPES::MESH,multiple,exclusive);
+		
+		if (multiple)
+		{
+			ccHObject tempContainer("Meshes");
+			{
+				for (unsigned i=0; i<m_meshes.size(); ++i)
+					tempContainer.addChild(m_meshes[i].getEntity(),ccHObject::DP_NONE);
+			}
+			//save output
+			GroupDesc desc(&tempContainer,"AllMeshes",m_meshes.front().path);
+			QString errorStr = Export(desc,suffix,0,false);
+			if (!errorStr.isEmpty())
+				return Error(errorStr);
+			else
+				return true;
+		}
+		else
+		{
+			ccConsole::Error(QString("The currently selected ouput format for meshes (%1) doesn't handle multiple entities at once!").arg(s_MeshExportFormat));
+			//will proceed with the standard way
+		}
+	}
+
+	//standard way: one file per mesh
+	{
+		for (unsigned i=0; i<m_meshes.size(); ++i)
+		{
+			//save output
+			QString errorStr = Export(m_meshes[i],suffix);
+			if (!errorStr.isEmpty())
+				return Error(errorStr);
+		}
 	}
 
 	return true;
@@ -250,8 +361,11 @@ ccCommandLineParser::EntityDesc::EntityDesc(QString _basename, QString _path)
 {
 }
 
-QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QString()*/, QString* _outputFilename/*=0*/)
+QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QString()*/, QString* _outputFilename/*=0*/, bool forceIsCloud/*=false*/)
 {
+	Print("[SAVING]");
+
+	//fetch the real entity
 	ccHObject* entity = entDesc.getEntity();
 	if (!entity)
 	{
@@ -259,9 +373,12 @@ QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QStrin
 		return QString("[Export] Internal error: invalid input entity!");
 	}
 
-	QString cloudName = entity->getName();
-	if (cloudName.isEmpty())
-		cloudName = entDesc.basename;
+	//get its name
+	QString entName = entity->getName();
+	if (entName.isEmpty())
+		entName = entDesc.basename;
+
+	//specific case: clouds
 	bool isCloud = entity->isA(CC_TYPES::POINT_CLOUD);
 	if (isCloud)
 	{
@@ -274,9 +391,11 @@ QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QStrin
 				suffix.prepend(QString("%1_").arg(cloudDesc.indexInFile));
 		}
 	}
+	isCloud |= forceIsCloud; //don't force this before this point (static cast to CloudDesc above!)
+
 	if (!suffix.isEmpty())
-		cloudName += QString("_") + suffix;
-	entity->setName(cloudName);
+		entName += QString("_") + suffix;
+	entity->setName(entName);
 
 	QString baseName = entDesc.basename;
 	if (!suffix.isEmpty())
@@ -284,7 +403,7 @@ QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QStrin
 
 	QString outputFilename = baseName;
 	if (s_addTimestamp)
-		outputFilename += QString("_%1").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_hh'h'mm"));
+		outputFilename += QString("_%1").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_hh'h'mm_ss"));
 	QString extension = isCloud ? s_CloudExportExt : s_MeshExportExt;
 	if (!extension.isEmpty())
 		outputFilename += QString(".%1").arg(extension);
@@ -303,7 +422,6 @@ QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QStrin
 		return QString("Failed to save result in file '%1'").arg(outputFilename);
 	}
 
-	//Print(QString("--> result saved to file '%1'").arg(outputFilename)); //DGM: message already logged by FileIOFilter::SaveToFile (or BinFilter?)
 	return QString();
 }
 
@@ -333,6 +451,48 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 			
 			Print(QString("Will skip %1 lines").arg(skipLines));
 		}
+		else if (IsCommand(argument,COMMAND_OPEN_SHIFT_ON_LOAD))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+
+			if (arguments.empty())
+				return Error(QString(QString("Missing parameter: global shift vector or %1 after '%2'").arg(COMMAND_KEYWORD_AUTO).arg(COMMAND_OPEN_SHIFT_ON_LOAD)));
+
+			QString firstParam = arguments.takeFirst();
+
+			s_loadParameters.shiftHandlingMode = ccGlobalShiftManager::NO_DIALOG;
+			s_loadParameters.m_coordinatesShiftEnabled = false;
+			s_loadParameters.m_coordinatesShift = CCVector3d(0,0,0);
+			
+			if (firstParam.toUpper() == COMMAND_KEYWORD_AUTO)
+			{
+				//let CC handles the global shift automatically
+				s_loadParameters.shiftHandlingMode = ccGlobalShiftManager::NO_DIALOG_AUTO_SHIFT;
+			}
+			else if (arguments.size() < 2)
+			{
+				return Error(QString(QString("Missing parameter: global shift vector after '%1' (3 values expected)").arg(COMMAND_OPEN_SHIFT_ON_LOAD)));
+			}
+			else
+			{
+				bool ok = true;
+				CCVector3d shiftOnLoadVec;
+				shiftOnLoadVec.x = firstParam.toDouble(&ok);
+				if (!ok)
+					return Error(QString(QString("Invalid parameter: X coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+				shiftOnLoadVec.y = arguments.takeFirst().toDouble(&ok);
+				if (!ok)
+					return Error(QString(QString("Invalid parameter: Y coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+				shiftOnLoadVec.z = arguments.takeFirst().toDouble(&ok);
+				if (!ok)
+					return Error(QString(QString("Invalid parameter: Z coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+
+				//set the user defined shift vector as default shift information
+				s_loadParameters.m_coordinatesShiftEnabled = true;
+				s_loadParameters.m_coordinatesShift = shiftOnLoadVec;
+			}
+		}
 		else
 		{
 			break;
@@ -349,9 +509,10 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 	//open specified file
 	QString filename(arguments.takeFirst());
 	Print(QString("Opening file: '%1'").arg(filename));
-	ccHObject* db = FileIOFilter::LoadFromFile(filename,UNKNOWN_FILE,false);
+
+	ccHObject* db = FileIOFilter::LoadFromFile(filename,s_loadParameters,QString());
 	if (!db)
-		return Error(QString("Failed to open file '%1'").arg(filename));
+		return false/*Error(QString("Failed to open file '%1'").arg(filename))*/;
 
 	//look for clouds inside loaded DB
 	ccHObject::Container clouds;
@@ -573,9 +734,35 @@ bool ccCommandLineParser::commandCurvature(QStringList& arguments, QDialog* pare
 	if (MainWindow::ApplyCCLibAlgortihm(MainWindow::CCLIB_ALGO_CURVATURE,entities,parent,additionalParameters))
 	{
 		//save output
-		if (!saveClouds(QString("%1_CURVATURE_KERNEL_%2").arg(curvTypeStr).arg(kernelSize)))
+		if (s_autoSaveMode && !saveClouds(QString("%1_CURVATURE_KERNEL_%2").arg(curvTypeStr).arg(kernelSize)))
 			return false;
 	}
+	return true;
+}
+
+bool ReadDensityType(QStringList& arguments, CCLib::GeometricalAnalysisTools::Density& density)
+{
+	if (arguments.empty())
+		return Error(QString("Missing parameter: density type after \"-%1\" (KNN/SURFACE/VOLUME)").arg(COMMAND_DENSITY_TYPE));
+	//read option confirmed, we can move on
+	QString typeArg = arguments.takeFirst().toUpper();
+	if (typeArg == "KNN")
+	{
+		density = CCLib::GeometricalAnalysisTools::DENSITY_KNN;
+	}
+	else if (typeArg == "SURFACE")
+	{
+		density = CCLib::GeometricalAnalysisTools::DENSITY_2D;
+	}
+	else if (typeArg == "VOLUME")
+	{
+		density = CCLib::GeometricalAnalysisTools::DENSITY_3D;
+	}
+	else
+	{
+		return Error(QString("Invalid parameter: density type is expected after \"-%1\" (KNN/SURFACE/VOLUME)").arg(COMMAND_DENSITY_TYPE));
+	}
+
 	return true;
 }
 
@@ -588,13 +775,31 @@ bool ccCommandLineParser::commandApproxDensity(QStringList& arguments, QDialog* 
 	//Call MainWindow generic method
 	ccHObject::Container entities;
 	entities.resize(m_clouds.size());
-	for (unsigned i=0; i<m_clouds.size(); ++i)
+	for (size_t i=0; i<m_clouds.size(); ++i)
 		entities[i] = m_clouds[i].pc;
 
-	if (MainWindow::ApplyCCLibAlgortihm(MainWindow::CCLIB_ALGO_APPROX_DENSITY,entities,parent))
+	//optional parameter: density type
+	CCLib::GeometricalAnalysisTools::Density densityType = CCLib::GeometricalAnalysisTools::DENSITY_3D;
+	if (!arguments.empty())
+	{
+		QString argument = arguments.front();
+		if (IsCommand(argument,COMMAND_DENSITY_TYPE))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+			if (arguments.empty())
+				return Error(QString("Missing parameter: density type after \"-%1\" (KNN/SURFACE/VOLUME)").arg(COMMAND_DENSITY_TYPE));
+			//read option confirmed, we can move on
+			if (!ReadDensityType(arguments,densityType))
+				return false;
+		}
+	}
+	void* additionalParameters[] = { &densityType };
+
+	if (MainWindow::ApplyCCLibAlgortihm(MainWindow::CCLIB_ALGO_APPROX_DENSITY,entities,parent,additionalParameters))
 	{
 		//save output
-		if (!saveClouds("APPROX_DENSITY"))
+		if (s_autoSaveMode && !saveClouds("APPROX_DENSITY"))
 			return false;
 	}
 
@@ -615,11 +820,28 @@ bool ccCommandLineParser::commandDensity(QStringList& arguments, QDialog* parent
 		return Error(QString("Failed to read a numerical parameter: sphere radius (after \"-%1\"). Got '%2' instead.").arg(COMMAND_DENSITY).arg(kernelStr));
 	Print(QString("\tSphere radius: %1").arg(kernelSize));
 
+	//optional parameter: density type
+	CCLib::GeometricalAnalysisTools::Density densityType = CCLib::GeometricalAnalysisTools::DENSITY_3D;
+	if (!arguments.empty())
+	{
+		QString argument = arguments.front();
+		if (IsCommand(argument,COMMAND_DENSITY_TYPE))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+			if (arguments.empty())
+				return Error(QString("Missing parameter: density type after \"-%1\" (KNN/SURFACE/VOLUME)").arg(COMMAND_DENSITY_TYPE));
+			//read option confirmed, we can move on
+			if (!ReadDensityType(arguments,densityType))
+				return false;
+		}
+	}
+
 	if (m_clouds.empty())
 		return Error(QString("No point cloud on which to compute density! (be sure to open one with \"-%1 [cloud filename]\" before \"-%2\")").arg(COMMAND_OPEN).arg(COMMAND_DENSITY));
 
 	//Call MainWindow generic method
-	void* additionalParameters[1] = {&kernelSize};
+	void* additionalParameters[] = { &kernelSize, &densityType };
 	ccHObject::Container entities;
 	entities.resize(m_clouds.size());
 	for (unsigned i=0; i<m_clouds.size(); ++i)
@@ -628,7 +850,7 @@ bool ccCommandLineParser::commandDensity(QStringList& arguments, QDialog* parent
 	if (MainWindow::ApplyCCLibAlgortihm(MainWindow::CCLIB_ALGO_ACCURATE_DENSITY,entities,parent,additionalParameters))
 	{
 		//save output
-		if (!saveClouds("DENSITY"))
+		if (s_autoSaveMode && !saveClouds("DENSITY"))
 			return false;
 	}
 
@@ -680,7 +902,7 @@ bool ccCommandLineParser::commandSFGradient(QStringList& arguments, QDialog* par
 	if (MainWindow::ApplyCCLibAlgortihm(MainWindow::CCLIB_ALGO_SF_GRADIENT,entities,parent,additionalParameters))
 	{
 		//save output
-		if (!saveClouds(euclidean ? "EUCLIDEAN_SF_GRAD" : "SF_GRAD"))
+		if (s_autoSaveMode && !saveClouds(euclidean ? "EUCLIDEAN_SF_GRAD" : "SF_GRAD"))
 			return false;
 	}
 
@@ -714,7 +936,7 @@ bool ccCommandLineParser::commandRoughness(QStringList& arguments, QDialog* pare
 	if (MainWindow::ApplyCCLibAlgortihm(MainWindow::CCLIB_ALGO_ROUGHNESS,entities,parent,additionalParameters))
 	{
 		//save output
-		if (!saveClouds(QString("ROUGHNESS_KERNEL_%2").arg(kernelSize)))
+		if (s_autoSaveMode && !saveClouds(QString("ROUGHNESS_KERNEL_%2").arg(kernelSize)))
 			return false;
 	}
 
@@ -1428,11 +1650,11 @@ bool ccCommandLineParser::commandBundler(QStringList& arguments)
 	}
 
 	ccHObject tempContainer;
+	FileIOFilter::LoadParameters parameters;
+	parameters.alwaysDisplayLoadDialog = false;
 	BundlerFilter().loadFileExtended(	qPrintable(bundlerFilename),
 										tempContainer,
-										false,
-										0,
-										0,
+										parameters,
 										altKeypointsFilename,
 										undistortImages,
 										generateColoredDTM,
@@ -1963,30 +2185,33 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 	return true;
 }
 
-CC_FILE_TYPES ccCommandLineParser::getFileFormat(QStringList& arguments)
+QString ccCommandLineParser::GetFileFormatFilter(QStringList& arguments, QString& defaultExt)
 {
-	CC_FILE_TYPES type = FILE_TYPES_COUNT;
+	QString fileFilter;
+	defaultExt = QString();
 
 	if (!arguments.isEmpty())
 	{
-		//test if the specified format corresponds to a valid file type
+		//test if the specified format corresponds to a known file type
 		QString argument = arguments.front().toUpper();
 		arguments.pop_front();
 
-		for (int i=0; i<FILE_TYPES_COUNT; ++i)
+		const FileIOFilter::FilterContainer& filters = FileIOFilter::GetFilters();
+		for (size_t i=0; i<filters.size(); ++i)
 		{
-			if (argument == QString(CC_FILE_TYPE_DEFAULT_EXTENSION[i]).toUpper())
+			if (argument == QString(filters[i]->getDefaultExtension()).toUpper())
 			{
 				//found
-				type = static_cast<CC_FILE_TYPES>(i);
+				fileFilter = filters[i]->getFileFilters(false).first(); //Take the first 'output' file filter by default (could we be smarter?)
+				defaultExt = filters[i]->getDefaultExtension();
 				break;
 			}
 		}
 
-		//didn't found anything?
-		if (type == FILE_TYPES_COUNT)
+		//haven't found anything?
+		if (fileFilter.isEmpty())
 		{
-			ccConsole::Error(QString("Unknown format specifier (%1)").arg(argument));
+			ccConsole::Error(QString("Unhandled format specifier (%1)").arg(argument));
 		}
 	}
 	else
@@ -1994,20 +2219,23 @@ CC_FILE_TYPES ccCommandLineParser::getFileFormat(QStringList& arguments)
 		ccConsole::Error("Missing file format specifier!");
 	}
 
-	return type;
+	return fileFilter;
 }
 
 bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 {
-	CC_FILE_TYPES type = getFileFormat(arguments);
-	if (type == FILE_TYPES_COUNT)
+	QString defaultExt;
+	QString fileFilter = GetFileFormatFilter(arguments,defaultExt);
+	if (fileFilter.isEmpty())
 		return false;
 
-	s_CloudExportFormat = type;
-	s_CloudExportExt = QString(CC_FILE_TYPE_DEFAULT_EXTENSION[s_CloudExportFormat]);
+	s_CloudExportFormat = fileFilter;
+	s_CloudExportExt = defaultExt;
+
+	ccConsole::Print(QString("Output export format (clouds) set to: %1").arg(s_CloudExportExt.toUpper()));
 
 	//default options for ASCII output
-	if (s_CloudExportFormat == ASCII)
+	if (fileFilter == AsciiFilter::GetFileFilter())
 	{
 		QSharedPointer<AsciiSaveDlg> saveDialog = AsciiFilter::GetSaveDialog();
 		assert(saveDialog);
@@ -2049,7 +2277,7 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 			if (!ok || precision < 0)
 				return Error(QString("Invalid value for precision! (%1)").arg(COMMAND_ASCII_EXPORT_PRECISION));
 
-			if (type != ASCII)
+			if (fileFilter != AsciiFilter::GetFileFilter())
 				ccConsole::Warning(QString("Argument '%1' is only applicable to ASCII format!").arg(argument));
 
 			QSharedPointer<AsciiSaveDlg> saveDialog = AsciiFilter::GetSaveDialog();
@@ -2069,11 +2297,11 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 			if (arguments.empty())
 				return Error(QString(QString("Missing parameter: separator character after '%1'").arg(COMMAND_ASCII_EXPORT_SEPARATOR)));
 
-			if (type != ASCII)
+			if (fileFilter != AsciiFilter::GetFileFilter())
 				ccConsole::Warning(QString("Argument '%1' is only applicable to ASCII format!").arg(argument));
 
 			QString separatorStr = arguments.takeFirst().toUpper();
-			printf("%s\n",qPrintable(separatorStr));
+			//printf("%s\n",qPrintable(separatorStr));
 			int index = -1;
 			if (separatorStr == "SPACE")
 				index = 0;
@@ -2105,12 +2333,15 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 
 bool ccCommandLineParser::commandChangeMeshOutputFormat(QStringList& arguments)
 {
-	CC_FILE_TYPES type = getFileFormat(arguments);
-	if (type == FILE_TYPES_COUNT)
+	QString defaultExt;
+	QString fileFilter = GetFileFormatFilter(arguments,defaultExt);
+	if (fileFilter.isEmpty())
 		return false;
 
-	s_MeshExportFormat = type;
-	s_MeshExportExt = QString(CC_FILE_TYPE_DEFAULT_EXTENSION[s_MeshExportFormat]);
+	s_MeshExportFormat = fileFilter;
+	s_MeshExportExt = defaultExt;
+
+	ccConsole::Print(QString("Output export format (meshes) set to: %1").arg(s_MeshExportExt.toUpper()));
 
 	//look for additional parameters
 	while (!arguments.empty())
@@ -2132,6 +2363,101 @@ bool ccCommandLineParser::commandChangeMeshOutputFormat(QStringList& arguments)
 		{
 			break; //as soon as we encounter an unrecognized argument, we break the local loop to go back on the main one!
 		}
+	}
+
+	return true;
+}
+
+bool ccCommandLineParser::commandChangeFBXOutputFormat(QStringList& arguments)
+{
+	if (arguments.empty())
+		return Error(QString("Missing parameter: FBX format (string) after '%1'").arg(COMMAND_FBX_EXPORT_FORMAT));
+
+	QString formatStr = arguments.takeFirst();
+	ccConsole::Print(QString("FBX format: %1").arg(formatStr));
+
+#ifdef CC_FBX_SUPPORT
+	FBXFilter::SetDefaultOutputFormat(formatStr);
+#endif
+
+	return true;
+}
+
+bool ccCommandLineParser::commandForcePTXNormalsComputation(QStringList& arguments)
+{
+	//simply change the default filter behavior
+	PTXFilter::SetNormalsComputationBehavior(PTXFilter::ALWAYS);
+
+	return true;
+}
+
+bool ccCommandLineParser::commandSaveClouds(QStringList& arguments)
+{
+	bool allAtOnce = false;
+
+	//look for additional parameters
+	while (!arguments.empty())
+	{
+		QString argument = arguments.front();
+
+		if (argument.toUpper() == OPTION_ALL_AT_ONCE)
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+			allAtOnce = true;
+		}
+		else
+		{
+			break; //as soon as we encounter an unrecognized argument, we break the local loop to go back on the main one!
+		}
+	}
+
+	return saveClouds(QString(),allAtOnce);
+}
+
+bool ccCommandLineParser::commandSaveMeshes(QStringList& arguments)
+{
+	bool allAtOnce = false;
+
+	//look for additional parameters
+	while (!arguments.empty())
+	{
+		QString argument = arguments.front();
+
+		if (argument.toUpper() == OPTION_ALL_AT_ONCE)
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+			allAtOnce = true;
+		}
+		else
+		{
+			break; //as soon as we encounter an unrecognized argument, we break the local loop to go back on the main one!
+		}
+	}
+
+	return saveMeshes(QString(),allAtOnce);
+}
+
+bool ccCommandLineParser::commandAutoSave(QStringList& arguments)
+{
+	if (arguments.empty())
+		return Error(QString(QString("Missing parameter: option after '%1' (%2/%2)").arg(COMMAND_AUTO_SAVE).arg(OPTION_ON).arg(OPTION_OFF)));
+
+	QString option = arguments.takeFirst().toUpper();
+	if (option == OPTION_ON)
+	{
+		Print("Auto-save is enabled");
+		s_autoSaveMode = true;
+	}
+	else if (option == OPTION_OFF)
+	{
+		Print("Auto-save is disabled");
+		s_autoSaveMode = false;
+	}
+	else
+	{
+		return Error(QString(QString("Unrecognized option afer '%1' (%2 or %3 expected)").arg(COMMAND_AUTO_SAVE).arg(OPTION_ON).arg(OPTION_OFF)));
 	}
 
 	return true;
@@ -2168,6 +2494,11 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		else if (IsCommand(argument,COMMAND_DENSITY))
 		{
 			success = commandDensity(arguments,parent);
+		}
+		// "APPROX DENSITY"
+		else if (IsCommand(argument,COMMAND_APPROX_DENSITY))
+		{
+			success = commandApproxDensity(arguments,parent);
 		}
 		// "SF_GRAD" SF GRADIENT
 		else if (IsCommand(argument,COMMAND_SF_GRADIENT))
@@ -2249,6 +2580,16 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		{
 			success = commandChangeMeshOutputFormat(arguments);
 		}
+		//Set default FBX output format
+		else if (IsCommand(argument,COMMAND_FBX_EXPORT_FORMAT))
+		{
+			success = commandChangeFBXOutputFormat(arguments);
+		}
+		//Force normal computation when importing PTX files
+		else if (IsCommand(argument,COMMAND_PTX_COMPUTE_NORMALS))
+		{
+			success = commandForcePTXNormalsComputation(arguments);
+		}
 		else if (IsCommand(argument,COMMAND_SET_ACTIVE_SF))
 		{
 			success = setActiveSF(arguments);
@@ -2256,12 +2597,17 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		//save all loaded clouds
 		else if (IsCommand(argument,COMMAND_SAVE_CLOUDS))
 		{
-			success = saveClouds();
+			success = commandSaveClouds(arguments);
 		}
 		//save all loaded meshes
 		else if (IsCommand(argument,COMMAND_SAVE_MESHES))
 		{
-			success = saveMeshes();
+			success = commandSaveMeshes(arguments);
+		}
+		//auto-save mode
+		else if (IsCommand(argument,COMMAND_AUTO_SAVE))
+		{
+			success = commandAutoSave(arguments);
 		}
 		//unload all loaded clouds
 		else if (IsCommand(argument,COMMAND_CLEAR_CLOUDS))

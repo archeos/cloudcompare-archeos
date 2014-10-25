@@ -20,167 +20,16 @@
 
 //Qt
 #include <QString>
+#include <QStringList>
+#include <QSharedPointer>
 
 //qCC_db
 #include <ccHObject.h>
 #include <ccHObjectCaster.h>
 
-//! Max number of characters per line in an ASCII file
-const int MAX_ASCII_FILE_LINE_LENGTH	=	4096;
-
-//! File types handled by CloudCompare (loading and/or saving)
-enum CC_FILE_TYPES {UNKNOWN_FILE = 0	,		/**< unknown type */
-					SOI					,		/**< SOI (Mensi Soisic) */
-					ASCII				,		/**< ASC,NEU, XYZ, TXT, PTS, etc. */
-					BIN					,		/**< CloudCompare binary */
-					PN					,		/**< Point-Normal (binary) */
-					PV					,		/**< Point-Value (binary) */
-					PLY					,		/**< Stanford mesh file */
-					OBJ					,		/**< Wavefront mesh file */
-					POV					,		/**< Multiple Point-Of-View cloud meta-file (ascii) */
-					MA					,		/**< Maya mesh (ascii) */
-					ICM					,		/**< Calibrated Images meta-file */
-					DM_ASCII			,		/**< Depth Map (ascii) */
-					BUNDLER				,		/**< Bundler output (ascii) */
-					VTK					,		/**< VTK mesh/cloud file */
-					STL					,		/**< STL mesh file (ascii) */
-					PCD					,		/**< Point Cloud Library file */
-					OFF					,		/**< OFF mesh file (ascii) */
-					PTX					,		/**< PTX cloud file (ascii) */
-#ifdef CC_X3D_SUPPORT
-					X3D					,		/**< X3D mesh file */
-#endif
-#ifdef CC_LAS_SUPPORT
-					LAS					,		/**< LAS lidar point cloud (binary) */
-#endif
-#ifdef CC_E57_SUPPORT
-					E57					,		/**< ASTM E2807-11 E57 file */
-#endif
-#ifdef CC_PDMS_SUPPORT
-					PDMS				,		/**< PDMS (.pdmsmac) */
-#endif
-#ifdef CC_DXF_SUPPORT
-					DXF					,		/**< DXF (Autocad) */
-#endif
-#ifdef CC_GDAL_SUPPORT
-					RASTER				,		/**< GIS 2D1/2 raster (supported by GDAL) */
-#endif
-#ifdef CC_FBX_SUPPORT
-					FBX					,		/**< Autodesk FBX format */
-#endif
-					FILE_TYPES_COUNT	,		/**< Fake file type (for automatic counting) */
-};
-
-const CC_FILE_TYPES CC_FILE_TYPES_ENUMS[] = {UNKNOWN_FILE, SOI, ASCII, BIN,
-												PN, PV, PLY, OBJ, POV,
-												MA, ICM, DM_ASCII, BUNDLER,
-												VTK, STL, PCD, OFF, PTX
-#ifdef CC_X3D_SUPPORT
-												,X3D
-#endif
-#ifdef CC_LAS_SUPPORT
-												,LAS
-#endif
-#ifdef CC_E57_SUPPORT
-												,E57
-#endif
-#ifdef CC_PDMS_SUPPORT
-												,PDMS
-#endif
-#ifdef CC_DXF_SUPPORT
-												,DXF
-#endif
-#ifdef CC_GDAL_SUPPORT
-												,RASTER
-#endif
-#ifdef CC_FBX_SUPPORT
-												,FBX
-#endif
-};
-
-const char CC_FILE_TYPE_FILTERS[][64] = {
-			"All (*.*)",
-			"SOI Soisic Mensi (*.soi)",
-			"ASCII files (*.txt *.asc *.neu *.xyz *.pts *.csv)",
-			"BIN CloudCompare binaries (*.bin)",
-			"PN Point-Normal [binary] (*.pn)",
-			"PV Point-Value [binary] (*.pv)",
-			"PLY Stanford mesh file (*.ply)",
-			"OBJ Wavefront mesh file (*.obj)",
-			"POV Multiple Point-Of-View cloud meta-file [ascii] (*.pov)",
-			"MA Maya ASCII file (*.ma)",
-			"ICM Calibrated Images meta-file (*.icm)",
-			"ASCII Depth Map (*.txt *.asc)",
-			"Snavely's Bundler output (*.out)",
-			"VTK cloud or mesh (*.vtk)",
-			"STL mesh (*.stl)",
-			"PCD Point Cloud Library cloud (*.pcd)",
-			"OFF mesh (*.off)",
-			"PTX cloud (*.ptx)" 
-#ifdef CC_X3D_SUPPORT
-			, "X3D mesh file (*.x3d)"
-#endif
-#ifdef CC_LAS_SUPPORT
-			, "LAS lidar point cloud (*.las *.laz)"
-#endif
-#ifdef CC_E57_SUPPORT
-			, "E57 ASTM E2807-11 files (*.e57)"
-#endif
-#ifdef CC_PDMS_SUPPORT
-			, "PDMS (*.pdms *.pdmsmac *.mac)"
-#endif
-#ifdef CC_DXF_SUPPORT
-			, "DXF (*.dxf)"
-#endif
-#ifdef CC_GDAL_SUPPORT
-			, "RASTER grid (*.*)"
-#endif
-#ifdef CC_FBX_SUPPORT
-			, "FBX Autodesk mesh (*.fbx)"
-#endif
-};
-
-const char CC_FILE_TYPE_DEFAULT_EXTENSION[][8] = {
-				"",
-				"soi",
-				"asc",
-				"bin",
-				"pn",
-				"pv",
-				"ply",
-				"obj",
-				"pov",
-				"ma",
-				"icm",
-				"txt",
-				"out",
-				"vtk",
-				"stl",
-				"pcd",
-				"off",
-				"ptx"
-#ifdef CC_X3D_SUPPORT
-				, "x3d"
-#endif
-#ifdef CC_LAS_SUPPORT
-				, "las"
-#endif
-#ifdef CC_E57_SUPPORT
-				, "e57"
-#endif
-#ifdef CC_PDMS_SUPPORT
-				, "pdms"
-#endif
-#ifdef CC_DXF_SUPPORT
-				, "dxf"
-#endif
-#ifdef CC_GDAL_SUPPORT
-				, "tif"
-#endif
-#ifdef CC_FBX_SUPPORT
-				, "fbx"
-#endif
-};
+//Local
+#include "qCC_io.h"
+#include "ccGlobalShiftManager.h"
 
 //! Typical I/O filter errors
 enum CC_FILE_ERROR {CC_FERR_NO_ERROR,
@@ -197,7 +46,10 @@ enum CC_FILE_ERROR {CC_FERR_NO_ERROR,
 					CC_FERR_MALFORMED_FILE,
 					CC_FERR_CONSOLE_ERROR,
 					CC_FERR_BROKEN_DEPENDENCY_ERROR,
-					CC_FERR_FILE_WAS_WRITTEN_BY_PLUGIN
+					CC_FERR_FILE_WAS_WRITTEN_BY_UNKNOWN_PLUGIN,
+					CC_FERR_THIRD_PARTY_LIB_FAILURE,
+					CC_FERR_THIRD_PARTY_LIB_EXCEPTION,
+					CC_FERR_NOT_IMPLEMENTED,
 };
 
 //! Generic file I/O filter
@@ -206,51 +58,56 @@ enum CC_FILE_ERROR {CC_FERR_NO_ERROR,
 **/
 class FileIOFilter
 {
-public:
-   virtual ~FileIOFilter() {}
+public: //initialization
 
-	//! Loads one or more entities from a file with known type
-	/** \param filename filename
-		\param fType file type (if left to UNKNOWN_FILE, file type will be guessed from extension)
-		\param alwaysDisplayLoadDialog always display (eventual) display dialog, even if automatic guess is possible
-		\param coordinatesShiftEnabled whether shift on load has been applied after loading
-		\param coordinatesShift if applicable, applied shift on load (3D translation)
-		\return loaded entities (or 0 if an error occurred)
-	**/
-	static ccHObject* LoadFromFile(const QString& filename,
-									CC_FILE_TYPES fType = UNKNOWN_FILE,
-									bool alwaysDisplayLoadDialog = true,
-									bool* coordinatesShiftEnabled = 0,
-									CCVector3d* coordinatesShift = 0);
+	//! Destructor
+	virtual ~FileIOFilter() {}
 
-	//! Saves an entity (or a group of) to a specific file (with name and type)
-	static CC_FILE_ERROR SaveToFile(ccHObject* entities,
-									const QString& filename,
-									CC_FILE_TYPES fType);
+	//! Generic loading parameters
+	struct LoadParameters
+	{
+		//! Default constructor
+		LoadParameters()
+			: shiftHandlingMode(ccGlobalShiftManager::DIALOG_IF_NECESSARY)
+			, alwaysDisplayLoadDialog(true)
+			, coordinatesShiftEnabled(0)
+			, coordinatesShift(0)
+		{}
 
-	//! Displays (to console) the message corresponding to a given error code
-	/** \param err error code
-		\param action "saving", "reading", etc.
-		\param filename corresponding file
-	**/
-	static void DisplayErrorMessage(CC_FILE_ERROR err,
-									const QString& action,
-									const QString& filename);
+		//! How to handle big coordinates
+		ccGlobalShiftManager::Mode shiftHandlingMode;
+		//! Wether to always display (eventual) display dialog, even if automatic guess is possible
+		bool alwaysDisplayLoadDialog;
+		//! Whether shift on load has been applied after loading (optional)
+		bool* coordinatesShiftEnabled;
+		//! If applicable, applied shift on load (optional)
+		CCVector3d* coordinatesShift;
+	};
+
+	//! Shared type
+	typedef QSharedPointer<FileIOFilter> Shared;
+
+public: //public interface (to be reimplemented by each I/O filter
+
+	//! Returns whether this I/O filter can import files
+	virtual bool importSupported() const { return false; }
 
 	//! Loads one or more entities from a file
 	/** This method must be implemented by children classes.
 		\param filename file to load
 		\param container container to store loaded entities
-		\param alwaysDisplayLoadDialog always display (eventual) display dialog, even if automatic guess is possible
-		\param coordinatesShiftEnabled whether shift on load has already been defined or not (may be modified by this method)
-		\param coordinatesShift already applied (input) or newly applied (output) shift on load (3D translation)
+		\param parameters generic loading parameters
 		\return error
 	**/
 	virtual CC_FILE_ERROR loadFile(	QString filename,
 									ccHObject& container,
-									bool alwaysDisplayLoadDialog = true,
-									bool* coordinatesShiftEnabled = 0,
-									CCVector3d* coordinatesShift = 0) = 0;
+									LoadParameters& parameters)
+	{
+		 return CC_FERR_NOT_IMPLEMENTED;
+	}
+
+	//! Returns whether this I/O filter can export files
+	virtual bool exportSupported() const { return false; }
 
 	//! Saves an entity (or a group of) to a file
 	/** This method must be implemented by children classes.
@@ -258,13 +115,123 @@ public:
 		\param filename filename
 		\return error
 	**/
-	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename) = 0;
+	virtual CC_FILE_ERROR saveToFile(	ccHObject* entity,
+										QString filename)
+	{
+		 return CC_FERR_NOT_IMPLEMENTED;
+	}
 
-	//! Detecs file type from file extension
-	static CC_FILE_TYPES GuessFileFormatFromExtension(QString ext);
+	//! Returns the file filter(s) for this I/O filter
+	/** E.g. 'ASCII file (*.asc)'
+		\param onImport whether the requested filters are for import or export
+		\return list of filters
+	**/
+	virtual QStringList getFileFilters(bool onImport) const = 0;
 
-	//! Factory: returns a filter given it's type
-	static FileIOFilter* CreateFilter(CC_FILE_TYPES fType);
+	//! Returns the default file extension
+	virtual QString getDefaultExtension() const = 0;
+
+	//! Returns whether a specific file can be loaded by this filter
+	/** Used when a file is dragged over the application window for instance.
+		Should remain simple (guess based on the file extension, etc.)
+	**/
+	//virtual bool canLoad(QString filename) const = 0;
+
+	//! Returns whether a specific extension can be loaded by this filter
+	/** \param upperCaseExt upper case extension
+		\return whether the extension is (theoretically) handled by this filter
+	**/
+	virtual bool canLoadExtension(QString upperCaseExt) const = 0;
+
+	//! Returns whether this I/O filter can save the specified type of entity
+	/** \param type entity type
+		\param multiple whether the filter can save multiple instances of this entity at once
+		\param exclusive whether the filter can only save this type of entity if selected or if it can be mixed with other types
+		\return whether the entity type can be saved
+	**/
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const = 0;
+
+public: //static methods
+
+	//! Loads one or more entities from a file with a known filter
+	/** Shortcut to FileIOFilter::loadFile
+		\param filename filename
+		\param parameters generic loading parameters
+		\param filter input filter
+		\return loaded entities (or 0 if an error occurred)
+	**/
+	QCC_IO_LIB_API static ccHObject* LoadFromFile(	const QString& filename,
+									LoadParameters& parameters,
+									Shared filter);
+
+	//! Loads one or more entities from a file with known type
+	/** Shortcut to the other version of FileIOFilter::LoadFromFile
+		\param parameters generic loading parameters
+		\param fileFilter input filter 'file filter' (if empty, the best I/O filter will be guessed from the file extension)
+		\return loaded entities (or 0 if an error occurred)
+	**/
+	QCC_IO_LIB_API static ccHObject* LoadFromFile(	const QString& filename,
+									LoadParameters& parameters,
+									QString fileFilter = QString());
+
+	//! Saves an entity (or a group of) to a specific file thanks to a given filter
+	/** Shortcut to FileIOFilter::saveFile
+		\param entities entity to save (can be a group of other entities)
+		\param filename filename
+		\param filter output filter
+		\return error type (if any)
+	**/
+	QCC_IO_LIB_API static CC_FILE_ERROR SaveToFile(ccHObject* entities,
+									const QString& filename,
+									Shared filter);
+
+	//! Saves an entity (or a group of) to a specific file thanks to a given filter
+	/** Shortcut to the other version of FileIOFilter::SaveToFile
+		\param entities entity to save (can be a group of other entities)
+		\param filename filename
+		\param fileFilter output filter 'file filter'
+		\return error type (if any)
+	**/
+	QCC_IO_LIB_API static CC_FILE_ERROR SaveToFile(ccHObject* entities,
+									const QString& filename,
+									QString fileFilter);
+
+	//! Shortcut to the ccGlobalShiftManager mechanism specific for files
+	/** \param[in] P sample point (typically the first loaded)
+		\param[out] Pshift global shift
+		\param loadParameters loading parameters
+		\return whether global shift has been defined/enabled
+	**/
+	QCC_IO_LIB_API static bool HandleGlobalShift(const CCVector3d& P, CCVector3d& Pshift, LoadParameters& loadParameters);
+
+	//! Displays (to console) the message corresponding to a given error code
+	/** \param err error code
+		\param action "saving", "reading", etc.
+		\param filename corresponding file
+	**/
+	QCC_IO_LIB_API static void DisplayErrorMessage(CC_FILE_ERROR err,
+									const QString& action,
+									const QString& filename);
+
+public: //global filters registration mechanism
+
+	//! Init internal filters (should be called once)
+	QCC_IO_LIB_API static void InitInternalFilters();
+
+	//! Registers a new filter
+	QCC_IO_LIB_API static void Register(Shared filter);
+
+	//! Returns the filter corresponding to the given 'file filter'
+	QCC_IO_LIB_API static Shared GetFilter(QString fileFilter, bool onImport);
+
+	//! Returns the best filter (presumably) to open a given file extension
+	QCC_IO_LIB_API static Shared FindBestFilterForExtension(QString ext);
+
+	//! Type of a I/O filters container
+	typedef std::vector< FileIOFilter::Shared > FilterContainer;
+
+	//! Returns the set of all registered filters
+	QCC_IO_LIB_API static const FilterContainer& GetFilters();
 
 };
 

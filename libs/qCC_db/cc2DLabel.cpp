@@ -21,8 +21,10 @@
 #include "cc2DLabel.h"
 #include "ccBasicTypes.h"
 #include "ccGenericPointCloud.h"
+#include "ccPointCloud.h"
 #include "ccSphere.h"
 #include "ccGenericGLDisplay.h"
+#include "ccScalarField.h"
 
 //Qt
 #include <QSharedPointer>
@@ -319,8 +321,7 @@ void AddPointCoordinates(QStringList& body, unsigned pointIndex, ccGenericPointC
 {
 	assert(cloud);
 	const CCVector3* P = cloud->getPointPersistentPtr(pointIndex);
-	const CCVector3d& shift = cloud->getGlobalShift();
-	bool isShifted = (shift.norm2() != 0);
+	bool isShifted = cloud->isShifted();
 
 	QString coordStr = QString("P#%0:").arg(pointIndex);
 	if (isShifted)
@@ -334,7 +335,7 @@ void AddPointCoordinates(QStringList& body, unsigned pointIndex, ccGenericPointC
 	
 	if (isShifted)
 	{
-		CCVector3d Pg = CCVector3d::fromArray(P->u) + shift;
+		CCVector3d Pg = cloud->toGlobal3d(*P);
 		QString globCoordStr = QString("  [original] (%1;%2;%3)").arg(Pg.x,0,'f',precision).arg(Pg.y,0,'f',precision).arg(Pg.z,0,'f',precision);
 		body << globCoordStr;
 	}
@@ -383,7 +384,15 @@ QStringList cc2DLabel::getLabelContent(int precision)
 			if (cloud->hasDisplayedScalarField())
 			{
 				ScalarType D = cloud->getPointScalarValue(pointIndex);
-				QString sfStr = QString("Scalar: %1").arg(D,0,'f',precision);
+				QString source("Scalar");
+				//fetch the real scalar field name if possible
+				if (cloud->isA(CC_TYPES::POINT_CLOUD))
+				{
+					ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
+					if (pc->getCurrentDisplayedScalarField())
+						source = QString(pc->getCurrentDisplayedScalarField()->getName());
+				}
+				QString sfStr = QString("%1 = %2").arg(source).arg(D,0,'f',precision);
 				body << sfStr;
 			}
 		}

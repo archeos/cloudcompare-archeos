@@ -46,6 +46,50 @@
 //Semi-persistent value for max. cloud size
 static double s_maxCloudSizeDoubleSpinBoxValue = (double)CC_MAX_NUMBER_OF_POINTS_PER_CLOUD/1.0e6;
 
+//! Dialog 'context'
+struct AsciiOpenContext
+{
+	//! Default initializer
+	AsciiOpenContext()
+		: separator(' ')
+		, extractSFNameFrom1stLine(false)
+		, maxPointCountPerCloud(0)
+		, skipLines(0)
+		, applyAll(false)
+	{}
+
+	//! Saves state
+	void save(Ui_AsciiOpenDialog* ui)
+	{
+		extractSFNameFrom1stLine = ui->extractSFNamesFrom1stLineCheckBox->isChecked();
+		maxPointCountPerCloud = ui->maxCloudSizeDoubleSpinBox->value();
+		separator = ui->lineEditSeparator->text()[0];
+		skipLines = ui->spinBoxSkipLines->value();
+	}
+
+	//! Restores state
+	void load(Ui_AsciiOpenDialog* ui) const
+	{
+		ui->extractSFNamesFrom1stLineCheckBox->setChecked(extractSFNameFrom1stLine);
+		ui->maxCloudSizeDoubleSpinBox->setValue(maxPointCountPerCloud);
+		ui->lineEditSeparator->setEnabled(false);
+		ui->lineEditSeparator->setText(separator);
+		ui->lineEditSeparator->setEnabled(true);
+		ui->spinBoxSkipLines->setEnabled(false);
+		ui->spinBoxSkipLines->setValue(skipLines);
+		ui->spinBoxSkipLines->setEnabled(true);
+	}
+	
+	AsciiOpenDlg::Sequence sequence;
+	QChar separator;
+	bool extractSFNameFrom1stLine;
+	double maxPointCountPerCloud;
+	int skipLines;
+	bool applyAll;
+};
+//! Semi-persistent loading context
+static AsciiOpenContext s_asciiOpenContext;
+
 AsciiOpenDlg::AsciiOpenDlg(QWidget* parent)
 	: QDialog(parent)
 	//, Ui::AsciiOpenDialog()
@@ -61,7 +105,9 @@ AsciiOpenDlg::AsciiOpenDlg(QWidget* parent)
 	//spinBoxSkipLines->setValue(0);
 	m_ui->commentLinesSkippedLabel->hide();
 
-	connect(m_ui->buttonBox,			SIGNAL(accepted()),						this, SLOT(testBeforeAccept()));
+	connect(m_ui->applyButton,			SIGNAL(clicked()),						this, SLOT(apply()));
+	connect(m_ui->applyAllButton,		SIGNAL(clicked()),						this, SLOT(applyAll()));
+	connect(m_ui->cancelButton,			SIGNAL(clicked()),						this, SLOT(reject()));
 	connect(m_ui->lineEditSeparator,	SIGNAL(textChanged(const QString &)),	this, SLOT(onSeparatorChange(const QString &)));
 	connect(m_ui->spinBoxSkipLines,		SIGNAL(valueChanged(int)),				this, SLOT(setSkippedLines(int)));
 
@@ -120,6 +166,9 @@ void AsciiOpenDlg::setSkippedLines(int linesCount)
 static bool CouldBeX (const QString& colHeader) { return colHeader.startsWith(AsciiHeaderColumns::X().toUpper()); }
 static bool CouldBeY (const QString& colHeader) { return colHeader.startsWith(AsciiHeaderColumns::Y().toUpper()); }
 static bool CouldBeZ (const QString& colHeader) { return colHeader.startsWith(AsciiHeaderColumns::Z().toUpper()); }
+static bool CouldBeRf(const QString& colHeader) { return colHeader == AsciiHeaderColumns::Rf().toUpper(); }
+static bool CouldBeGf(const QString& colHeader) { return colHeader == AsciiHeaderColumns::Gf().toUpper(); }
+static bool CouldBeBf(const QString& colHeader) { return colHeader == AsciiHeaderColumns::Bf().toUpper(); }
 static bool CouldBeR (const QString& colHeader) { return colHeader == AsciiHeaderColumns::R().toUpper() || colHeader.contains("RED"); }
 static bool CouldBeG (const QString& colHeader) { return colHeader == AsciiHeaderColumns::G().toUpper() || colHeader.contains("GREEN"); }
 static bool CouldBeB (const QString& colHeader) { return colHeader == AsciiHeaderColumns::B().toUpper() || colHeader.contains("BLUE"); }
@@ -160,7 +209,7 @@ void AsciiOpenDlg::onSeparatorChange(const QString& separator)
 	if (separator.length() < 1)
 	{
 		m_ui->asciiCodeLabel->setText("Enter a valid character!");
-		m_ui->buttonBox->setEnabled(false);
+		m_ui->buttonFrame->setEnabled(false);
 		m_ui->tableWidget->clear();
 		m_columnsValidty.clear();
 		return;
@@ -395,6 +444,9 @@ void AsciiOpenDlg::updateTable()
 				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_R,RGBIcon);
 				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_G,RGBIcon);
 				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_B,RGBIcon);
+				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_Rf,RGBIcon);
+				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_Gf,RGBIcon);
+				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_Bf,RGBIcon);
 				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_Grey,GreyIcon);
 				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_Scalar,ScalarIcon);
 				columnHeaderWidget->setItemIcon(ASCII_OPEN_DLG_RGB32i,RGBIcon);
@@ -473,6 +525,27 @@ void AsciiOpenDlg::updateTable()
 						//Z
 						columnHeaderWidget->setCurrentIndex(ASCII_OPEN_DLG_Z);
 						assignedXYZFlags |= Z_BIT; //update bit field accordingly
+						m_columnsValidty[i] = true;
+					}
+					else if ( (assignedRGBFlags & X_BIT) == 0 && CouldBeRf(colHeader) )
+					{
+						//Red
+						columnHeaderWidget->setCurrentIndex(ASCII_OPEN_DLG_Rf);
+						assignedRGBFlags |= X_BIT; //update bit field accordingly
+						m_columnsValidty[i] = true;
+					}
+					else if ( (assignedRGBFlags & Y_BIT) == 0 && CouldBeGf(colHeader) )
+					{
+						//Green
+						columnHeaderWidget->setCurrentIndex(ASCII_OPEN_DLG_Gf);
+						assignedRGBFlags |= Y_BIT; //update bit field accordingly
+						m_columnsValidty[i] = true;
+					}
+					else if ( (assignedRGBFlags & Z_BIT) == 0 && CouldBeBf(colHeader) )
+					{
+						//Blue
+						columnHeaderWidget->setCurrentIndex(ASCII_OPEN_DLG_Bf);
+						assignedRGBFlags |= Z_BIT; //update bit field accordingly
 						m_columnsValidty[i] = true;
 					}
 					else if ( (assignedRGBFlags & X_BIT) == 0 && CouldBeR(colHeader) )
@@ -654,7 +727,7 @@ void AsciiOpenDlg::updateTable()
 	m_columnsCount = columnsCount;
 
 	m_ui->tableWidget->setEnabled(true);
-	m_ui->buttonBox->setEnabled(true);
+	m_ui->buttonFrame->setEnabled(true);
 
 	//check for invalid columns
 	checkSelectedColumnsValidity(); //will eventually enable of disable the "OK" button
@@ -676,7 +749,8 @@ void AsciiOpenDlg::checkSelectedColumnsValidity()
 		}
 	}
 
-	m_ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(!m_selectedInvalidColumns);
+	m_ui->applyAllButton->setEnabled(!m_selectedInvalidColumns);
+	m_ui->applyButton->setEnabled(!m_selectedInvalidColumns);
 }
 
 bool AsciiOpenDlg::CheckOpenSequence(const AsciiOpenDlg::Sequence& sequence, QString& errorMessage)
@@ -715,18 +789,68 @@ bool AsciiOpenDlg::CheckOpenSequence(const AsciiOpenDlg::Sequence& sequence, QSt
 	return true;
 }
 
-void AsciiOpenDlg::testBeforeAccept()
+bool AsciiOpenDlg::apply()
 {
 	QString errorMessage;
 	if (!CheckOpenSequence(getOpenSequence(),errorMessage))
 	{
 		QMessageBox::warning(0, "Error", errorMessage);
+		return false;
 	}
 	else
 	{
 		s_maxCloudSizeDoubleSpinBoxValue = m_ui->maxCloudSizeDoubleSpinBox->value();
 		accept();
+		return true;
 	}
+}
+
+void AsciiOpenDlg::applyAll()
+{
+	if (!apply())
+		return;
+
+	//backup current open sequence
+	s_asciiOpenContext.save(m_ui);
+	s_asciiOpenContext.sequence = getOpenSequence();
+	s_asciiOpenContext.applyAll = true;
+}
+
+bool AsciiOpenDlg::restorePreviousContext()
+{
+	if (!s_asciiOpenContext.applyAll)
+		return false;
+
+	//restore previous dialog state
+	s_asciiOpenContext.load(m_ui);
+	updateTable();
+
+	//saved sequence and cloud content don't match!!!
+	if (static_cast<size_t>(m_columnsCount) != s_asciiOpenContext.sequence.size())
+	{
+		s_asciiOpenContext.applyAll = false; //cancel the 'Apply All' effect
+		return false;
+	}
+
+	//Restore columns attributes
+	for (unsigned i=0; i<m_columnsCount; i++)
+	{
+		QComboBox* combo = static_cast<QComboBox*>(m_ui->tableWidget->cellWidget(0,i));
+		if (!combo) //yes, it happens if all lines are skipped!
+		{
+			s_asciiOpenContext.applyAll = false; //cancel the 'Apply All' effect
+			return false;
+		}
+		SequenceItem& item = s_asciiOpenContext.sequence[i];
+		combo->setCurrentIndex(item.type);
+	}
+
+	QString errorMessage;
+	if (!CheckOpenSequence(s_asciiOpenContext.sequence,errorMessage))
+	{
+		s_asciiOpenContext.applyAll = false; //cancel the 'Apply All' effect
+	}
+	return s_asciiOpenContext.applyAll;
 }
 
 AsciiOpenDlg::Sequence AsciiOpenDlg::getOpenSequence() const
@@ -809,14 +933,17 @@ bool AsciiOpenDlg::safeSequence() const
 				return false;
 			break;
 		case ASCII_OPEN_DLG_R:
+		case ASCII_OPEN_DLG_Rf:
 			if (!CouldBeR(colHeader))
 				return false;
 			break;
 		case ASCII_OPEN_DLG_G:
+		case ASCII_OPEN_DLG_Gf:
 			if (!CouldBeG(colHeader))
 				return false;
 			break;
 		case ASCII_OPEN_DLG_B:
+		case ASCII_OPEN_DLG_Bf:
 			if (!CouldBeB(colHeader))
 				return false;
 			break;
@@ -869,9 +996,11 @@ void AsciiOpenDlg::columnsTypeHasChanged(int index)
 		//we found the right element
 		if (changedCombo == combo)
 		{
-			if (index == int(ASCII_OPEN_DLG_X) ||
+			if (index == int(ASCII_OPEN_DLG_X)  ||
 				index == int(ASCII_OPEN_DLG_NX) ||
-				index == int(ASCII_OPEN_DLG_R))
+				index == int(ASCII_OPEN_DLG_R)  ||
+				index == int(ASCII_OPEN_DLG_Rf)
+				)
 			{
 				//Auto select the next columns type
 				if (i+2<m_columnsCount)
@@ -899,6 +1028,11 @@ void AsciiOpenDlg::columnsTypeHasChanged(int index)
 						{
 							nextCombo->setCurrentIndex(ASCII_OPEN_DLG_G);
 							nextNextCombo->setCurrentIndex(ASCII_OPEN_DLG_B);
+						}
+						else if (index == int(ASCII_OPEN_DLG_Rf))
+						{
+							nextCombo->setCurrentIndex(ASCII_OPEN_DLG_Gf);
+							nextNextCombo->setCurrentIndex(ASCII_OPEN_DLG_Bf);
 						}
 					}
 

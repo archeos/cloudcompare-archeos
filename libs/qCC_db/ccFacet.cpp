@@ -85,6 +85,10 @@ ccFacet* ccFacet::clone() const
 			return 0;
 		}
 
+		//the copy constructor of ccPolyline creates a new cloud (the copy of this facet's 'contour points')
+		//but set it by default as a child of the polyline (while we want the opposite in a facet)
+		facet->m_contourPolyline->detachChild(facet->m_contourVertices);
+
 		facet->m_contourPolyline->setLocked(m_contourPolyline->isLocked());
 		facet->m_contourVertices->setEnabled(m_contourVertices->isEnabled());
 		facet->m_contourVertices->setVisible(m_contourVertices->isVisible());
@@ -280,7 +284,6 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 		}
 
 		//we create the corresponding (2D) mesh
-		CCLib::Delaunay2dMesh dm;
 		std::vector<CCVector2> hullPointsVector;
 		try
 		{
@@ -296,52 +299,63 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 		//if we have computed a concave hull, we must remove triangles falling outside!
 		bool removePointsOutsideHull = (m_maxEdgeLength > 0);
 
-		if (!hullPointsVector.empty() && dm.build(hullPointsVector,0,removePointsOutsideHull))
+		if (!hullPointsVector.empty())
 		{
-			unsigned triCount = dm.size();
-			assert(triCount != 0);
-
-			m_polygonMesh = new ccMesh(m_contourVertices);
-			if (m_polygonMesh->reserve(triCount))
+			CCLib::Delaunay2dMesh dm;
+			char errorStr[1024];
+			if (dm.buildMesh(hullPointsVector,0,errorStr))
 			{
-				//import faces
-				for (unsigned i=0; i<triCount; ++i)
-				{
-					const CCLib::TriangleSummitsIndexes* tsi = dm.getTriangleIndexes(i);
-					m_polygonMesh->addTriangle(tsi->i1, tsi->i2, tsi->i3);
-				}
-				m_polygonMesh->setVisible(true);
-				m_polygonMesh->enableStippling(true);
+				if (removePointsOutsideHull)
+					dm.removeOuterTriangles(hullPointsVector,hullPointsVector);
+				unsigned triCount = dm.size();
+				assert(triCount != 0);
 
-				//unique normal for facets
-				if (m_polygonMesh->reservePerTriangleNormalIndexes())
+				m_polygonMesh = new ccMesh(m_contourVertices);
+				if (m_polygonMesh->reserve(triCount))
 				{
-					NormsIndexesTableType* normsTable = new NormsIndexesTableType();
-					normsTable->reserve(1);
-					CCVector3 N(m_planeEquation);
-					normsTable->addElement(ccNormalVectors::GetNormIndex(N.u));
-					m_polygonMesh->setTriNormsTable(normsTable);
+					//import faces
 					for (unsigned i=0; i<triCount; ++i)
-						m_polygonMesh->addTriangleNormalIndexes(0,0,0); //all triangles will have the same normal!
-					m_polygonMesh->showNormals(true);
-					m_polygonMesh->addChild(normsTable);
-					m_polygonMesh->setLocked(true);
-					m_polygonMesh->setName(DEFAULT_POLYGON_MESH_NAME);
-					m_contourVertices->addChild(m_polygonMesh);
+					{
+						const CCLib::TriangleSummitsIndexes* tsi = dm.getTriangleIndexes(i);
+						m_polygonMesh->addTriangle(tsi->i1, tsi->i2, tsi->i3);
+					}
+					m_polygonMesh->setVisible(true);
+					m_polygonMesh->enableStippling(true);
+
+					//unique normal for facets
+					if (m_polygonMesh->reservePerTriangleNormalIndexes())
+					{
+						NormsIndexesTableType* normsTable = new NormsIndexesTableType();
+						normsTable->reserve(1);
+						CCVector3 N(m_planeEquation);
+						normsTable->addElement(ccNormalVectors::GetNormIndex(N.u));
+						m_polygonMesh->setTriNormsTable(normsTable);
+						for (unsigned i=0; i<triCount; ++i)
+							m_polygonMesh->addTriangleNormalIndexes(0,0,0); //all triangles will have the same normal!
+						m_polygonMesh->showNormals(true);
+						m_polygonMesh->addChild(normsTable);
+						m_polygonMesh->setLocked(true);
+						m_polygonMesh->setName(DEFAULT_POLYGON_MESH_NAME);
+						m_contourVertices->addChild(m_polygonMesh);
+					}
+					else
+					{
+						ccLog::Warning("[ccFacet::createInternalRepresentation] Not enough memory to create the polygon mesh's normals!");
+					}
+
+					//update facet surface
+					m_surface = CCLib::MeshSamplingTools::computeMeshArea(m_polygonMesh);
 				}
 				else
 				{
-					ccLog::Warning("[ccFacet::createInternalRepresentation] Not enough memory to create the polygon mesh's normals!");
+					delete m_polygonMesh;
+					m_polygonMesh = 0;
+					ccLog::Warning("[ccFacet::createInternalRepresentation] Not enough memory to create the polygon mesh!");
 				}
-
-				//update facet surface
-				m_surface = CCLib::MeshSamplingTools::computeMeshArea(m_polygonMesh);
 			}
 			else
 			{
-				delete m_polygonMesh;
-				m_polygonMesh = 0;
-				ccLog::Warning("[ccFacet::createInternalRepresentation] Not enough memory to create the polygon mesh!");
+				ccLog::Warning(QString("[ccFacet::createInternalRepresentation] Failed to create polygon mesh (Triangle lib. said '%1'").arg(errorStr));
 			}
 		}
 	}
@@ -426,7 +440,7 @@ bool ccFacet::toFile_MeOnly(QFile& out) const
 	//WARNING: the cloud must be saved in the same BIN file! (responsibility of the caller)
 	{
 		uint32_t originPointsUniqueID = (m_originPoints ? (uint32_t)m_originPoints->getUniqueID() : 0);
-		if (out.write((const char*)&originPointsUniqueID,4)<0)
+		if (out.write((const char*)&originPointsUniqueID,4) < 0)
 			return WriteError();
 	}
 
@@ -435,7 +449,7 @@ bool ccFacet::toFile_MeOnly(QFile& out) const
 	//WARNING: the cloud must be saved in the same BIN file! (responsibility of the caller)
 	{
 		uint32_t contourPointsUniqueID = (m_contourVertices ? (uint32_t)m_contourVertices->getUniqueID() : 0);
-		if (out.write((const char*)&contourPointsUniqueID,4)<0)
+		if (out.write((const char*)&contourPointsUniqueID,4) < 0)
 			return WriteError();
 	}
 
@@ -444,7 +458,7 @@ bool ccFacet::toFile_MeOnly(QFile& out) const
 	//WARNING: the polyline must be saved in the same BIN file! (responsibility of the caller)
 	{
 		uint32_t contourPolyUniqueID = (m_contourPolyline ? (uint32_t)m_contourPolyline->getUniqueID() : 0);
-		if (out.write((const char*)&contourPolyUniqueID,4)<0)
+		if (out.write((const char*)&contourPolyUniqueID,4) < 0)
 			return WriteError();
 	}
 
@@ -453,28 +467,28 @@ bool ccFacet::toFile_MeOnly(QFile& out) const
 	//WARNING: the mesh must be saved in the same BIN file! (responsibility of the caller)
 	{
 		uint32_t polygonMeshUniqueID = (m_polygonMesh ? (uint32_t)m_polygonMesh->getUniqueID() : 0);
-		if (out.write((const char*)&polygonMeshUniqueID,4)<0)
+		if (out.write((const char*)&polygonMeshUniqueID,4) < 0)
 			return WriteError();
 	}
 
 	//plane equation (dataVersion>=32)
-	if (out.write((const char*)&m_planeEquation,sizeof(PointCoordinateType)*4)<0)
+	if (out.write((const char*)&m_planeEquation,sizeof(PointCoordinateType)*4) < 0)
 		return WriteError();
 
 	//center (dataVersion>=32)
-	if (out.write((const char*)m_center.u,sizeof(PointCoordinateType)*3)<0)
+	if (out.write((const char*)m_center.u,sizeof(PointCoordinateType)*3) < 0)
 		return WriteError();
 
 	//RMS (dataVersion>=32)
-	if (out.write((const char*)&m_rms,sizeof(double))<0)
+	if (out.write((const char*)&m_rms,sizeof(double)) < 0)
 		return WriteError();
 
 	//surface (dataVersion>=32)
-	if (out.write((const char*)&m_surface,sizeof(double))<0)
+	if (out.write((const char*)&m_surface,sizeof(double)) < 0)
 		return WriteError();
 
 	//Max edge length (dataVersion>=31)
-	if (out.write((const char*)&m_maxEdgeLength,sizeof(PointCoordinateType))<0)
+	if (out.write((const char*)&m_maxEdgeLength,sizeof(PointCoordinateType)) < 0)
 		return WriteError();
 
 	return true;
@@ -493,7 +507,7 @@ bool ccFacet::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	//we only store its unique ID --> we hope we will find it at loading time
 	{
 		uint32_t origPointsUniqueID = 0;
-		if (in.read((char*)&origPointsUniqueID,4)<0)
+		if (in.read((char*)&origPointsUniqueID,4) < 0)
 			return ReadError();
 		//[DIRTY] WARNING: temporarily, we set the cloud unique ID in the 'm_originPoints' pointer!!!
 		*(uint32_t*)(&m_originPoints) = origPointsUniqueID;
@@ -504,7 +518,7 @@ bool ccFacet::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	//we only store its unique ID --> we hope we will find it at loading time
 	{
 		uint32_t contourPointsUniqueID = 0;
-		if (in.read((char*)&contourPointsUniqueID,4)<0)
+		if (in.read((char*)&contourPointsUniqueID,4) < 0)
 			return ReadError();
 		//[DIRTY] WARNING: temporarily, we set the cloud unique ID in the 'm_contourVertices' pointer!!!
 		*(uint32_t*)(&m_contourVertices) = contourPointsUniqueID;
@@ -515,7 +529,7 @@ bool ccFacet::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	//we only store its unique ID --> we hope we will find it at loading time
 	{
 		uint32_t contourPolyUniqueID = 0;
-		if (in.read((char*)&contourPolyUniqueID,4)<0)
+		if (in.read((char*)&contourPolyUniqueID,4) < 0)
 			return ReadError();
 		//[DIRTY] WARNING: temporarily, we set the polyline unique ID in the 'm_contourPolyline' pointer!!!
 		*(uint32_t*)(&m_contourPolyline) = contourPolyUniqueID;
@@ -526,30 +540,30 @@ bool ccFacet::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	//we only store its unique ID --> we hope we will find it at loading time
 	{
 		uint32_t polygonMeshUniqueID = 0;
-		if (in.read((char*)&polygonMeshUniqueID,4)<0)
+		if (in.read((char*)&polygonMeshUniqueID,4) < 0)
 			return ReadError();
 		//[DIRTY] WARNING: temporarily, we set the polyline unique ID in the 'm_contourPolyline' pointer!!!
 		*(uint32_t*)(&m_polygonMesh) = polygonMeshUniqueID;
 	}
 
 	//plane equation (dataVersion>=32)
-	if (in.read((char*)&m_planeEquation,sizeof(PointCoordinateType)*4)<0)
+	if (in.read((char*)&m_planeEquation,sizeof(PointCoordinateType)*4) < 0)
 		return ReadError();
 
 	//center (dataVersion>=32)
-	if (in.read((char*)m_center.u,sizeof(PointCoordinateType)*3)<0)
+	if (in.read((char*)m_center.u,sizeof(PointCoordinateType)*3) < 0)
 		return ReadError();
 
 	//RMS (dataVersion>=32)
-	if (in.read((char*)&m_rms,sizeof(double))<0)
+	if (in.read((char*)&m_rms,sizeof(double)) < 0)
 		return ReadError();
 
 	//surface (dataVersion>=32)
-	if (in.read((char*)&m_surface,sizeof(double))<0)
+	if (in.read((char*)&m_surface,sizeof(double)) < 0)
 		return ReadError();
 
 	//Max edge length (dataVersion>=31)
-	if (in.read((char*)&m_maxEdgeLength,sizeof(PointCoordinateType))<0)
+	if (in.read((char*)&m_maxEdgeLength,sizeof(PointCoordinateType)) < 0)
 		return WriteError();
 
 	return true;

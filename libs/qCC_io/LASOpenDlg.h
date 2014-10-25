@@ -41,11 +41,12 @@ enum LAS_FIELDS {	LAS_X					= 0,
 					LAS_GREEN				= 13,
 					LAS_BLUE				= 14,
 					LAS_TIME				= 15,
+					LAS_EXTRA				= 16,
 					//Sub fields
-					LAS_CLASSIF_VALUE		= 16,
-					LAS_CLASSIF_SYNTHETIC	= 17,
-					LAS_CLASSIF_KEYPOINT	= 18,
-					LAS_CLASSIF_WITHHELD	= 19,
+					LAS_CLASSIF_VALUE		= 17,
+					LAS_CLASSIF_SYNTHETIC	= 18,
+					LAS_CLASSIF_KEYPOINT	= 19,
+					LAS_CLASSIF_WITHHELD	= 20,
 					//Invald flag
 					LAS_INVALID				= 255
 };
@@ -66,6 +67,7 @@ const char LAS_FIELD_NAMES[][28] = {"X",
 									"Green",
 									"Blue",
 									"Time",
+									"extra",
 									"[Classif] Value",
 									"[Classif] Synthetic flag",
 									"[Classif] Key-point flag",
@@ -87,12 +89,20 @@ public:
 	//! Whether to load a given field
 	bool doLoad(LAS_FIELDS field) const;
 
+	//! Clears the 'extra bytes' record
+	void clearEVLRs();
+
+	//! Adds an 'extra bytes' record entry
+	void addEVLR(QString description);
+
+	//! Returns whether an EVLR is selected for laoding or not
+	bool doLoadEVLR(size_t index) const;
+
 	//! Auto-skip mode (to use the same parameters for ALL files afterwards)
 	bool autoSkipMode() const;
 
 	//! Whether 8-bit RGB mode is forced or not
 	bool forced8bitRgbMode() const;
-
 };
 
 #endif //CC_LAS_OPEN_DIALOG

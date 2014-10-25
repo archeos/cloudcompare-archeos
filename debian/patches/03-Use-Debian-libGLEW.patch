@@ -3,7 +3,7 @@ Date: Mon, 14 Jan 2013 21:15:12 +0100
 Subject: Use debian libGLEW
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -59,7 +59,7 @@ include( CMakeExternalLibs.cmake )
+@@ -68,7 +68,7 @@ include( CMakeExternalLibs.cmake )
  include( contrib/AllSupport.cmake )
  
  # Libs requested by both qCC & ccViewer
@@ -124,8 +124,8 @@ Subject: Use debian libGLEW
 +# include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
- include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
-@@ -60,7 +60,7 @@ else()
+ include_directories( ${QCC_IO_LIB_SOURCE_DIR} )
+@@ -63,7 +63,7 @@ else()
  	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE QT_NO_DEBUG)
  endif()
  

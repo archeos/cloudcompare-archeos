@@ -6,6 +6,7 @@ include_directories( ${CloudComparePlugins_SOURCE_DIR} )
 include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
 include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
 include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
+include_directories( ${QCC_IO_LIB_SOURCE_DIR} )
 include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
 if( MSVC )
 include_directories( ${QCC_DB_LIB_SOURCE_DIR}/msvc )
@@ -15,6 +16,8 @@ include_directories( ${EXTERNAL_LIBS_INCLUDE_DIR} )
 
 file( GLOB header_list *.h)
 file( GLOB source_list *.cpp)
+# force the link with ccStdPluginInterface.cpp
+list( APPEND source_list ${CloudComparePlugins_SOURCE_DIR}/ccStdPluginInterface.cpp )
 file( GLOB ui_list *.ui )
 file( GLOB qrc_list *.qrc )
 file( GLOB rc_list *.rc )
@@ -50,7 +53,7 @@ set_default_cc_preproc( ${PROJECT_NAME} )
 # Add custom default prepocessor definitions
 set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS USE_GLEW GLEW_STATIC )
 if( WIN32 )
-    set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_USE_AS_DLL QCC_DB_USE_AS_DLL )
+    set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_USE_AS_DLL QCC_DB_USE_AS_DLL QCC_IO_USE_AS_DLL )
 endif()
 
 # Plugins need the QT_NO_DEBUG preprocessor in release!
@@ -64,6 +67,7 @@ target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
 target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
 target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
+target_link_libraries( ${PROJECT_NAME} QCC_IO_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_GL_LIB )
 target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
 
@@ -78,11 +82,10 @@ else()
 	install_shared( ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} 1 /plugins )
 endif()
 
-#'GL filter' plugins specifics
-if( CC_SHADER_FOLDER )
+#GL filters and IO plugins also go the the ccViewer 'plugins' sub-folder
+if( ${OPTION_BUILD_CCVIEWER} )
 
-	#GL filters also go the the ccViewer 'plugins' sub-folder
-	if( ${OPTION_BUILD_CCVIEWER} )
+	if( CC_SHADER_FOLDER OR CC_IS_IO_PLUGIN )
 		if( APPLE )
 			install( TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${CCVIEWER_MAC_BASE_DIR}/Contents/Plugins/ccViewerPlugins COMPONENT Runtime )
 			set( CCVIEWER_PLUGINS ${CCVIEWER_PLUGINS} ${CCVIEWER_MAC_BASE_DIR}/Contents/Plugins/ccViewerPlugins/lib${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "ccViewer plugin list")
@@ -90,6 +93,11 @@ if( CC_SHADER_FOLDER )
 			install_shared( ${PROJECT_NAME} ${CCVIEWER_DEST_FOLDER} 1 /plugins )
 		endif()
 	endif()
+
+endif()
+
+#'GL filter' plugins specifics
+if( CC_SHADER_FOLDER )
 
 	#copy the shader files
 	file( GLOB shaderFiles shaders/${CC_SHADER_FOLDER}/*.frag shaders/${CC_SHADER_FOLDER}/*.vert )

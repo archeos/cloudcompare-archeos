@@ -25,6 +25,7 @@
 //Qt
 #include <QString>
 #include <QVariant>
+#include <QSharedPointer>
 
 //System
 #include <stdint.h>
@@ -125,7 +126,7 @@ public:
 	static const CC_CLASS_ENUM TRANS_BUFFER			=	HIERARCHY_OBJECT	| CC_TRANS_BUFFER_BIT		| CC_LEAF_BIT;
 
 	//  Custom types
-	/**	Custom objects are typically defined by plugins. They can be inserted in an object
+	/** Custom objects are typically defined by plugins. They can be inserted in an object
 		hierarchy or displayed in an OpenGL context like any other ccHObject.
 		To differentiate custom objects, use the meta-data mechanism (see ccOBject::getMetaData
 		and ccOBject::setMetaData). You can also define a custom icon (see ccHObject::getIcon).
@@ -146,6 +147,30 @@ public:
 
 };
 
+//! Unique ID generator (should be unique for the whole application instance - with plugins, etc.)
+class QCC_DB_LIB_API ccUniqueIDGenerator
+{
+public:
+
+	//! Shared type
+	typedef QSharedPointer<ccUniqueIDGenerator> Shared;
+
+	//! Default constructor
+	ccUniqueIDGenerator() : m_lastUniqueID(0) {}
+
+	//! Resets the unique ID
+	void reset() { m_lastUniqueID = 0; }
+	//! Returns a (new) unique ID
+	unsigned fetchOne() { return ++m_lastUniqueID; }
+	//! Returns the value of the last generated unique ID
+	unsigned getLast() const { return m_lastUniqueID; }
+	//! Updates the value of the last generated unique ID with the current one
+	void update(unsigned ID) { if (ID > m_lastUniqueID) m_lastUniqueID = ID; }
+
+protected:
+	unsigned m_lastUniqueID;
+};
+
 //! Generic "CloudCompare Object" template
 class QCC_DB_LIB_API ccObject : public ccSerializableObject
 {
@@ -156,8 +181,15 @@ public:
 	**/
 	ccObject(QString name = QString());
 
+	//! Copy constructor
+	ccObject(const ccObject& object);
+
 	//! Returns current database version
 	static unsigned GetCurrentDBVersion();
+	//! Sets the unique ID generator
+	static void SetUniqueIDGenerator(ccUniqueIDGenerator::Shared generator);
+	//! Returns the unique ID generator
+	static ccUniqueIDGenerator::Shared GetUniqueIDGenerator();
 
 	//! Returns class ID
 	virtual CC_CLASS_ENUM getClassID() const = 0;
@@ -187,6 +219,9 @@ public:
 	**/
 	virtual inline void setEnabled(bool state) { setFlagState(CC_ENABLED,state); }
 
+	//! Toggles the "enabled" property
+	virtual inline void toggleActivation() { setEnabled(!isEnabled()); }
+
 	//! Returns whether the object is locked  or not
 	/** Shortcut to access flag CC_LOCKED
 	**/
@@ -205,11 +240,6 @@ public:
 
 	inline bool isKindOf(CC_CLASS_ENUM type) const { return (getClassID() & type) == type; }
 	inline bool isA(CC_CLASS_ENUM type) const { return (getClassID() == type); }
-
-	//! Resets the object's unique ID counter
-	/** Warning: should be called only once, on program startup.
-	**/
-	static void ResetUniqueIDCounter();
 
 	//! Returns a new unassigned unique ID
 	/** Unique IDs are handled with persistent settings
@@ -277,13 +307,6 @@ protected:
 		skipped (in order to let the user instantiate the object first)
 	**/
 	virtual bool fromFile(QFile& in, short dataVersion, int flags);
-
-	//! Sets last assigned unique ID
-	/** Unique IDs are handled with persistent settings
-		in order to assure consistency between main app
-		and plugins!
-	**/
-	static void UpdateLastUniqueID(unsigned lastID);
 
 	//! Object name
 	QString m_name;

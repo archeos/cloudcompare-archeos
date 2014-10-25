@@ -57,17 +57,28 @@ struct plyElement
 };
 
 //! Stanfod PLY file I/O filter
-class PlyFilter : public FileIOFilter
+class QCC_IO_LIB_API PlyFilter : public FileIOFilter
 {
 public:
 
+	//static accessors
+	static inline QString GetFileFilter() { return "PLY mesh (*.ply)"; }
+	static inline QString GetDefaultExtension() { return "ply"; }
+
 	//inherited from FileIOFilter
-	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
+	virtual bool importSupported() const { return true; }
+	virtual bool exportSupported() const { return true; }
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
 	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
+	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
+	virtual bool canLoadExtension(QString upperCaseExt) const;
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const;
 
 protected:
 
+	//! Internal method
 	CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename, e_ply_storage_mode storageType);
 };
 
-#endif
+#endif //CC_PLY_FILTER_HEADER

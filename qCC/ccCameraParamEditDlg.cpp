@@ -31,6 +31,20 @@
 #include <QDoubleValidator>
 #include <QMdiSubWindow>
 
+double SliderPosToZNearCoef(int i, int iMax)
+{
+	assert(i >= 0 && i <= iMax);
+	return pow(10,-static_cast<double>((iMax-i)*3)/iMax); //between 10^-3 and 1
+}
+
+int ZNearCoefToSliderPos(double coef, int iMax)
+{
+	assert(coef >= 0 && coef <= 1.0);
+	int i = static_cast<int>(-(static_cast<double>(iMax)/3) * log10(coef));
+	assert(i >= 0 && i <= iMax);
+	return iMax-i;
+}
+
 ccCameraParamEditDlg::ccCameraParamEditDlg(QWidget* parent)
 	: ccOverlayDialog(parent)
 	, Ui::CameraParamDlg()
@@ -55,6 +69,7 @@ ccCameraParamEditDlg::ccCameraParamEditDlg(QWidget* parent)
 	connect(ezDoubleSpinBox,		SIGNAL(valueChanged(double)),	this,	SLOT(cameraCenterChanged()));
 
 	connect(fovDoubleSpinBox,		SIGNAL(valueChanged(double)),	this,	SLOT(fovChanged(double)));
+	connect(zNearHorizontalSlider,	SIGNAL(sliderMoved(int)),		this,	SLOT(zNearSliderMoved(int)));
 
 	connect(viewUpToolButton,		SIGNAL(clicked()),				this,	SLOT(setTopView()));
 	connect(viewDownToolButton,		SIGNAL(clicked()),				this,	SLOT(setBottomView()));
@@ -83,7 +98,7 @@ void ccCameraParamEditDlg::makeFrameless()
 void ccCameraParamEditDlg::iThetaValueChanged(int val)
 {
 	thetaSpinBox->blockSignals(true);
-	thetaSpinBox->setValue((double)val/10);
+	thetaSpinBox->setValue(static_cast<double>(val)/10);
 	thetaSpinBox->blockSignals(false);
 
 	reflectParamChange();
@@ -92,7 +107,7 @@ void ccCameraParamEditDlg::iThetaValueChanged(int val)
 void ccCameraParamEditDlg::iPsiValueChanged(int val)
 {
 	psiSpinBox->blockSignals(true);
-	psiSpinBox->setValue((double)val/10);
+	psiSpinBox->setValue(static_cast<double>(val)/10);
 	psiSpinBox->blockSignals(false);
 
 	reflectParamChange();
@@ -101,7 +116,7 @@ void ccCameraParamEditDlg::iPsiValueChanged(int val)
 void ccCameraParamEditDlg::iPhiValueChanged(int val)
 {
 	phiSpinBox->blockSignals(true);
-	phiSpinBox->setValue((double)val/10);
+	phiSpinBox->setValue(static_cast<double>(val)/10);
 	phiSpinBox->blockSignals(false);
 
 	reflectParamChange();
@@ -110,7 +125,7 @@ void ccCameraParamEditDlg::iPhiValueChanged(int val)
 void ccCameraParamEditDlg::dThetaValueChanged(double val)
 {
 	thetaSlider->blockSignals(true);
-	thetaSlider->setValue((int)(val*10.0));
+	thetaSlider->setValue(static_cast<int>(val*10.0));
 	thetaSlider->blockSignals(false);
 	reflectParamChange();
 }
@@ -118,7 +133,7 @@ void ccCameraParamEditDlg::dThetaValueChanged(double val)
 void ccCameraParamEditDlg::dPsiValueChanged(double val)
 {
 	psiSlider->blockSignals(true);
-	psiSlider->setValue((int)(val*10.0));
+	psiSlider->setValue(static_cast<int>(val*10.0));
 	psiSlider->blockSignals(false);
 	reflectParamChange();
 }
@@ -126,7 +141,7 @@ void ccCameraParamEditDlg::dPsiValueChanged(double val)
 void ccCameraParamEditDlg::dPhiValueChanged(double val)
 {
 	phiSlider->blockSignals(true);
-	phiSlider->setValue((int)(val*10.0));
+	phiSlider->setValue(static_cast<int>(val*10.0));
 	phiSlider->blockSignals(false);
 	reflectParamChange();
 }
@@ -138,8 +153,8 @@ void ccCameraParamEditDlg::cameraCenterChanged()
 
 	m_associatedWin->blockSignals(true);
 	m_associatedWin->setCameraPos( CCVector3d(	exDoubleSpinBox->value(),
-		eyDoubleSpinBox->value(),
-		ezDoubleSpinBox->value() ));
+												eyDoubleSpinBox->value(),
+												ezDoubleSpinBox->value() ));
 	m_associatedWin->blockSignals(false);
 
 	m_associatedWin->redraw();
@@ -165,6 +180,16 @@ void ccCameraParamEditDlg::fovChanged(double value)
 		return;
 
 	m_associatedWin->setFov(static_cast<float>(value));
+	m_associatedWin->redraw();
+}
+
+void ccCameraParamEditDlg::zNearSliderMoved(int i)
+{
+	if (!m_associatedWin)
+		return;
+
+	double zNearCoef = SliderPosToZNearCoef(i,zNearHorizontalSlider->maximum());
+	m_associatedWin->setZNearCoef(zNearCoef);
 	m_associatedWin->redraw();
 }
 
@@ -312,17 +337,20 @@ bool ccCameraParamEditDlg::linkWith(ccGLWindow* win)
 
 	if (oldWin)
 	{
-		this->disconnect(oldWin);
+		m_associatedWin->disconnect(this);
 	}
 
 	if (m_associatedWin)
 	{
-		initWithMatrix(m_associatedWin->getBaseViewMat());
-		connect(m_associatedWin,	SIGNAL(baseViewMatChanged(const ccGLMatrixdd&)),	this,	SLOT(initWithMatrix(const ccGLMatrixd&)));
+		initWith(m_associatedWin);
+		connect(m_associatedWin,	SIGNAL(baseViewMatChanged(const ccGLMatrixd&)),		this,	SLOT(initWithMatrix(const ccGLMatrixd&)));
+		connect(m_associatedWin,	SIGNAL(viewMatRotated(const ccGLMatrixd&)),			this,	SLOT(updateViewMatrix(const ccGLMatrixd&)));
+
 		connect(m_associatedWin,	SIGNAL(cameraPosChanged(const CCVector3d&)),		this,	SLOT(updateCameraCenter(const CCVector3d&)));
 		connect(m_associatedWin,	SIGNAL(pivotPointChanged(const CCVector3d&)),		this,	SLOT(updatePivotPoint(const CCVector3d&)));
 		connect(m_associatedWin,	SIGNAL(perspectiveStateChanged()),					this,	SLOT(updateViewMode()));
 		connect(m_associatedWin,	SIGNAL(destroyed(QObject*)),						this,	SLOT(hide()));
+		connect(m_associatedWin,	SIGNAL(fovChanged(float)),							this,	SLOT(updateWinFov(float)));
 
 		PushedMatricesMapType::iterator it = pushedMatrices.find(m_associatedWin);
 		buttonsFrame->setEnabled(it != pushedMatrices.end());
@@ -358,12 +386,18 @@ void ccCameraParamEditDlg::updateViewMode()
 		if (!perspective)
 			currentModeLabel->setText("parallel projection");
 		else
-			currentModeLabel->setText(QString(objectBased ? "Object" : "Viewer")+QString("-based perspective"));
+			currentModeLabel->setText(QString(objectBased ? "object" : "viewer") + QString("-based perspective"));
 
 		rotationCenterFrame->setEnabled(objectBased);
 		pivotPickingToolButton->setEnabled(objectBased);
 		eyePositionFrame->setEnabled(perspective);
 	}
+}
+
+void ccCameraParamEditDlg::updateViewMatrix(const ccGLMatrixd&)
+{
+	if (m_associatedWin)
+		initWithMatrix(m_associatedWin->getBaseViewMat());
 }
 
 void ccCameraParamEditDlg::initWithMatrix(const ccGLMatrixd& mat)
@@ -372,39 +406,67 @@ void ccCameraParamEditDlg::initWithMatrix(const ccGLMatrixd& mat)
 	CCVector3d trans;
 	mat.getParameters(phi,theta,psi,trans);
 
-	//to prevent retro-action!
+	//to avoid retro-action
 	ccGLWindow* win = m_associatedWin;
 	m_associatedWin = 0;
 
+	phiSpinBox->blockSignals(true);
 	phiSpinBox->setValue(CC_RAD_TO_DEG*phi);
+	dPhiValueChanged(phiSpinBox->value());
+	phiSpinBox->blockSignals(false);
+	
+	psiSpinBox->blockSignals(true);
 	psiSpinBox->setValue(CC_RAD_TO_DEG*psi);
+	dPsiValueChanged(psiSpinBox->value());
+	psiSpinBox->blockSignals(false);
+
+	thetaSpinBox->blockSignals(true);
 	thetaSpinBox->setValue(CC_RAD_TO_DEG*theta);
+	dThetaValueChanged(thetaSpinBox->value());
+	thetaSpinBox->blockSignals(false);
 
 	m_associatedWin = win;
+}
 
-	if (m_associatedWin)
-	{
-		updatePivotPoint(win->getViewportParameters().pivotPoint);
-		updateCameraCenter(win->getViewportParameters().cameraCenter);
-	}
+void ccCameraParamEditDlg::initWith(ccGLWindow* win)
+{
+	setEnabled(win != 0);
+	if (!win)
+		return;
+
+	//update matrix (angles)
+	initWithMatrix(win->getBaseViewMat());
+
+	const ccViewportParameters& params = m_associatedWin->getViewportParameters();
+
+	//update view mode
+	updateViewMode();
+
+	//update pivot point
+	updatePivotPoint(params.pivotPoint);
+	//update camera center
+	updateCameraCenter(params.cameraCenter);
+
+	//update FOV
+	updateWinFov(win->getFov());
+
+	//update zNearCoef
+	zNearHorizontalSlider->blockSignals(true);
+	zNearHorizontalSlider->setValue(ZNearCoefToSliderPos(params.zNearCoef,zNearHorizontalSlider->maximum()));
+	zNearHorizontalSlider->blockSignals(false);
 }
 
 void ccCameraParamEditDlg::updateCameraCenter(const CCVector3d& P)
 {
-	if (!m_associatedWin)
-		return;
-
-	//to prevent retro-action!
-	ccGLWindow* win = m_associatedWin;
-	m_associatedWin = 0;
-
+	exDoubleSpinBox->blockSignals(true);
+	eyDoubleSpinBox->blockSignals(true);
+	ezDoubleSpinBox->blockSignals(true);
 	exDoubleSpinBox->setValue(P.x);
 	eyDoubleSpinBox->setValue(P.y);
 	ezDoubleSpinBox->setValue(P.z);
-
-	fovDoubleSpinBox->setValue(win->getViewportParameters().fov);
-
-	m_associatedWin = win;
+	exDoubleSpinBox->blockSignals(false);
+	eyDoubleSpinBox->blockSignals(false);
+	ezDoubleSpinBox->blockSignals(false);
 }
 
 void ccCameraParamEditDlg::updatePivotPoint(const CCVector3d& P)
@@ -412,17 +474,25 @@ void ccCameraParamEditDlg::updatePivotPoint(const CCVector3d& P)
 	if (!m_associatedWin)
 		return;
 
-	//to prevent retro-action!
-	ccGLWindow* win = m_associatedWin;
-	m_associatedWin = 0;
-
+	rcxDoubleSpinBox->blockSignals(true);
+	rcyDoubleSpinBox->blockSignals(true);
+	rczDoubleSpinBox->blockSignals(true);
 	rcxDoubleSpinBox->setValue(P.x);
 	rcyDoubleSpinBox->setValue(P.y);
 	rczDoubleSpinBox->setValue(P.z);
+	rcxDoubleSpinBox->blockSignals(false);
+	rcyDoubleSpinBox->blockSignals(false);
+	rczDoubleSpinBox->blockSignals(false);
+}
 
-	fovDoubleSpinBox->setValue(win->getViewportParameters().fov);
+void ccCameraParamEditDlg::updateWinFov(float fov_deg)
+{
+	if (!m_associatedWin)
+		return;
 
-	m_associatedWin = win;
+	fovDoubleSpinBox->blockSignals(true);
+	fovDoubleSpinBox->setValue(fov_deg);
+	fovDoubleSpinBox->blockSignals(false);
 }
 
 ccGLMatrixd ccCameraParamEditDlg::getMatrix()

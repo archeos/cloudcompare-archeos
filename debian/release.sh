@@ -1,13 +1,13 @@
 #!/bin/bash
 
-version=2.5.6~git20140801
+version=2.6.0
 debversion=0
 ppaversion=1
 
-for d in precise saucy trusty
+for d in precise saucy trusty utopic
 do
     # Saucy package can be build from 'experimental' branch, with DXF support
-    if [ $d = "saucy" ] || [ $d = "trusty" ]
+    if [ $d != "precise" ]
     then
         git checkout experimental
     fi
@@ -17,7 +17,7 @@ do
     sed -i -e 's/archeos/'${d}'/g' -e 's/theodoric/'${d}'/g' debian/changelog
     
     # Precise do not support libfreenect-dev
-    if [ $d = "precise" ]
+    if [ $d == "precise" ]
     then
       sed -i 's/, libfreenect-dev//g' debian/control;
       sed -i -e '/\-DLIBFREENECT_INCLUDE_DIR=\"\/usr\/include\" \\/d' -e '/\-DLIBFREENECT_LIBRARY_FILE=\"\-lfreenect\" \\/d' -e '/\-DINSTALL_QKINECT_PLUGIN=ON \\/d'  debian/rules;

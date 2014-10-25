@@ -23,20 +23,26 @@
 //! Noah Snavely's Bundler output file filter
 /** See http://phototour.cs.washington.edu/
 **/
-class BundlerFilter : public FileIOFilter
+class QCC_IO_LIB_API BundlerFilter : public FileIOFilter
 {
 public:
 
+	//static accessors
+	static inline QString GetFileFilter() { return "Snavely's Bundler output (*.out)"; }
+	static inline QString GetDefaultExtension() { return "out"; }
+
 	//inherited from FileIOFilter
-	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
-	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename) {/*NOT IMPLEMENTED*/return CC_FERR_NO_SAVE;}
+	virtual bool importSupported() const { return true; }
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
+	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
+	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
+	virtual bool canLoadExtension(QString upperCaseExt) const;
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const;
 
 	//! Specific load method
 	CC_FILE_ERROR loadFileExtended(	const QString& filename,
 									ccHObject& container,
-									bool displayLoadDialog,
-									bool* coordinatesShiftEnabled = 0,
-									CCVector3d* coordinatesShift = 0,
+									LoadParameters& parameters,
 									const QString& altKeypointsFilename = QString(),
 									bool undistortImages = false,
 									bool generateColoredDTM = false,
@@ -45,4 +51,4 @@ public:
 
 };
 
-#endif
+#endif //CC_BUNDLER_FILTER_HEADER
