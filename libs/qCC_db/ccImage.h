@@ -27,6 +27,7 @@
 #include <QString>
 
 class ccGenericGLDisplay;
+class ccCameraSensor;
 
 //! Generic image
 class QCC_DB_LIB_API ccImage : public ccHObject
@@ -39,6 +40,9 @@ public:
 	//! Constructor from QImage
 	ccImage(const QImage& image, const QString& name = QString("unknown"));
 
+	//inherited methods (ccHObject)
+	virtual bool isSerializable() const { return true; }
+
 	//! Returns unique class ID
 	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::IMAGE; }
 
@@ -49,45 +53,48 @@ public:
 	**/
 	bool load(const QString& filename, QString& error);
 
-	//! Sets image
-	/** \param image image
-		\return success
-	**/
-	virtual void setImage(const QImage& image);
+	//! Returns image data
+	inline QImage& data() { return m_image; }
+	//! Returns image data (const version)
+	inline const QImage& data() const { return m_image; }
+
+	//! Sets image data
+	void setData(const QImage& image);
 
 	//! Returns image width
-	inline unsigned getW() const {return m_width;}
+	inline unsigned getW() const { return m_width; }
 
 	//! Returns image height
-	inline unsigned getH() const {return m_height;}
+	inline unsigned getH() const { return m_height; }
 
 	//! Sets image texture transparency
-	virtual void setAlpha(float value);
+	void setAlpha(float value);
 
 	//! Returns image texture transparency
-	virtual inline float getAlpha() const {return m_texAlpha;}
-
-#ifdef INCLUDE_IMAGE_FILENAME
-	//! Returns complete filename
-	QString getCompleteFileName() const {return m_completeFileName;}
-
-	//! Sets complete filename
-	void setCompleteFileName(const QString& name) {m_completeFileName = name;}
-#endif
-
-	//! Returns coresponding QImage
-	virtual const QImage& data() const {return m_image;}
+	inline float getAlpha() const { return m_texAlpha; }
 
 	//! Manually sets aspect ratio
 	void setAspectRatio(float ar) { m_aspectRatio = ar; }
 
 	//! Returns aspect ratio
-	float getAspectRatio() const { return m_aspectRatio; }
+	inline float getAspectRatio() const { return m_aspectRatio; }
+
+	//! Sets associated sensor
+	void setAssociatedSensor(ccCameraSensor* sensor);
+
+	//! Returns associated sensor
+	ccCameraSensor* getAssociatedSensor() { return m_associatedSensor; }
+
+	//! Returns associated sensor (const version)
+	const ccCameraSensor* getAssociatedSensor() const { return m_associatedSensor; }
 
 protected:
 
 	//inherited from ccHObject
 	virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
+	virtual void onDeletionOf(const ccHObject* obj);
+	virtual bool toFile_MeOnly(QFile& out) const;
+	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
 
 	//! Unbinds texture from currently associated GL context
 	virtual bool unbindTexture();
@@ -98,6 +105,9 @@ protected:
 		\return success
 	**/
 	virtual bool bindToGlTexture(ccGenericGLDisplay* win, bool pow2Texture = false);
+
+	//! Updates aspect ratio
+	void updateAspectRatio();
 
 	//! Image width (in pixels)
 	unsigned m_width;
@@ -127,10 +137,8 @@ protected:
 	//! Image data
 	QImage m_image;
 
-#ifdef INCLUDE_IMAGE_FILENAME
-	//! Complete filename
-	QString m_completeFileName;
-#endif
+	//! Associated sensor
+	ccCameraSensor* m_associatedSensor;
 };
 
 #endif //CC_IMAGE_HEADER

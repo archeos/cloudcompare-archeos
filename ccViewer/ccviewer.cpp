@@ -27,6 +27,7 @@
 #include <QPluginLoader>
 #include <QDir>
 #include <ccGLFilterPluginInterface.h>
+#include <ccIOFilterPluginInterface.h>
 
 //qCC_glWindow
 #include <ccGLWindow.h>
@@ -132,6 +133,7 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 	//"Options" menu
 	connect(ui.actionGlobalZoom,					SIGNAL(triggered()),						this,	SLOT(setGlobalZoom()));
 	connect(ui.actionFullScreen,					SIGNAL(toggled(bool)),						this,	SLOT(toggleFullScreen(bool)));
+	connect(ui.actionLockRotationVertAxis,			SIGNAL(triggered()),						this,	SLOT(toggleRotationAboutVertAxis()));
 
 	//"Options > Selected" menu
 	connect(ui.actionShowColors,					SIGNAL(toggled(bool)),						this,	SLOT(toggleColorsShown(bool)));
@@ -140,6 +142,7 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 	connect(ui.actionShowColorRamp,					SIGNAL(toggled(bool)),						this,	SLOT(toggleColorbarShown(bool)));
 	connect(ui.actionZoomOnSelectedEntity,			SIGNAL(triggered()),						this,	SLOT(zoomOnSelectedEntity()));
 	connect(ui.actionDelete,						SIGNAL(triggered()),						this,	SLOT(doActionDeleteSelectedEntity()));
+
 
 	//"Shaders" menu
 	connect(ui.actionNoFilter,						SIGNAL(triggered()),						this,	SLOT(doDisableGLFilter()));
@@ -223,34 +226,57 @@ void ccViewer::loadPlugins()
 
 bool ccViewer::loadPlugin(QObject *plugin)
 {
-	ccGLFilterPluginInterface* ccPlugin = qobject_cast<ccGLFilterPluginInterface*>(plugin);
-	if (!ccPlugin)
+	//is this a GL plugin?
+	ccGLFilterPluginInterface* glPlugin = qobject_cast<ccGLFilterPluginInterface*>(plugin);
+	if (glPlugin)
 	{
-		ccLog::Warning("Only 'GL filter' plugins are supported for now!");
-		return false;
-	}
-	plugin->setParent(this);
+		plugin->setParent(this);
 
-	QString pluginName = ccPlugin->getName();
-	if (pluginName.isEmpty())
+		QString pluginName = glPlugin->getName();
+		if (pluginName.isEmpty())
+		{
+			ccLog::Warning("Plugin has an invalid (empty) name!");
+			return false;
+		}
+		ccLog::Print("Plugin name: [%s] (GL filter)",qPrintable(pluginName));
+
+		//(auto)create action
+		QAction* action = new QAction(pluginName,plugin);
+		action->setToolTip(glPlugin->getDescription());
+		action->setIcon(glPlugin->getIcon());
+		//connect default signal
+		connect(action, SIGNAL(triggered()), this, SLOT(doEnableGLFilter()));
+
+		ui.menuPlugins->addAction(action);
+		ui.menuPlugins->setEnabled(true);
+		ui.menuPlugins->setVisible(true);
+		return true;
+	}
+
+	//is this an IO plugin?
+	ccIOFilterPluginInterface* ioPlugin = qobject_cast<ccIOFilterPluginInterface*>(plugin);
+	if (ioPlugin)
 	{
-		ccLog::Warning("Plugin has an invalid (empty) name!");
-		return false;
+		plugin->setParent(this);
+
+		QString pluginName = ioPlugin->getName();
+		if (pluginName.isEmpty())
+		{
+			ccLog::Warning("Plugin has an invalid (empty) name!");
+			return false;
+		}
+		ccLog::Print("Plugin name: [%s] (I/O filter)",qPrintable(pluginName));
+
+		FileIOFilter::Shared filter = ioPlugin->getFilter(0);
+		if (filter)
+		{
+			FileIOFilter::Register(filter);
+			ccLog::Print(QString("\tfile extension: %1").arg(filter->getDefaultExtension().toUpper()));
+		}
 	}
-	ccLog::Print("Plugin name: [%s]",qPrintable(pluginName));
 
-	//(auto)create action
-	QAction* action = new QAction(pluginName,plugin);
-	action->setToolTip(ccPlugin->getDescription());
-	action->setIcon(ccPlugin->getIcon());
-	//connect default signal
-	connect(action, SIGNAL(triggered()), this, SLOT(doEnableGLFilter()));
-
-	ui.menuPlugins->addAction(action);
-	ui.menuPlugins->setEnabled(true);
-	ui.menuPlugins->setVisible(true);
-
-	return true;
+	ccLog::Warning("Only 'GL filter' and 'I/O' plugins are supported for now!");
+	return false;
 }
 
 void ccViewer::doDisableGLFilter()
@@ -482,11 +508,15 @@ void ccViewer::addToDB(const QStringList& filenames)
 		currentRoot=0;
 	}
 
-	bool scaleAlreadyDisplayed=false;
+	bool scaleAlreadyDisplayed = false;
 
-	for (int i=0;i<filenames.size();++i)
+	FileIOFilter::LoadParameters parameters;
+	parameters.alwaysDisplayLoadDialog = false;
+	parameters.shiftHandlingMode = ccGlobalShiftManager::NO_DIALOG_AUTO_SHIFT;
+
+	for (int i=0; i<filenames.size(); ++i)
 	{
-		ccHObject* newEntities = FileIOFilter::LoadFromFile(filenames[i],UNKNOWN_FILE,false);
+		ccHObject* newEntities = FileIOFilter::LoadFromFile(filenames[i],parameters);
 
 		if (newEntities)
 		{
@@ -494,7 +524,7 @@ void ccViewer::addToDB(const QStringList& filenames)
 
 			if (!scaleAlreadyDisplayed)
 			{
-				for (unsigned i=0;i<newEntities->getChildrenNumber();++i)
+				for (unsigned i=0; i<newEntities->getChildrenNumber(); ++i)
 				{
 					ccHObject* ent = newEntities->getChild(i);
 					if (ent->isA(CC_TYPES::POINT_CLOUD))
@@ -693,6 +723,31 @@ void ccViewer::toggleFullScreen(bool state)
 		m_glWindow->redraw();
 }
 
+void ccViewer::toggleRotationAboutVertAxis()
+{
+	if (!m_glWindow)
+		return;
+
+	bool wasLocked = m_glWindow->isVerticalRotationLocked();
+	bool isLocked = !wasLocked;
+
+	m_glWindow->lockVerticalRotation(isLocked);
+
+	ui.actionLockRotationVertAxis->blockSignals(true);
+	ui.actionLockRotationVertAxis->setChecked(isLocked);
+	ui.actionLockRotationVertAxis->blockSignals(false);
+
+	if (isLocked)
+	{
+		m_glWindow->displayNewMessage(QString("[ROTATION LOCKED]"),ccGLWindow::UPPER_CENTER_MESSAGE,false,24*3600,ccGLWindow::ROTAION_LOCK_MESSAGE);
+	}
+	else
+	{
+		m_glWindow->displayNewMessage(QString(),ccGLWindow::UPPER_CENTER_MESSAGE,false,0,ccGLWindow::ROTAION_LOCK_MESSAGE);
+	}
+	m_glWindow->redraw();
+}
+
 void ccViewer::doActionDisplayShortcuts()
 {
 	QMessageBox msgBox;
@@ -813,7 +868,7 @@ void ccViewer::changeCurrentScalarField(bool state)
 
 	//disable all other actions
 	const QObjectList& children = ui.menuSelectSF->children();
-	for (int i=0;i<children.size();++i)
+	for (int i=0; i<children.size() ;++i)
 	{
 		QAction* act = static_cast<QAction*>(children[i]);
 		act->blockSignals(true);
@@ -822,7 +877,7 @@ void ccViewer::changeCurrentScalarField(bool state)
 	}
 
 	int sfIndex = action->data().toInt();
-	if (sfIndex < (int)cloud->getNumberOfScalarFields())
+	if (sfIndex < static_cast<int>(cloud->getNumberOfScalarFields()))
 	{
 		cloud->setCurrentDisplayedScalarField(sfIndex);
 		//when 'setCurrentDisplayedScalarField' is called, scalar field is automatically shown!

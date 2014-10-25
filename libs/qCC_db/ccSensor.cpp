@@ -24,23 +24,19 @@ ccSensor::ccSensor(QString name)
 	, m_color(ccColor::green)
 	, m_scale(PC_ONE)
 {
-    m_rigidTransformation.toIdentity();
+	m_rigidTransformation.toIdentity();
 }
 
-ccSensor::ccSensor(const ccSensor &sensor): ccHObject(sensor.getName())
+ccSensor::ccSensor(const ccSensor &sensor)
+	: ccHObject(sensor)
+	, m_posBuffer(0)
+	, m_rigidTransformation(sensor.m_rigidTransformation)
+	, m_activeIndex(sensor.m_activeIndex)
+	, m_color(sensor.m_color)
+	, m_scale(sensor.m_scale)
 {
-	//! Transform
-	this->m_rigidTransformation = sensor.m_rigidTransformation;
-
-	//! Active index (for displayed position, etc.)
-	this->m_activeIndex = sensor.m_activeIndex;
-
-	//! Color of the sensor
-	this->m_color = sensor.m_color;
-
-	//! Sensor graphic representation scale
-	this->m_scale = sensor.m_scale;
-	this->m_posBuffer = sensor.m_posBuffer;
+	if (sensor.m_posBuffer)
+		m_posBuffer = new ccIndexedTransformationBuffer(*sensor.m_posBuffer);
 }
 
 bool ccSensor::addPosition(ccGLMatrix& trans, double index)
@@ -73,9 +69,11 @@ bool ccSensor::addPosition(ccGLMatrix& trans, double index)
 
 void ccSensor::applyGLTransformation(const ccGLMatrix& trans)
 {
+	//transparent call
+	ccHObject::applyGLTransformation(trans);
+
 	//we update the rigid transformation
 	m_rigidTransformation = trans * m_rigidTransformation;
-	ccHObject::applyGLTransformation(trans);
 }
 
 void ccSensor::getIndexBounds(double& minIndex, double& maxIndex) const
@@ -154,14 +152,14 @@ bool ccSensor::toFile_MeOnly(QFile& out) const
 	outStream << m_scale;			//scale
 
 	//color (dataVersion>=35)
-	if (out.write((const char*)&m_color.u,sizeof(colorType)*3)<0)
+	if (out.write((const char*)&m_color.u,sizeof(colorType)*3) < 0)
 		return WriteError();
 
 	//we can't save the associated position buffer (as it may be shared by multiple sensors)
 	//so instead we save it's unique ID (dataVersion>=34)
 	//WARNING: the buffer must be saved in the same BIN file! (responsibility of the caller)
 	uint32_t bufferUniqueID = (m_posBuffer ? (uint32_t)m_posBuffer->getUniqueID() : 0);
-	if (out.write((const char*)&bufferUniqueID,4)<0)
+	if (out.write((const char*)&bufferUniqueID,4) < 0)
 		return WriteError();
 
 	return true;
@@ -186,17 +184,24 @@ bool ccSensor::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	ccSerializationHelper::CoordsFromDataStream(inStream,flags,&m_scale);
 
 	//color (dataVersion>=35)
-	if (in.read((char*)&m_color.u,sizeof(colorType)*3)<0)
+	if (in.read((char*)&m_color.u,sizeof(colorType)*3) < 0)
 		return ReadError();
 
 	//as the associated position buffer can't be saved directly (as it may be shared by multiple sensors)
 	//we only store its unique ID (dataVersion>=34) --> we hope we will find it at loading time (i.e. this
 	//is the responsibility of the caller to make sure that all dependencies are saved together)
 	uint32_t bufferUniqueID = 0;
-	if (in.read((char*)&bufferUniqueID,4)<0)
+	if (in.read((char*)&bufferUniqueID,4) < 0)
 		return ReadError();
 	//[DIRTY] WARNING: temporarily, we set the vertices unique ID in the 'm_posBuffer' pointer!!!
 	*(uint32_t*)(&m_posBuffer) = bufferUniqueID;
 
 	return true;
+}
+
+bool ccSensor::applyViewport(ccGenericGLDisplay* win/*=0*/)
+{
+	//not supported by default, must be reimplemented by the child class
+	ccLog::Warning("[ccSensor::applyViewport] Unhandled sensor type!");
+	return false;
 }

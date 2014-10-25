@@ -15,17 +15,37 @@
 //#                                                                        #
 //##########################################################################
 
-//Local
 #include "ccIndexedTransformationBuffer.h"
+
+//Local
+#include "ccLog.h"
 
 ccIndexedTransformationBuffer::ccIndexedTransformationBuffer(QString name)
 	: ccHObject(name)
+	, m_bBoxValidSize(0)
 	, m_showAsPolyline(false)
 	, m_showTrihedrons(true)
 	, m_trihedronsScale(1.0f)
-	, m_bBoxValidSize(0)
 {
 	lockVisibility(false);
+}
+
+ccIndexedTransformationBuffer::ccIndexedTransformationBuffer(const ccIndexedTransformationBuffer& buffer)
+	: ccHObject(buffer)
+	, m_bBox(buffer.m_bBox)
+	, m_bBoxValidSize(buffer.m_bBoxValidSize)
+	, m_showAsPolyline(buffer.m_showAsPolyline)
+	, m_showTrihedrons(buffer.m_showTrihedrons)
+	, m_trihedronsScale(buffer.m_trihedronsScale)
+{
+	try
+	{
+		this->std::vector< ccIndexedTransformation >::operator = (buffer);
+	}
+	catch(std::bad_alloc)
+	{
+		ccLog::Warning("[ccIndexedTransformationBuffer] Failed to copy original content (not enough memory)");
+	}
 }
 
 static bool IndexedSortOperator(const ccIndexedTransformation& a, const ccIndexedTransformation& b)
@@ -194,7 +214,7 @@ bool ccIndexedTransformationBuffer::toFile_MeOnly(QFile& out) const
 
 	//vector size (dataVersion>=34)
 	uint32_t count = static_cast<uint32_t>(size());
-	if (out.write((const char*)&count,4)<0)
+	if (out.write((const char*)&count,4) < 0)
 		return WriteError();
 
 	//transformations (dataVersion>=34)
@@ -205,13 +225,13 @@ bool ccIndexedTransformationBuffer::toFile_MeOnly(QFile& out) const
 	//display options
 	{
 		//Show polyline (dataVersion>=34)
-		if (out.write((const char*)&m_showAsPolyline,sizeof(bool))<0)
+		if (out.write((const char*)&m_showAsPolyline,sizeof(bool)) < 0)
 			return WriteError();
 		//Show trihedrons (dataVersion>=34)
-		if (out.write((const char*)&m_showTrihedrons,sizeof(bool))<0)
+		if (out.write((const char*)&m_showTrihedrons,sizeof(bool)) < 0)
 			return WriteError();
 		//Display scale (dataVersion>=34)
-		if (out.write((const char*)&m_trihedronsScale,sizeof(float))<0)
+		if (out.write((const char*)&m_trihedronsScale,sizeof(float)) < 0)
 			return WriteError();
 	}
 
@@ -225,7 +245,7 @@ bool ccIndexedTransformationBuffer::fromFile_MeOnly(QFile& in, short dataVersion
 
 	//vector size (dataVersion>=34)
 	uint32_t count = 0;
-	if (in.read((char*)&count,4)<0)
+	if (in.read((char*)&count,4) < 0)
 		return ReadError();
 
 	//try to resize the vector accordingly
@@ -247,13 +267,13 @@ bool ccIndexedTransformationBuffer::fromFile_MeOnly(QFile& in, short dataVersion
 	//display options
 	{
 		//Show polyline (dataVersion>=34)
-		if (in.read((char*)&m_showAsPolyline,sizeof(bool))<0)
+		if (in.read((char*)&m_showAsPolyline,sizeof(bool)) < 0)
 			return ReadError();
 		//Show trihedrons (dataVersion>=34)
-		if (in.read((char*)&m_showTrihedrons,sizeof(bool))<0)
+		if (in.read((char*)&m_showTrihedrons,sizeof(bool)) < 0)
 			return ReadError();
 		//Display scale (dataVersion>=34)
-		if (in.read((char*)&m_trihedronsScale,sizeof(float))<0)
+		if (in.read((char*)&m_trihedronsScale,sizeof(float)) < 0)
 			return ReadError();
 	}
 

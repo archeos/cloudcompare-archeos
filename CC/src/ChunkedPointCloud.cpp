@@ -27,16 +27,20 @@
 using namespace CCLib;
 
 ChunkedPointCloud::ChunkedPointCloud()
+	: GenericIndexedCloudPersist()
+	, m_points(new GenericChunkedArray<3,PointCoordinateType>())
+	, m_validBB(false)
+	, m_currentPointIndex(0)
+	, m_currentInScalarFieldIndex(-1)
+	, m_currentOutScalarFieldIndex(-1)
 {
-	m_points = new GenericChunkedArray<3,PointCoordinateType>();
 	m_points->link();
-
-	clear();
 }
 
 ChunkedPointCloud::~ChunkedPointCloud()
 {
-	clear();
+	deleteAllScalarFields();
+
 	m_points->release();
 }
 
@@ -101,23 +105,23 @@ bool ChunkedPointCloud::resize(unsigned newNumberOfPoints)
 
 	//we try to enlarge the 3D points array
 	if (!m_points->resize(newNumberOfPoints))
-        return false;
+		return false;
 
-	//then the scalarfields
+	//then the scalar fields
 	for (size_t i=0; i<m_scalarFields.size(); ++i)
 	{
 		if (!m_scalarFields[i]->resize(newNumberOfPoints))
-        {
+		{
 			//if something fails, we restore the previous size for already processed SFs!
 			for (size_t j=0; j<i; ++j)
 			{
-                m_scalarFields[j]->resize(oldNumberOfPoints);
+				m_scalarFields[j]->resize(oldNumberOfPoints);
 				m_scalarFields[j]->computeMinAndMax();
 			}
 			//we can assume that newNumberOfPoints > oldNumberOfPoints, so it should always be ok
 			m_points->resize(oldNumberOfPoints);
 			return false;
-        }
+		}
 		m_scalarFields[i]->computeMinAndMax();
 	}
 
@@ -128,49 +132,62 @@ bool ChunkedPointCloud::reserve(unsigned newNumberOfPoints)
 {
 	//we try to enlarge the 3D points array
 	if (!m_points->reserve(newNumberOfPoints))
-        return false;
+		return false;
 
-	//then the scalarfields
+	//then the scalar fields
 	for (size_t i=0; i<m_scalarFields.size(); ++i)
 	{
 		if (!m_scalarFields[i]->reserve(newNumberOfPoints))
 			return false;
 	}
 
-	return true;
+	//double check
+	return m_points->capacity() >= newNumberOfPoints;
 }
 
 void ChunkedPointCloud::addPoint(const CCVector3 &P)
 {
-	m_points->addElement(P.u);
+	//NaN coordinates check
+	if (	P.x != P.x
+		||	P.y != P.y
+		||	P.z != P.z )
+	{
+		//replace NaN point by 0000
+		CCVector3 fakeP(0,0,0);
+		m_points->addElement(fakeP.u);
+	}
+	else
+	{
+		m_points->addElement(P.u);
+	}
 	m_validBB = false;
 }
 
 void ChunkedPointCloud::applyTransformation(PointProjectionTools::Transformation& trans)
 {
-    unsigned count = size();
+	unsigned count = size();
 
 	//always apply the scale before everything (applying before or after rotation does not changes anything)
-    if (fabs((double)trans.s - 1.0) > ZERO_TOLERANCE)
-    {
-        for (unsigned i=0; i<count; ++i)
-            *point(i) *= trans.s;
-        m_validBB = false; //invalidate bb
-    }
+	if (fabs(static_cast<double>(trans.s) - 1.0) > ZERO_TOLERANCE)
+	{
+		for (unsigned i=0; i<count; ++i)
+			*point(i) *= trans.s;
+		m_validBB = false; //invalidate bb
+	}
 
-    if (trans.R.isValid())
-    {
-        for (unsigned i=0; i<count; ++i)
-            trans.R.apply(point(i)->u);
-        m_validBB = false;
-    }
+	if (trans.R.isValid())
+	{
+		for (unsigned i=0; i<count; ++i)
+			trans.R.apply(point(i)->u);
+		m_validBB = false;
+	}
 
-    if (trans.T.norm() > ZERO_TOLERANCE) //T applied only if it makes sense
-    {
-        for (unsigned i=0; i<count; ++i)
-            *point(i) += trans.T;
-        m_validBB = false;
-    }
+	if (trans.T.norm() > ZERO_TOLERANCE) //T applied only if it makes sense
+	{
+		for (unsigned i=0; i<count; ++i)
+			*point(i) += trans.T;
+		m_validBB = false;
+	}
 }
 
 /***********************/
@@ -284,8 +301,8 @@ int ChunkedPointCloud::addScalarField(const char* uniqueName)
 
 void ChunkedPointCloud::deleteScalarField(int index)
 {
-    int sfCount = (int)m_scalarFields.size();
-    if (index<0 || index>=sfCount)
+    int sfCount = static_cast<int>(m_scalarFields.size());
+    if (index < 0 || index >= sfCount)
         return;
 
     //we update SF roles if they point to the deleted scalar field
@@ -337,7 +354,7 @@ int ChunkedPointCloud::getScalarFieldIndexByName(const char* name) const
 
 bool ChunkedPointCloud::renameScalarField(int index, const char* newName)
 {
-	if (getScalarFieldIndexByName(newName)<0)
+	if (getScalarFieldIndexByName(newName) < 0)
 	{
 		ScalarField* sf = getScalarField(index);
 		if (sf)

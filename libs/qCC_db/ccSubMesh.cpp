@@ -34,11 +34,13 @@
 
 ccSubMesh::ccSubMesh(ccMesh* parentMesh)
 	: ccGenericMesh("Sub-mesh")
-	, m_associatedMesh(parentMesh)
+	, m_associatedMesh(0)
 	, m_triIndexes(new ReferencesContainer())
 	, m_globalIterator(0)
 {
 	m_triIndexes->link();
+
+	setAssociatedMesh(parentMesh); //must be called so as to set the right dependency!
 
 	showColors(parentMesh ? parentMesh->colorsShown() : true);
 	showNormals(parentMesh ? parentMesh->normalsShown() : true);
@@ -54,8 +56,14 @@ ccSubMesh::~ccSubMesh()
 	}
 }
 
-void ccSubMesh::setAssociatedMesh(ccMesh* mesh)
+void ccSubMesh::setAssociatedMesh(ccMesh* mesh, bool unlinkPreviousOne/*=true*/)
 {
+	if (m_associatedMesh == mesh)
+		return;
+
+	if (m_associatedMesh && unlinkPreviousOne)
+		m_associatedMesh->removeDependencyWith(this);
+
 	m_associatedMesh = mesh;
 
 	if (m_associatedMesh)
@@ -74,7 +82,7 @@ void ccSubMesh::forEach(genericTriangleAction& anAction)
 		return;
 
 	m_triIndexes->placeIteratorAtBegining();
-	for (unsigned i=0;i<m_triIndexes->currentSize();++i)
+	for (unsigned i=0; i<m_triIndexes->currentSize(); ++i)
 	{
 		CCLib::GenericTriangle* tri = m_associatedMesh->_getTriangle(m_triIndexes->getCurrentValue());
 		anAction(*tri);
@@ -94,7 +102,7 @@ CCLib::GenericTriangle* ccSubMesh::_getNextTriangle() //temporary object
 
 CCLib::TriangleSummitsIndexes* ccSubMesh::getNextTriangleIndexes()
 {
-	return m_associatedMesh && m_globalIterator < size() ? m_associatedMesh->getTriangleIndexes(m_globalIterator++) : 0;
+	return m_associatedMesh && m_globalIterator < size() ? m_associatedMesh->getTriangleIndexes(m_triIndexes->getValue(m_globalIterator++)) : 0;
 }
 
 bool ccSubMesh::interpolateNormals(unsigned triIndex, const CCVector3& P, CCVector3& N)
@@ -474,7 +482,7 @@ bool ccSubMesh::toFile_MeOnly(QFile& out) const
 	//so instead we save it's unique ID (dataVersion>=29)
 	//WARNING: the mesh must be saved in the same BIN file! (responsibility of the caller)
 	uint32_t meshUniqueID = (m_associatedMesh ? (uint32_t)m_associatedMesh->getUniqueID() : 0);
-	if (out.write((const char*)&meshUniqueID,4)<0)
+	if (out.write((const char*)&meshUniqueID,4) < 0)
 		return WriteError();
 
 	//references (dataVersion>=29)
@@ -493,7 +501,7 @@ bool ccSubMesh::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	//we only store its unique ID (dataVersion>=29) --> we hope we will find it at loading time (i.e. this
 	//is the responsibility of the caller to make sure that all dependencies are saved together)
 	uint32_t meshUniqueID = 0;
-	if (in.read((char*)&meshUniqueID,4)<0)
+	if (in.read((char*)&meshUniqueID,4) < 0)
 		return ReadError();
 	//[DIRTY] WARNING: temporarily, we set the mesh unique ID in the 'm_associatedMesh' pointer!!!
 	*(uint32_t*)(&m_associatedMesh) = meshUniqueID;

@@ -16,7 +16,6 @@
 //##########################################################################
 
 #include "AsciiFilter.h"
-#include "ccCoordinatesShiftManager.h"
 
 //Qt
 #include <QFile>
@@ -56,6 +55,29 @@ QSharedPointer<AsciiOpenDlg> AsciiFilter::GetOpenDialog()
 		s_openDialog = QSharedPointer<AsciiOpenDlg>(new AsciiOpenDlg());
 
 	return s_openDialog;
+}
+
+bool AsciiFilter::canLoadExtension(QString upperCaseExt) const
+{
+	return (	upperCaseExt == "ASC"
+			||	upperCaseExt == "TXT"
+			||	upperCaseExt == "XYZ"
+			||	upperCaseExt == "NEU"
+			||	upperCaseExt == "PTS"
+			||	upperCaseExt == "CSV");
+}
+
+bool AsciiFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	//only one cloud per file
+	if (type == CC_TYPES::POINT_CLOUD)
+	{
+		multiple = false;
+		exclusive = true;
+		return true;
+	}
+
+	return false;
 }
 
 CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
@@ -100,21 +122,24 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 						QString subFilename = path+QString("/");
 						subFilename += QString(baseName).replace("cloudname",child->getName(),Qt::CaseInsensitive);
 						counter++;
-						assert(counter<=cloudCount);
+						assert(counter <= cloudCount);
 						subFilename += QString("_%1").arg(cloudCount-counter,6,10,QChar('0'));
 						if (!extension.isEmpty())
-							subFilename += QString(".")+extension;
+							subFilename += QString(".") + extension;
+						
 						CC_FILE_ERROR result = saveToFile(entity->getChild(i),subFilename);
 						if (result != CC_FERR_NO_ERROR)
 						{
 							return result;
 						}
 						else
-							ccLog::Print(QString("[AsciiFilter::saveToFile] Cloud '%1' saved in: %2").arg(child->getName()).arg(subFilename));
+						{
+							ccLog::Print(QString("[ASCII] Cloud '%1' has been saved in: %2").arg(child->getName()).arg(subFilename));
+						}
 					}
 					else
 					{
-						ccLog::Warning(QString("[AsciiFilter::saveToFile] Entity '%1' can't be saved this way!").arg(child->getName()));
+						ccLog::Warning(QString("[ASCII] Entity '%1' can't be saved this way!").arg(child->getName()));
 					}
 				}
 
@@ -144,7 +169,7 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 		for (unsigned i=0; i<ccCloud->getNumberOfScalarFields(); ++i)
 			theScalarFields.push_back(ccCloud->getScalarField(i));
 	}
-	bool writeSF = (theScalarFields.size()!=0);
+	bool writeSF = (theScalarFields.size() != 0);
 
 	//progress dialog
 	ccProgressDialog pdlg(true);
@@ -163,24 +188,25 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 	bool savePointCountHeader = saveDialog->savePointCountHeader();
 	bool swapColorAndSFs = saveDialog->swapColorAndSF();
 	QChar separator(saveDialog->getSeparator());
+	bool saveFloatColors = saveDialog->saveFloatColors();
 
 	if (saveColumnsHeader)
 	{
 		QString header("//");
-		header.append("X");
+		header.append(AsciiHeaderColumns::X());
 		header.append(separator);
-		header.append("Y");
+		header.append(AsciiHeaderColumns::Y());
 		header.append(separator);
-		header.append("Z");
+		header.append(AsciiHeaderColumns::Z());
 
 		if (writeColors && !swapColorAndSFs)
 		{
 			header.append(separator);
-			header.append("R");
+			header.append(saveFloatColors ? AsciiHeaderColumns::Rf() : AsciiHeaderColumns::R());
 			header.append(separator);
-			header.append("G");
+			header.append(saveFloatColors ? AsciiHeaderColumns::Gf() : AsciiHeaderColumns::G());
 			header.append(separator);
-			header.append("B");
+			header.append(saveFloatColors ? AsciiHeaderColumns::Bf() : AsciiHeaderColumns::B());
 		}
 
 		if (writeSF)
@@ -189,7 +215,7 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 			for (std::vector<CCLib::ScalarField*>::const_iterator it = theScalarFields.begin(); it != theScalarFields.end(); ++it)
 			{
 				QString sfName((*it)->getName());
-				sfName.replace(" ","_");
+				sfName.replace(separator,'_');
 				header.append(separator);
 				header.append(sfName);
 			}
@@ -198,21 +224,21 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 		if (writeColors && swapColorAndSFs)
 		{
 			header.append(separator);
-			header.append("R");
+			header.append(saveFloatColors ? AsciiHeaderColumns::Rf() : AsciiHeaderColumns::R());
 			header.append(separator);
-			header.append("G");
+			header.append(saveFloatColors ? AsciiHeaderColumns::Gf() : AsciiHeaderColumns::G());
 			header.append(separator);
-			header.append("B");
+			header.append(saveFloatColors ? AsciiHeaderColumns::Bf() : AsciiHeaderColumns::B());
 		}
 
 		if (writeNorms)
 		{
 			header.append(separator);
-			header.append("Nx");
+			header.append(AsciiHeaderColumns::Nx());
 			header.append(separator);
-			header.append("Ny");
+			header.append(AsciiHeaderColumns::Ny());
 			header.append(separator);
-			header.append("Nz");
+			header.append(AsciiHeaderColumns::Nz());
 		}
 		
 		stream << header << "\n";
@@ -238,20 +264,32 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 		line.append(separator);
 		line.append(QString::number(Pglobal.z,'f',s_coordPrecision));
 
-		QString color;
+		QString colorLine;
 		if (writeColors)
 		{
 			//add rgb color
 			const colorType* col = cloud->getPointColor(i);
-			color.append(separator);
-			color.append(QString::number(col[0]));
-			color.append(separator);
-			color.append(QString::number(col[1]));
-			color.append(separator);
-			color.append(QString::number(col[2]));
+			if (saveFloatColors)
+			{
+				colorLine.append(separator);
+				colorLine.append(QString::number(static_cast<double>(col[0])/MAX_COLOR_COMP));
+				colorLine.append(separator);
+				colorLine.append(QString::number(static_cast<double>(col[1])/MAX_COLOR_COMP));
+				colorLine.append(separator);
+				colorLine.append(QString::number(static_cast<double>(col[2])/MAX_COLOR_COMP));
+			}
+			else
+			{
+				colorLine.append(separator);
+				colorLine.append(QString::number(col[0]));
+				colorLine.append(separator);
+				colorLine.append(QString::number(col[1]));
+				colorLine.append(separator);
+				colorLine.append(QString::number(col[2]));
+			}
 
 			if (!swapColorAndSFs)
-				line.append(color);
+				line.append(colorLine);
 		}
 
 		if (writeSF)
@@ -265,7 +303,7 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 		}
 
 		if (writeColors && swapColorAndSFs)
-			line.append(color);
+			line.append(colorLine);
 
 		if (writeNorms)
 		{
@@ -293,9 +331,7 @@ CC_FILE_ERROR AsciiFilter::saveToFile(ccHObject* entity, QString filename)
 
 CC_FILE_ERROR AsciiFilter::loadFile(QString filename,
 									ccHObject& container,
-									bool alwaysDisplayLoadDialog/*=true*/,
-									bool* coordinatesShiftEnabled/*=0*/,
-									CCVector3d* coordinatesShift/*=0*/)
+									LoadParameters& parameters)
 {
 	//we get the size of the file to open
 	QFile file(filename);
@@ -315,9 +351,21 @@ CC_FILE_ERROR AsciiFilter::loadFile(QString filename,
 	assert(openDialog);
 	openDialog->setFilename(filename);
 
+	bool forceDialogDisplay = parameters.alwaysDisplayLoadDialog;
+	//if we should try to avoid displaying the dialog
+	if (!parameters.alwaysDisplayLoadDialog)
+	{
+		//we must check that the automatically guessed sequence is ok
+		forceDialogDisplay = !openDialog->safeSequence();
+	}
+	if (openDialog->restorePreviousContext())
+	{
+		//if we can/should use the previous sequence ('Apply all')
+		forceDialogDisplay = false;
+	}
+
 	QString dummyStr;
-	if (	alwaysDisplayLoadDialog
-		||	!openDialog->safeSequence()
+	if (	forceDialogDisplay
 		||	!AsciiOpenDlg::CheckOpenSequence(openDialog->getOpenSequence(),dummyStr) )
 	{
 		if (!openDialog->exec())
@@ -341,9 +389,7 @@ CC_FILE_ERROR AsciiFilter::loadFile(QString filename,
 											fileSize,
 											maxCloudSize,
 											skipLineCount,
-											alwaysDisplayLoadDialog,
-											coordinatesShiftEnabled,
-											coordinatesShift);
+											parameters);
 }
 
 struct cloudAttributesDescriptor
@@ -371,6 +417,7 @@ struct cloudAttributesDescriptor
 	std::vector<CCLib::ScalarField*> scalarFields;
 	bool hasNorms;
 	bool hasRGBColors;
+	bool hasFloatRGBColors[3];
 
 	cloudAttributesDescriptor()
 	{
@@ -384,6 +431,8 @@ struct cloudAttributesDescriptor
 			indexes[i] = -1;
 		hasNorms = false;
 		hasRGBColors = false;
+		hasFloatRGBColors[0] = hasFloatRGBColors[1] = hasFloatRGBColors[2] = false;
+		
 		scalarIndexes.clear();
 		scalarFields.clear();
 	};
@@ -412,6 +461,7 @@ void clearStructure(cloudAttributesDescriptor &cloudDesc)
 cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequence,
 										unsigned numberOfPoints,
 										int& maxIndex,
+										char separator,
 										unsigned step = 1)
 {
 	ccPointCloud* cloud = new ccPointCloud();
@@ -450,7 +500,7 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 			if (cloud->reserveTheNormsTable())
 			{
 				cloudDesc.xNormIndex = i;
-				cloudDesc.hasNorms=true;
+				cloudDesc.hasNorms = true;
 				cloud->showNormals(true);
 			}
 			else
@@ -462,7 +512,7 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 			if (cloud->reserveTheNormsTable())
 			{
 				cloudDesc.yNormIndex = i;
-				cloudDesc.hasNorms=true;
+				cloudDesc.hasNorms = true;
 				cloud->showNormals(true);
 			}
 			else
@@ -474,7 +524,7 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 			if (cloud->reserveTheNormsTable())
 			{
 				cloudDesc.zNormIndex = i;
-				cloudDesc.hasNorms=true;
+				cloudDesc.hasNorms = true;
 				cloud->showNormals(true);
 			}
 			else
@@ -494,6 +544,10 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 					//if (isPositive)
 					//	sfName += QString(" (positive)");
 				}
+				else
+				{
+					sfName.replace('_',separator);
+				}
 
 				ccScalarField* sf = new ccScalarField(qPrintable(sfName));
 				sf->link();
@@ -510,11 +564,13 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 				sf->release();
 			}
 			break;
+		case ASCII_OPEN_DLG_Rf:
+			cloudDesc.hasFloatRGBColors[0] = true;
 		case ASCII_OPEN_DLG_R:
 			if (cloud->reserveTheRGBTable())
 			{
 				cloudDesc.redIndex = i;
-				cloudDesc.hasRGBColors=true;
+				cloudDesc.hasRGBColors = true;
 				cloud->showColors(true);
 			}
 			else
@@ -522,11 +578,13 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 				ccLog::Warning("Failed to allocate memory for colors! (skipped)");
 			}
 			break;
+		case ASCII_OPEN_DLG_Gf:
+			cloudDesc.hasFloatRGBColors[1] = true;
 		case ASCII_OPEN_DLG_G:
 			if (cloud->reserveTheRGBTable())
 			{
 				cloudDesc.greenIndex = i;
-				cloudDesc.hasRGBColors=true;
+				cloudDesc.hasRGBColors = true;
 				cloud->showColors(true);
 			}
 			else
@@ -534,11 +592,13 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 				ccLog::Warning("Failed to allocate memory for colors! (skipped)");
 			}
 			break;
+		case ASCII_OPEN_DLG_Bf:
+			cloudDesc.hasFloatRGBColors[2] = true;
 		case ASCII_OPEN_DLG_B:
 			if (cloud->reserveTheRGBTable())
 			{
 				cloudDesc.blueIndex = i;
-				cloudDesc.hasRGBColors=true;
+				cloudDesc.hasRGBColors = true;
 				cloud->showColors(true);
 			}
 			else
@@ -554,7 +614,7 @@ cloudAttributesDescriptor prepareCloud(	const AsciiOpenDlg::Sequence &openSequen
 					cloudDesc.iRgbaIndex = i;
 				else
 					cloudDesc.fRgbaIndex = i;
-				cloudDesc.hasRGBColors=true;
+				cloudDesc.hasRGBColors = true;
 				cloud->showColors(true);
 			}
 			else
@@ -590,10 +650,8 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 															unsigned approximateNumberOfLines,
 															qint64 fileSize,
 															unsigned maxCloudSize,
-															unsigned skipLines/*=0*/,
-															bool alwaysDisplayLoadDialog/*=true*/,
-															bool* coordinatesShiftEnabled/*=0*/,
-															CCVector3d* coordinatesShift/*=0*/)
+															unsigned skipLines,
+															LoadParameters& parameters)
 {
 	//we may have to "slice" clouds when opening them if they are too big!
 	maxCloudSize = std::min(maxCloudSize,CC_MAX_NUMBER_OF_POINTS_PER_CLOUD);
@@ -602,8 +660,8 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 	unsigned chunkRank = 1;
 
 	//we initialize the loading accelerator structure and point cloud
-	int maxPartIndex=-1;
-	cloudAttributesDescriptor cloudDesc = prepareCloud(openSequence, cloudChunkSize, maxPartIndex, chunkRank);
+	int maxPartIndex = -1;
+	cloudAttributesDescriptor cloudDesc = prepareCloud(openSequence, cloudChunkSize, maxPartIndex, separator, chunkRank);
 
 	if (!cloudDesc.cloud)
 		return CC_FERR_NOT_ENOUGH_MEMORY;
@@ -674,15 +732,15 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 
 			//we re-evaluate the average line size
 			{
-				double averageLineSize = (double)file.pos()/(double)(pointsRead+skipLines);
-				double newNbOfLinesApproximation = std::max(1.0, (double)fileSize/averageLineSize - (double)skipLines);
+				double averageLineSize = static_cast<double>(file.pos())/(pointsRead+skipLines);
+				double newNbOfLinesApproximation = std::max(1.0, static_cast<double>(fileSize)/averageLineSize - static_cast<double>(skipLines));
 
 				//if approximation is smaller than actual one, we add 2% by default
 				if (newNbOfLinesApproximation <= pointsRead)
 				{
-					newNbOfLinesApproximation = std::max((double)(cloudChunkPos+cloudChunkSize)+1.0,(double)pointsRead * 1.02);
+					newNbOfLinesApproximation = std::max(static_cast<double>(cloudChunkPos+cloudChunkSize)+1.0,static_cast<double>(pointsRead) * 1.02);
 				}
-				approximateNumberOfLines = (unsigned)ceil(newNbOfLinesApproximation);
+				approximateNumberOfLines = static_cast<unsigned>(ceil(newNbOfLinesApproximation));
 				ccLog::PrintDebug("[ASCII] New approximate nb of lines: %i",approximateNumberOfLines);
 			}
 
@@ -720,7 +778,7 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 				//and create new one
 				cloudChunkPos = pointsRead;
 				cloudChunkSize = std::min(maxCloudSize,approximateNumberOfLines-cloudChunkPos);
-				cloudDesc = prepareCloud(openSequence, cloudChunkSize, maxPartIndex, ++chunkRank);
+				cloudDesc = prepareCloud(openSequence, cloudChunkSize, maxPartIndex, separator, ++chunkRank);
 				if (!cloudDesc.cloud)
 				{
 					ccLog::Error("Not enough memory! Process stopped ...");
@@ -753,22 +811,10 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 			//first point: check for 'big' coordinates
 			if (pointsRead == 0)
 			{
-				bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
-				if (shiftAlreadyEnabled)
-					Pshift = *coordinatesShift;
-				bool applyAll = false;
-				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(P,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll) )
+				if (HandleGlobalShift(P,Pshift,parameters))
 				{
 					cloudDesc.cloud->setGlobalShift(Pshift);
 					ccLog::Warning("[ASCIIFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
-
-					//we save coordinates shift information
-					if (applyAll && coordinatesShiftEnabled && coordinatesShift)
-					{
-						*coordinatesShiftEnabled = true;
-						*coordinatesShift = Pshift;
-					}
 				}
 			}
 
@@ -809,11 +855,20 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 				else
 				{
 					if (cloudDesc.redIndex >= 0)
-						col[0] = static_cast<colorType>(parts[cloudDesc.redIndex].toFloat());
+					{
+						float multiplier = cloudDesc.hasFloatRGBColors[0] ? static_cast<float>(MAX_COLOR_COMP) : 1.0f;
+						col[0] = static_cast<colorType>(parts[cloudDesc.redIndex].toFloat() * multiplier);
+					}
 					if (cloudDesc.greenIndex >= 0)
-						col[1] = static_cast<colorType>(parts[cloudDesc.greenIndex].toFloat());
+					{
+						float multiplier = cloudDesc.hasFloatRGBColors[1] ? static_cast<float>(MAX_COLOR_COMP) : 1.0f;
+						col[1] = static_cast<colorType>(parts[cloudDesc.greenIndex].toFloat() * multiplier);
+					}
 					if (cloudDesc.blueIndex >= 0)
-						col[2] = static_cast<colorType>(parts[cloudDesc.blueIndex].toFloat());
+					{
+						float multiplier = cloudDesc.hasFloatRGBColors[2] ? static_cast<float>(MAX_COLOR_COMP) : 1.0f;
+						col[2] = static_cast<colorType>(parts[cloudDesc.blueIndex].toFloat() * multiplier);
+					}
 				}
 				cloudDesc.cloud->addRGBColor(col);
 			}
@@ -826,7 +881,7 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 			//Scalar distance
 			if (!cloudDesc.scalarIndexes.empty())
 			{
-				for (unsigned j=0; j<cloudDesc.scalarIndexes.size(); ++j)
+				for (size_t j=0; j<cloudDesc.scalarIndexes.size(); ++j)
 				{
 					D = static_cast<ScalarType>( parts[cloudDesc.scalarIndexes[j]].toDouble() );
 					cloudDesc.scalarFields[j]->setValue(pointsRead-cloudChunkPos,D);
@@ -861,8 +916,11 @@ CC_FILE_ERROR AsciiFilter::loadCloudFromFormatedAsciiFile(	const QString& filena
 		//add cloud to output
 		if (!cloudDesc.scalarFields.empty())
 		{
-			for (unsigned j=0;j<cloudDesc.scalarFields.size();++j)
+			for (size_t j=0; j<cloudDesc.scalarFields.size(); ++j)
+			{
+				cloudDesc.scalarFields[j]->resize(cloudDesc.cloud->size(),true,NAN_VALUE);
 				cloudDesc.scalarFields[j]->computeMinAndMax();
+			}
 			cloudDesc.cloud->setCurrentDisplayedScalarField(0);
 			cloudDesc.cloud->showSF(true);
 		}

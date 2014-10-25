@@ -22,10 +22,11 @@
 #include "Mouse3DInput.h"
 
 //qCC_db
-#include <ccPlatform.h>
 #include <ccLog.h>
 //qCC_gl
 #include <ccGLWindow.h>
+//CCLib
+#include <CCPlatform.h>
 
 //Qt
 #include <QApplication>
@@ -119,7 +120,7 @@ bool Mouse3DInput::connect(QWidget* mainWidget, QString appName)
 	if (m_siHandle == SI_NO_HANDLE)
 	{
 		/* Get and display initialization error */
-		ccLog::Warning("[3D MOUSE] Could not open a 3DxWare device");
+		ccLog::Warning("[3D Mouse] Could not open a 3DxWare device");
 		return false;
 	}
 
@@ -132,17 +133,17 @@ bool Mouse3DInput::connect(QWidget* mainWidget, QString appName)
 		if (info.majorVersion == 0 && info.minorVersion == 0)
 		{
 			/* Not a real device */
-			ccLog::Warning("[3D MOUSE] Couldn't find a connected device");
+			ccLog::Warning("[3D Mouse] Couldn't find a connected device");
 			return false;
 		}
 
 		SiDeviceName name;
 		SiGetDeviceName(m_siHandle, &name);
-		ccLog::Print(QString("[3D MOUSE] Device: %1 (%2 buttons) - firmware v%2.%3").arg(name.name).arg(info.numButtons).arg(info.majorVersion).arg(info.minorVersion));
+		ccLog::Print(QString("[3D Mouse] Device: %1 (%2 buttons) - firmware v%2.%3").arg(name.name).arg(info.numButtons).arg(info.majorVersion).arg(info.minorVersion));
 	}
 	else
 	{
-		ccLog::Warning("[3D MOUSE] Failed to retrieve device info?!");
+		ccLog::Warning("[3D Mouse] Failed to retrieve device info?!");
 	}
 
 	return true;
@@ -248,7 +249,7 @@ void Mouse3DInput::GetMatrix(const std::vector<float>& vec, ccGLMatrixd& mat)
 {
 	assert(vec.size() == 6);
 
-	float axis[3] = { vec[3], vec[4], vec[5] };
+	float axis[3] = { -vec[3], vec[4], -vec[5] };
 
 	Matrix Rd;
 	SPW_ArbitraryAxisToMatrix(Rd,axis,1.0f);
@@ -286,17 +287,23 @@ void Mouse3DInput::Apply(const std::vector<float>& motionData, ccGLWindow* win)
 
 	//panning or zooming
 	{
+		float& X = vec[0];
+		float& Y = vec[1];
+		float& Z = vec[2];
+
+		//ccLog::Print(QString("Mouse translation: (%1,%2,%3)").arg(X).arg(Y).arg(Z));
+
 		//Zoom: object moves closer/away (only for ortho. mode)
-		if (!perspectiveView && fabs(vec[1])>ZERO_TOLERANCE)
+		if (!perspectiveView && fabs(Z) > ZERO_TOLERANCE)
 		{
-			win->updateZoom(1.0f + vec[1]);
-			vec[1] = 0.0f;
+			win->updateZoom(1.0f - Z/1.5f);
+			Z = 0;
 		}
 
 		//Zoom & Panning: camera moves right/left + up/down + backward/forward (only for perspective mode)
-		if (	fabs(vec[0]) > ZERO_TOLERANCE
-			||	fabs(vec[1]) > ZERO_TOLERANCE
-			||	fabs(vec[2]) > ZERO_TOLERANCE )
+		if (	fabs(X) > ZERO_TOLERANCE
+			||	fabs(Y) > ZERO_TOLERANCE
+			||	fabs(Z) > ZERO_TOLERANCE )
 		{
 			const ccViewportParameters& viewParams = win->getViewportParameters();
 
@@ -304,8 +311,8 @@ void Mouse3DInput::Apply(const std::vector<float>& motionData, ccGLWindow* win)
 			if (perspectiveView)
 			{
 				float tanFOV = tan(viewParams.fov*static_cast<float>(CC_DEG_TO_RAD)/*/2*/);
-				vec[0] *= tanFOV;
-				vec[2] *= tanFOV;
+				X *= tanFOV;
+				Y *= tanFOV;
 				scale /= win->computePerspectiveZoom();
 			}
 			else
@@ -315,7 +322,7 @@ void Mouse3DInput::Apply(const std::vector<float>& motionData, ccGLWindow* win)
 
 			if (objectMode)
 				scale = -scale;
-			win->moveCamera(vec[0]*scale,-vec[2]*scale,vec[1]*scale);
+			win->moveCamera(-X*scale, Y*scale, -Z*scale);
 		}
 	}
 
@@ -325,6 +332,8 @@ void Mouse3DInput::Apply(const std::vector<float>& motionData, ccGLWindow* win)
 			||	fabs(vec[4]) > ZERO_TOLERANCE
 			||	fabs(vec[5]) > ZERO_TOLERANCE)
 		{
+			//ccLog::Print(QString("Mouse rotation: (%1,%2,%3)").arg(vec[3]).arg(vec[4]).arg(vec[5]));
+
 			//get corresponding rotation matrix
 			ccGLMatrixd rotMat;
 			Mouse3DInput::GetMatrix(vec,rotMat);

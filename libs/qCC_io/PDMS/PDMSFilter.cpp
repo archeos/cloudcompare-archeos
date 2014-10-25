@@ -33,13 +33,20 @@
 
 using namespace CCLib;
 
-CC_FILE_ERROR PDMSFilter::saveToFile(ccHObject* entity, QString filename)
+bool PDMSFilter::canLoadExtension(QString upperCaseExt) const
 {
-	ccLog::Print("Function is not implemented yet !");
-	return CC_FERR_NO_SAVE;
+	return (	upperCaseExt == "MAC"
+			||	upperCaseExt == "PDMS"
+			||	upperCaseExt == "PDMSMAC" );
 }
 
-CC_FILE_ERROR PDMSFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+bool PDMSFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	//not supported yet
+	return false;
+}
+
+CC_FILE_ERROR PDMSFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
 	PdmsParser parser;
 	PdmsFileSession session(filename.toStdString());
@@ -185,6 +192,10 @@ CC_FILE_ERROR PDMSFilter::loadFile(QString filename, ccHObject& container, bool 
 			}
 
 		}
+	}
+	else
+	{
+		return CC_FERR_MALFORMED_FILE;
 	}
 
 	container.applyGLTransformation_recursive();

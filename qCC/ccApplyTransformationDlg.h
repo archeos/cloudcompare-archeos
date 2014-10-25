@@ -49,10 +49,15 @@ protected slots:
 	//! Updates dialog when a component of the euleur form changes
 	void onEulerValueChanged(double);
 
+	//! Loads matrix from ASCII file
+	void loadFromASCIIFile();
+	//! Loads matrix from clipboard ("paste")
+	void loadFromClipboard();
+
 protected:
 
 	//! Updates all forms with a given matrix
 	void updateAll(const ccGLMatrix& mat, bool textForm = true, bool axisAngleForm = true, bool eulerForm = true);
 };
 
-#endif
+#endif //CC_APPLY_TRANSFORMATION_DLG_HEADER

@@ -21,7 +21,6 @@
 
 //Local
 #include "E57Header.h"
-#include "ccCoordinatesShiftManager.h"
 
 //libE57
 #include <E57/E57Foundation.h>
@@ -35,9 +34,9 @@
 #include <ccPointCloud.h>
 #include <ccProgressDialog.h>
 #include <ccImage.h>
-#include <ccCalibratedImage.h>
 #include <ccColorScalesManager.h>
 #include <ccScalarField.h>
+#include <ccCameraSensor.h>
 
 //Qt
 #include <QApplication>
@@ -46,88 +45,57 @@
 #include <QUuid>
 #include <QBuffer>
 
+//system
+#include <string.h>
+#include <assert.h>
+
 typedef double colorFieldType;
 //typedef boost::uint16_t colorFieldType;
 
 const char CC_E57_INTENSITY_FIELD_NAME[] = "Intensity";
 const char CC_E57_RETURN_INDEX_FIELD_NAME[] = "Return index";
 
+bool E57Filter::canLoadExtension(QString upperCaseExt) const
+{
+	return (upperCaseExt == "E57");
+}
+
+bool E57Filter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	if (type == CC_TYPES::POINT_CLOUD)
+	{
+		multiple = true;
+		exclusive = true;
+		return true;
+	}
+	return false;
+}
+
 //Array chunks for reading/writing out information from E57 files
 struct TempArrays
 {
 	//points
-	double* xData;
-	double* yData;
-	double* zData;
-	boost::int8_t* isInvalidData;
+	std::vector<double> xData;
+	std::vector<double> yData;
+	std::vector<double> zData;
+	std::vector<boost::int8_t> isInvalidData;
 
 	//normals
-	double* xNormData;
-	double* yNormData;
-	double* zNormData;
+	std::vector<double> xNormData;
+	std::vector<double> yNormData;
+	std::vector<double> zNormData;
 
 	//scalar field
-	double*	intData;
-	boost::int8_t* isInvalidIntData;
+	std::vector<double>	intData;
+	std::vector<boost::int8_t> isInvalidIntData;
 
 	//scan index field
-	boost::int8_t* scanIndexData;
+	std::vector<boost::int8_t> scanIndexData;
 
 	//color
-	colorFieldType* redData;
-	colorFieldType* greenData;
-	colorFieldType* blueData;
-
-	TempArrays()
-		: xData(0)
-		, yData(0)
-		, zData(0)
-		, isInvalidData(0)
-		, xNormData(0)
-		, yNormData(0)
-		, zNormData(0)
-		, intData(0)
-		, isInvalidIntData(0)
-		, scanIndexData(0)
-		, redData(0)
-		, greenData(0)
-		, blueData(0)
-	{
-	}
-
-	~TempArrays()
-	{
-		if (xData)
-			delete[] xData;
-		if (yData)
-			delete[] yData;
-		if (zData)
-			delete[] zData;
-		if (isInvalidData)
-			delete[] isInvalidData;
-
-		if (xNormData)
-			delete[] xNormData;
-		if (yNormData)
-			delete[] yNormData;
-		if (zNormData)
-			delete[] zNormData;
-
-		if (intData)
-			delete[] intData;
-		if (isInvalidIntData)
-			delete[] isInvalidIntData;
-
-		if (scanIndexData)
-			delete[] scanIndexData;
-
-		if (redData)
-			delete[] redData;
-		if (greenData)
-			delete[] greenData;
-		if (blueData)
-			delete[] blueData;
-	}
+	std::vector<colorFieldType> redData;
+	std::vector<colorFieldType> greenData;
+	std::vector<colorFieldType> blueData;
 };
 
 QString GetNewGuid()
@@ -230,7 +198,7 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	int maxReturnIndex = 0;
 	{
 		int returnIndexSFIndex = cloud->getScalarFieldIndexByName(CC_E57_RETURN_INDEX_FIELD_NAME);
-		if (returnIndexSFIndex>=0)
+		if (returnIndexSFIndex >= 0)
 		{
 			ccScalarField* sf = static_cast<ccScalarField*>(cloud->getScalarField(returnIndexSFIndex));
 			assert(sf);
@@ -276,13 +244,13 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	bool hasInvalidIntensities = false;
 	{
 		int intensitySFIndex = cloud->getScalarFieldIndexByName(CC_E57_INTENSITY_FIELD_NAME);
-		if (intensitySFIndex<0)
+		if (intensitySFIndex < 0)
 		{
 			intensitySFIndex = cloud->getCurrentDisplayedScalarFieldIndex();
-			if (intensitySFIndex>=0)
+			if (intensitySFIndex >= 0)
 				ccLog::Print("[E57] No 'intensity' scalar field found, we'll use the currently displayed one instead (%s)",cloud->getScalarFieldName(intensitySFIndex));
 		}
-		if (intensitySFIndex>=0)
+		if (intensitySFIndex >= 0)
 		{
 			intensitySF = static_cast<ccScalarField*>(cloud->getScalarField(intensitySFIndex));
 			assert(intensitySF);
@@ -376,24 +344,24 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 												precision,
 												bbMin.x,
 												bbMax.x ) );
-		arrays.xData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "cartesianX",  arrays.xData,  nSize, true, true));
+		arrays.xData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "cartesianX",  &(arrays.xData.front()),  nSize, true, true));
 
 		proto.set("cartesianY", e57::FloatNode(	imf,
 												bbCenter.y,
 												precision,
 												bbMin.y,
 												bbMax.y ) );
-		arrays.yData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "cartesianY",  arrays.yData,  nSize, true, true));
+		arrays.yData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "cartesianY",  &(arrays.yData.front()),  nSize, true, true));
 
 		proto.set("cartesianZ", e57::FloatNode(	imf,
 												bbCenter.z,
 												precision,
 												bbMin.z,
 												bbMax.z ) );
-		arrays.zData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "cartesianZ",  arrays.zData,  nSize, true, true));
+		arrays.zData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "cartesianZ",  &(arrays.zData.front()),  nSize, true, true));
 	}
 
 	//Normals
@@ -402,16 +370,16 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 		e57::FloatPrecision precision = sizeof(PointCoordinateType)==8 ? e57::E57_DOUBLE : e57::E57_SINGLE;
 
 		proto.set("nor:normalX", e57::FloatNode(imf, 0.0, precision, -1.0, 1.0));
-		arrays.xNormData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "nor:normalX",  arrays.xNormData,  nSize, true, true));
+		arrays.xNormData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "nor:normalX",  &(arrays.xNormData.front()),  nSize, true, true));
 
 		proto.set("nor:normalY", e57::FloatNode(imf, 0.0, precision, -1.0, 1.0));
-		arrays.yNormData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "nor:normalY",  arrays.yNormData,  nSize, true, true));
+		arrays.yNormData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "nor:normalY",  &(arrays.yNormData.front()),  nSize, true, true));
 
 		proto.set("nor:normalZ", e57::FloatNode(imf, 0.0, precision, -1.0, 1.0));
-		arrays.zNormData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "nor:normalZ",  arrays.zNormData,  nSize, true, true));
+		arrays.zNormData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "nor:normalZ",  &(arrays.zNormData.front()),  nSize, true, true));
 	}
 
 	//Return index
@@ -419,21 +387,21 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	{
 		assert(maxReturnIndex>minReturnIndex);
 		proto.set("returnIndex", e57::IntegerNode(imf, minReturnIndex, minReturnIndex, maxReturnIndex));
-		arrays.scanIndexData = new boost::int8_t[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "returnIndex",  arrays.scanIndexData,  nSize, true, true));
+		arrays.scanIndexData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "returnIndex",  &(arrays.scanIndexData.front()),  nSize, true, true));
 	}
 	//Intensity field
 	if (intensitySF)
 	{
 		proto.set("intensity", e57::FloatNode(imf, intensitySF->getMin(), sizeof(ScalarType)==8 ? e57::E57_DOUBLE : e57::E57_SINGLE, intensitySF->getMin(), intensitySF->getMax()));
-		arrays.intData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "intensity",  arrays.intData,  nSize, true, true));
+		arrays.intData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "intensity",  &(arrays.intData.front()),  nSize, true, true));
 
 		if (hasInvalidIntensities)
 		{
 			proto.set("isIntensityInvalid", e57::IntegerNode(imf, 0, 0, 1));
-			arrays.isInvalidIntData = new boost::int8_t[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(imf, "isIntensityInvalid",  arrays.isInvalidIntData,  nSize, true, true));
+			arrays.isInvalidIntData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(imf, "isIntensityInvalid",  &(arrays.isInvalidIntData.front()),  nSize, true, true));
 		}
 	}
 
@@ -441,14 +409,14 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 	if (hasColors)
 	{
 		proto.set("colorRed",	e57::FloatNode(imf, 0., e57::E57_DOUBLE, 0., 255.));
-		arrays.redData = new colorFieldType[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "colorRed",  arrays.redData,  nSize, true, true));
+		arrays.redData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "colorRed",  &(arrays.redData.front()),  nSize, true, true));
 		proto.set("colorGreen",	e57::FloatNode(imf, 0., e57::E57_DOUBLE, 0., 255.));
-		arrays.greenData = new colorFieldType[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "colorGreen",  arrays.greenData,  nSize, true, true));
+		arrays.greenData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "colorGreen",  &(arrays.greenData.front()),  nSize, true, true));
 		proto.set("colorBlue",	e57::FloatNode(imf, 0., e57::E57_DOUBLE, 0., 255.));
-		arrays.blueData = new colorFieldType[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(imf, "colorBlue",  arrays.blueData,  nSize, true, true));
+		arrays.blueData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(imf, "colorBlue",  &(arrays.blueData.front()),  nSize, true, true));
 	}
 
 	//ignored fields
@@ -477,14 +445,14 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 
 	//progress bar
 	ccProgressDialog pdlg(true);
-	CCLib::NormalizedProgress nprogress(&pdlg,(unsigned)ceil((double)pointCount/(double)nSize));
+	CCLib::NormalizedProgress nprogress(&pdlg,static_cast<unsigned>(ceil(static_cast<double>(pointCount)/nSize)));
 	pdlg.setMethodTitle("Write E57 file");
 	pdlg.setInfo(qPrintable(QString("Scan #%1 - %2 points").arg(s_absoluteScanIndex).arg(pointCount)));
 	pdlg.start();
 	QApplication::processEvents();
 
-	unsigned indexShift=0;
-	while (pointCount>0)
+	unsigned indexShift = 0;
+	while (pointCount != 0)
 	{
 		unsigned size = std::min(pointCount,nSize);
 
@@ -499,10 +467,10 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 
 			if(intensitySF)
 			{
-				assert(arrays.intData);
+				assert(!arrays.intData.empty());
 				ScalarType sfVal = intensitySF->getValue(indexShift+i);
 				arrays.intData[i] = static_cast<double>(sfVal);
-				if (arrays.isInvalidIntData)
+				if (!arrays.isInvalidIntData.empty())
 					arrays.isInvalidIntData[i] = ccScalarField::ValidValue(sfVal) ? 0 : 1;
 			}
 
@@ -525,8 +493,8 @@ bool SaveScan(ccPointCloud* cloud, e57::StructureNode& scanNode, e57::ImageFile&
 
 			if (returnIndexSF)
 			{
-				assert(arrays.scanIndexData);
-				arrays.scanIndexData[i]=(boost::int8_t)returnIndexSF->getValue(indexShift+i);
+				assert(!arrays.scanIndexData.empty());
+				arrays.scanIndexData[i] = (boost::int8_t)returnIndexSF->getValue(indexShift+i);
 			}
 		}
 
@@ -591,8 +559,15 @@ void SaveImage(ccImage* image, const QString& scanGUID, e57::ImageFile& imf, e57
 	// Create pose structure for scan (in any)
 	if (image->isA(CC_TYPES::CALIBRATED_IMAGE))
 	{
-		ccGLMatrix poseMat = static_cast<ccCalibratedImage*>(image)->getCameraMatrix();
-		SavePoseInformation(imageNode,imf,poseMat);
+		ccCameraSensor* sensor = static_cast<ccImage*>(image)->getAssociatedSensor();
+		if (sensor)
+		{
+			ccIndexedTransformation poseMat;
+			if (sensor->getActiveAbsoluteTransformation(poseMat))
+			{
+				SavePoseInformation(imageNode,imf,poseMat);
+			}
+		}
 	}
 
 	//save image data as PNG
@@ -613,16 +588,16 @@ void SaveImage(ccImage* image, const QString& scanGUID, e57::ImageFile& imf, e57
 	cameraRepresentation.set("imageWidth", e57::IntegerNode(imf, image->getW()));
 
 	//'pinhole' camera image
-	//if (image->isA(CC_TYPES::CALIBRATED_IMAGE))
+	//if (image->isKindOf(CC_TYPES::IMAGE))
 	//{
 	//	cameraRepresentationStr = "pinholeRepresentation";
-	//	ccCalibratedImage* calibImage = static_cast<ccCalibratedImage*>(image);
+	//	ccImage* calibImage = static_cast<ccImage*>(image);
 	//	//DGM FIXME
 	//	cameraRepresentation.set("focalLength", e57::FloatNode(imf, calibImage->getFocal()));
 	//	cameraRepresentation.set("pixelHeight", e57::FloatNode(imf, image2DHeader.pinholeRepresentation.pixelHeight));
 	//	cameraRepresentation.set("pixelWidth", e57::FloatNode(imf, image2DHeader.pinholeRepresentation.pixelWidth));
-	//	cameraRepresentation.set("principalPointX", e57::FloatNode(imf, (double)image->getW()/2.0));
-	//	cameraRepresentation.set("principalPointY", e57::FloatNode(imf, (double)image->getH()/2.0));
+	//	cameraRepresentation.set("principalPointX", e57::FloatNode(imf, static_cast<double>(image->getW())/2.0));
+	//	cameraRepresentation.set("principalPointY", e57::FloatNode(imf, static_cast<double>(image->getH())/2.0));
 	//}
 	//else //standard image (TODO: handle cylindrical and spherical cameras!)
 	//{
@@ -646,7 +621,7 @@ CC_FILE_ERROR E57Filter::saveToFile(ccHObject* entity, QString filename)
 	}
 	else
 	{
-		for (unsigned i=0;i<entity->getChildrenNumber();++i)
+		for (unsigned i=0; i<entity->getChildrenNumber(); ++i)
 			if (entity->getChild(i)->isA(CC_TYPES::POINT_CLOUD))
 				scans.push_back(static_cast<ccPointCloud*>(entity->getChild(i)));
 	}
@@ -659,124 +634,137 @@ CC_FILE_ERROR E57Filter::saveToFile(ccHObject* entity, QString filename)
 	if (!imf.isOpen())
 		return CC_FERR_WRITING;
 
-	//get root
-	e57::StructureNode root = imf.root();
-
-	//header info
-
-	/// We are using the E57 v1.0 data format standard fieldnames.
-	/// The standard fieldnames are used without an extension prefix (in the default namespace).
-	/// We explicitly register it for completeness (the reference implementaion would do it for us, if we didn't).
-	imf.extensionsAdd("", E57_V1_0_URI);
-
-	// Set per-file properties.
-	/// Path names: "/formatName", "/majorVersion", "/minorVersion", "/coordinateMetadata"
-	root.set("formatName", e57::StringNode(imf, "ASTM E57 3D Imaging Data File"));
-	root.set("guid", e57::StringNode(imf, GetNewGuid().toStdString()));
-
-	// Get ASTM version number supported by library, so can write it into file
-	int astmMajor;
-	int astmMinor;
-	e57::ustring libraryId;
-	e57::E57Utilities().getVersions(astmMajor, astmMinor, libraryId);
-
-	root.set("versionMajor", e57::IntegerNode(imf,astmMajor));
-	root.set("versionMinor", e57::IntegerNode(imf,astmMinor));
-	root.set("e57LibraryVersion", e57::StringNode(imf,libraryId));
-
-	// Save a dummy string for coordinate system.
-	/// Really should be a valid WKT string identifying the coordinate reference system (CRS).
-	root.set("coordinateMetadata", e57::StringNode(imf, ""));
-
-	// Create creationDateTime structure
-	/// Path name: "/creationDateTime
-	e57::StructureNode creationDateTime = e57::StructureNode(imf);
-	creationDateTime.set("dateTimeValue", e57::FloatNode(imf, 0.0));
-	creationDateTime.set("isAtomicClockReferenced", e57::IntegerNode(imf,0));
-	root.set("creationDateTime", creationDateTime);
-
-	//3D data
-	e57::VectorNode data3D(imf,true);
-	root.set("data3D", data3D);
-
-	//Images
-	e57::VectorNode images2D(imf,true);
-	root.set("images2D", images2D);
-
 	CC_FILE_ERROR result = CC_FERR_NO_ERROR;
 
-	//we store (temporarily) the saved scans associated with
-	//their unique GUID in a map (to retrieve them later if
-	//necessary - for example to associate them with images)
-	QMap<ccHObject*,QString> scansGUID;
-	s_absoluteScanIndex = 0;
-	s_cancelRequestedByUser = false;
-	for (unsigned i=0;i<scans.size();++i)
+	try
 	{
-		ccPointCloud* cloud = scans[i];
-		QString scanGUID = GetNewGuid();
+		//get root
+		e57::StructureNode root = imf.root();
 
-		//create corresponding node
-		e57::StructureNode scanNode = e57::StructureNode(imf);
-		if (SaveScan(cloud, scanNode, imf, data3D, scanGUID))
-		{
-			++s_absoluteScanIndex;
-			scansGUID.insert(cloud,scanGUID);
-		}
-		else
-		{
-			result = CC_FERR_WRITING;
-			break;
-		}
+		//header info
 
-		if (s_cancelRequestedByUser)
-		{
-			result = CC_FERR_CANCELED_BY_USER;
-			break;
-		}
-	}
+		/// We are using the E57 v1.0 data format standard fieldnames.
+		/// The standard fieldnames are used without an extension prefix (in the default namespace).
+		/// We explicitly register it for completeness (the reference implementaion would do it for us, if we didn't).
+		imf.extensionsAdd("", E57_V1_0_URI);
 
-	if (result == CC_FERR_NO_ERROR)
-	{
-		//Save images
-		s_absoluteImageIndex = 0;
-		size_t scanCount = scans.size();
-		for (size_t i=0;i<scanCount;++i)
+		// Set per-file properties.
+		/// Path names: "/formatName", "/majorVersion", "/minorVersion", "/coordinateMetadata"
+		root.set("formatName", e57::StringNode(imf, "ASTM E57 3D Imaging Data File"));
+		root.set("guid", e57::StringNode(imf, GetNewGuid().toStdString()));
+
+		// Get ASTM version number supported by library, so can write it into file
+		int astmMajor;
+		int astmMinor;
+		e57::ustring libraryId;
+		e57::E57Utilities().getVersions(astmMajor, astmMinor, libraryId);
+
+		root.set("versionMajor", e57::IntegerNode(imf,astmMajor));
+		root.set("versionMinor", e57::IntegerNode(imf,astmMinor));
+		root.set("e57LibraryVersion", e57::StringNode(imf,libraryId));
+
+		// Save a dummy string for coordinate system.
+		/// Really should be a valid WKT string identifying the coordinate reference system (CRS).
+		root.set("coordinateMetadata", e57::StringNode(imf, ""));
+
+		// Create creationDateTime structure
+		/// Path name: "/creationDateTime
+		e57::StructureNode creationDateTime = e57::StructureNode(imf);
+		creationDateTime.set("dateTimeValue", e57::FloatNode(imf, 0.0));
+		creationDateTime.set("isAtomicClockReferenced", e57::IntegerNode(imf,0));
+		root.set("creationDateTime", creationDateTime);
+
+		//3D data
+		e57::VectorNode data3D(imf,true);
+		root.set("data3D", data3D);
+
+		//Images
+		e57::VectorNode images2D(imf,true);
+		root.set("images2D", images2D);
+
+		//we store (temporarily) the saved scans associated with
+		//their unique GUID in a map (to retrieve them later if
+		//necessary - for example to associate them with images)
+		QMap<ccHObject*,QString> scansGUID;
+		s_absoluteScanIndex = 0;
+		s_cancelRequestedByUser = false;
+		for (unsigned i=0;i<scans.size();++i)
 		{
 			ccPointCloud* cloud = scans[i];
-			ccHObject::Container images;
-			unsigned imageCount = cloud->filterChildren(images,false,CC_TYPES::IMAGE);
+			QString scanGUID = GetNewGuid();
 
-			if (imageCount!=0)
+			//create corresponding node
+			e57::StructureNode scanNode = e57::StructureNode(imf);
+			if (SaveScan(cloud, scanNode, imf, data3D, scanGUID))
 			{
-				//progress bar
-				ccProgressDialog pdlg(true);
-				CCLib::NormalizedProgress nprogress(&pdlg,imageCount);
-				pdlg.setMethodTitle("Write E57 file");
-				pdlg.setInfo(qPrintable(QString("Cloud #%1 - Images: %2").arg(i).arg(imageCount)));
-				pdlg.start();
-				QApplication::processEvents();
+				++s_absoluteScanIndex;
+				scansGUID.insert(cloud,scanGUID);
+			}
+			else
+			{
+				result = CC_FERR_WRITING;
+				break;
+			}
 
-				for (unsigned j=0;j<imageCount;++j)
+			if (s_cancelRequestedByUser)
+			{
+				result = CC_FERR_CANCELED_BY_USER;
+				break;
+			}
+		}
+
+		if (result == CC_FERR_NO_ERROR)
+		{
+			//Save images
+			s_absoluteImageIndex = 0;
+			size_t scanCount = scans.size();
+			for (size_t i=0;i<scanCount;++i)
+			{
+				ccPointCloud* cloud = scans[i];
+				ccHObject::Container images;
+				unsigned imageCount = cloud->filterChildren(images,false,CC_TYPES::IMAGE);
+
+				if (imageCount!=0)
 				{
-					assert(images[j]->isKindOf(CC_TYPES::IMAGE));
-					assert(scansGUID.contains(cloud));
-					QString scanGUID = scansGUID.value(cloud);
-					SaveImage(static_cast<ccImage*>(images[j]),scanGUID,imf,images2D);
-					++s_absoluteImageIndex;
-					if (!nprogress.oneStep())
+					//progress bar
+					ccProgressDialog pdlg(true);
+					CCLib::NormalizedProgress nprogress(&pdlg,imageCount);
+					pdlg.setMethodTitle("Write E57 file");
+					pdlg.setInfo(qPrintable(QString("Cloud #%1 - Images: %2").arg(i).arg(imageCount)));
+					pdlg.start();
+					QApplication::processEvents();
+
+					for (unsigned j=0;j<imageCount;++j)
 					{
-						s_cancelRequestedByUser = true;
-						i = scanCount; //double break!
-						result = CC_FERR_CANCELED_BY_USER;
-						break;
+						assert(images[j]->isKindOf(CC_TYPES::IMAGE));
+						assert(scansGUID.contains(cloud));
+						QString scanGUID = scansGUID.value(cloud);
+						SaveImage(static_cast<ccImage*>(images[j]),scanGUID,imf,images2D);
+						++s_absoluteImageIndex;
+						if (!nprogress.oneStep())
+						{
+							s_cancelRequestedByUser = true;
+							i = scanCount; //double break!
+							result = CC_FERR_CANCELED_BY_USER;
+							break;
+						}
 					}
 				}
 			}
 		}
-	}
 
-	imf.close();
+		imf.close();
+	}
+	catch(e57::E57Exception e)
+	{
+		ccLog::Warning(QString("[E57] LibE57 has thrown an exception: %1").arg(e57::E57Utilities().errorCodeToString(e.errorCode()).c_str()));
+		result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+	}
+	catch(...)
+	{
+		ccLog::Warning("[E57] LibE57 has thrown an unknown exception!");
+		result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+	}
 
 	return result;
 }
@@ -995,8 +983,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			double offset = e57::ScaledIntegerNode(proto.get("cartesianX")).offset();
 			int64_t minimum = e57::ScaledIntegerNode(proto.get("cartesianX")).minimum();
 			int64_t maximum = e57::ScaledIntegerNode(proto.get("cartesianX")).maximum();
-			header.pointFields.pointRangeMinimum = (double)minimum * scale + offset;	
-			header.pointFields.pointRangeMaximum = (double)maximum * scale + offset;
+			header.pointFields.pointRangeMinimum = minimum * scale + offset;	
+			header.pointFields.pointRangeMaximum = maximum * scale + offset;
 			header.pointFields.pointRangeScaledInteger = scale;
 
 		}
@@ -1014,8 +1002,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			double offset = e57::ScaledIntegerNode(proto.get("sphericalRange")).offset();
 			int64_t minimum = e57::ScaledIntegerNode(proto.get("sphericalRange")).minimum();
 			int64_t maximum = e57::ScaledIntegerNode(proto.get("sphericalRange")).maximum();
-			header.pointFields.pointRangeMinimum = (double)minimum * scale + offset;	
-			header.pointFields.pointRangeMaximum = (double)maximum * scale + offset;
+			header.pointFields.pointRangeMinimum = minimum * scale + offset;	
+			header.pointFields.pointRangeMaximum = maximum * scale + offset;
 			header.pointFields.pointRangeScaledInteger = scale;
 
 		}
@@ -1043,8 +1031,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			double offset = e57::ScaledIntegerNode(proto.get("sphericalAzimuth")).offset();
 			int64_t minimum = e57::ScaledIntegerNode(proto.get("sphericalAzimuth")).minimum();
 			int64_t maximum = e57::ScaledIntegerNode(proto.get("sphericalAzimuth")).maximum();
-			header.pointFields.angleMinimum = (double)minimum * scale + offset;	
-			header.pointFields.angleMaximum = (double)maximum * scale + offset;
+			header.pointFields.angleMinimum = minimum * scale + offset;	
+			header.pointFields.angleMaximum = maximum * scale + offset;
 			header.pointFields.angleScaledInteger = scale;
 
 		}
@@ -1085,8 +1073,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			double offset = e57::ScaledIntegerNode(proto.get("nor:normalX")).offset();
 			int64_t minimum = e57::ScaledIntegerNode(proto.get("nor:normalX")).minimum();
 			int64_t maximum = e57::ScaledIntegerNode(proto.get("nor:normalX")).maximum();
-			header.pointFields.normRangeMinimum = (double)minimum * scale + offset;	
-			header.pointFields.normRangeMaximum = (double)maximum * scale + offset;
+			header.pointFields.normRangeMinimum = minimum * scale + offset;	
+			header.pointFields.normRangeMaximum = maximum * scale + offset;
 			header.pointFields.normRangeScaledInteger = scale;
 
 		}
@@ -1104,9 +1092,9 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 	if(proto.isDefined("timeStamp"))
 	{
 		if( proto.get("timeStamp").type() == e57::E57_INTEGER)
-			header.pointFields.timeMaximum = (double)e57::IntegerNode(proto.get("timeStamp")).maximum();
+			header.pointFields.timeMaximum = static_cast<double>(e57::IntegerNode(proto.get("timeStamp")).maximum());
 		else if( proto.get("timeStamp").type() == e57::E57_FLOAT)
-			header.pointFields.timeMaximum = (double)e57::FloatNode(proto.get("timeStamp")).maximum();
+			header.pointFields.timeMaximum = static_cast<double>(e57::FloatNode(proto.get("timeStamp")).maximum());
 	}
 
 	header.pointFields.intensityField = proto.isDefined("intensity");
@@ -1121,8 +1109,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 		e57::StructureNode intbox(scan.get("intensityLimits"));
 		if( intbox.get("intensityMaximum").type() == e57::E57_SCALED_INTEGER )
 		{
-			header.intensityLimits.intensityMaximum = (double)e57::ScaledIntegerNode(intbox.get("intensityMaximum")).scaledValue();
-			header.intensityLimits.intensityMinimum = (double)e57::ScaledIntegerNode(intbox.get("intensityMinimum")).scaledValue();
+			header.intensityLimits.intensityMaximum = e57::ScaledIntegerNode(intbox.get("intensityMaximum")).scaledValue();
+			header.intensityLimits.intensityMinimum = e57::ScaledIntegerNode(intbox.get("intensityMinimum")).scaledValue();
 		}
 		else if( intbox.get("intensityMaximum").type() == e57::E57_FLOAT )
 		{
@@ -1131,8 +1119,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 		}
 		else if( intbox.get("intensityMaximum").type() == e57::E57_INTEGER)
 		{
-			header.intensityLimits.intensityMaximum = (double)e57::IntegerNode(intbox.get("intensityMaximum")).value();
-			header.intensityLimits.intensityMinimum = (double)e57::IntegerNode(intbox.get("intensityMinimum")).value();
+			header.intensityLimits.intensityMaximum = static_cast<double>(e57::IntegerNode(intbox.get("intensityMaximum")).value());
+			header.intensityLimits.intensityMinimum = static_cast<double>(e57::IntegerNode(intbox.get("intensityMinimum")).value());
 		}
 	}
 	
@@ -1142,8 +1130,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 		{
 			if(header.intensityLimits.intensityMaximum == 0.)
 			{
-				header.intensityLimits.intensityMinimum = (double)e57::IntegerNode(proto.get("intensity")).minimum();
-				header.intensityLimits.intensityMaximum = (double)e57::IntegerNode(proto.get("intensity")).maximum();
+				header.intensityLimits.intensityMinimum = static_cast<double>(e57::IntegerNode(proto.get("intensity")).minimum());
+				header.intensityLimits.intensityMaximum = static_cast<double>(e57::IntegerNode(proto.get("intensity")).maximum());
 			}
 			header.pointFields.intensityScaledInteger = -1.;
 
@@ -1156,8 +1144,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			{
 				int64_t minimum = e57::ScaledIntegerNode(proto.get("intensity")).minimum();
 				int64_t maximum = e57::ScaledIntegerNode(proto.get("intensity")).maximum();
-				header.intensityLimits.intensityMinimum = (double)minimum * scale + offset;	
-				header.intensityLimits.intensityMaximum = (double)maximum * scale + offset;
+				header.intensityLimits.intensityMinimum = minimum * scale + offset;	
+				header.intensityLimits.intensityMaximum = maximum * scale + offset;
 			}
 			header.pointFields.intensityScaledInteger = scale;
 		}
@@ -1188,30 +1176,30 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 		e57::StructureNode colorbox(scan.get("colorLimits"));
 		if( colorbox.get("colorRedMaximum").type() == e57::E57_SCALED_INTEGER )
 		{
-			header.colorLimits.colorRedMaximum = (double) e57::ScaledIntegerNode(colorbox.get("colorRedMaximum")).scaledValue();
-			header.colorLimits.colorRedMinimum = (double) e57::ScaledIntegerNode(colorbox.get("colorRedMinimum")).scaledValue();
-			header.colorLimits.colorGreenMaximum = (double) e57::ScaledIntegerNode(colorbox.get("colorGreenMaximum")).scaledValue();
-			header.colorLimits.colorGreenMinimum = (double) e57::ScaledIntegerNode(colorbox.get("colorGreenMinimum")).scaledValue();
-			header.colorLimits.colorBlueMaximum = (double) e57::ScaledIntegerNode(colorbox.get("colorBlueMaximum")).scaledValue();
-			header.colorLimits.colorBlueMinimum = (double) e57::ScaledIntegerNode(colorbox.get("colorBlueMinimum")).scaledValue();
+			header.colorLimits.colorRedMaximum   = e57::ScaledIntegerNode(colorbox.get("colorRedMaximum")  ).scaledValue();
+			header.colorLimits.colorRedMinimum   = e57::ScaledIntegerNode(colorbox.get("colorRedMinimum")  ).scaledValue();
+			header.colorLimits.colorGreenMaximum = e57::ScaledIntegerNode(colorbox.get("colorGreenMaximum")).scaledValue();
+			header.colorLimits.colorGreenMinimum = e57::ScaledIntegerNode(colorbox.get("colorGreenMinimum")).scaledValue();
+			header.colorLimits.colorBlueMaximum  = e57::ScaledIntegerNode(colorbox.get("colorBlueMaximum") ).scaledValue();
+			header.colorLimits.colorBlueMinimum  = e57::ScaledIntegerNode(colorbox.get("colorBlueMinimum") ).scaledValue();
 		}
 		else if( colorbox.get("colorRedMaximum").type() == e57::E57_FLOAT )
 		{
-			header.colorLimits.colorRedMaximum = e57::FloatNode(colorbox.get("colorRedMaximum")).value();
-			header.colorLimits.colorRedMinimum = e57::FloatNode(colorbox.get("colorRedMinimum")).value();
+			header.colorLimits.colorRedMaximum =   e57::FloatNode(colorbox.get("colorRedMaximum")  ).value();
+			header.colorLimits.colorRedMinimum =   e57::FloatNode(colorbox.get("colorRedMinimum")  ).value();
 			header.colorLimits.colorGreenMaximum = e57::FloatNode(colorbox.get("colorGreenMaximum")).value();
 			header.colorLimits.colorGreenMinimum = e57::FloatNode(colorbox.get("colorGreenMinimum")).value();
-			header.colorLimits.colorBlueMaximum = e57::FloatNode(colorbox.get("colorBlueMaximum")).value();
-			header.colorLimits.colorBlueMinimum = e57::FloatNode(colorbox.get("colorBlueMinimum")).value();
+			header.colorLimits.colorBlueMaximum =  e57::FloatNode(colorbox.get("colorBlueMaximum") ).value();
+			header.colorLimits.colorBlueMinimum =  e57::FloatNode(colorbox.get("colorBlueMinimum") ).value();
 		}
 		else if( colorbox.get("colorRedMaximum").type() == e57::E57_INTEGER)
 		{
-			header.colorLimits.colorRedMaximum = (double) e57::IntegerNode(colorbox.get("colorRedMaximum")).value();
-			header.colorLimits.colorRedMinimum = (double) e57::IntegerNode(colorbox.get("colorRedMinimum")).value();
-			header.colorLimits.colorGreenMaximum = (double) e57::IntegerNode(colorbox.get("colorGreenMaximum")).value();
-			header.colorLimits.colorGreenMinimum = (double) e57::IntegerNode(colorbox.get("colorGreenMinimum")).value();
-			header.colorLimits.colorBlueMaximum = (double) e57::IntegerNode(colorbox.get("colorBlueMaximum")).value();
-			header.colorLimits.colorBlueMinimum = (double) e57::IntegerNode(colorbox.get("colorBlueMinimum")).value();
+			header.colorLimits.colorRedMaximum =   static_cast<double>(e57::IntegerNode(colorbox.get("colorRedMaximum")  ).value());
+			header.colorLimits.colorRedMinimum =   static_cast<double>(e57::IntegerNode(colorbox.get("colorRedMinimum")  ).value());
+			header.colorLimits.colorGreenMaximum = static_cast<double>(e57::IntegerNode(colorbox.get("colorGreenMaximum")).value());
+			header.colorLimits.colorGreenMinimum = static_cast<double>(e57::IntegerNode(colorbox.get("colorGreenMinimum")).value());
+			header.colorLimits.colorBlueMaximum =  static_cast<double>(e57::IntegerNode(colorbox.get("colorBlueMaximum") ).value());
+			header.colorLimits.colorBlueMinimum =  static_cast<double>(e57::IntegerNode(colorbox.get("colorBlueMinimum") ).value());
 		}
 	}
 
@@ -1219,13 +1207,13 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 	{
 		if(proto.get("colorRed").type() == e57::E57_INTEGER)
 		{
-			header.colorLimits.colorRedMinimum = (double)e57::IntegerNode(proto.get("colorRed")).minimum();
-			header.colorLimits.colorRedMaximum = (double)e57::IntegerNode(proto.get("colorRed")).maximum();
+			header.colorLimits.colorRedMinimum = static_cast<double>(e57::IntegerNode(proto.get("colorRed")).minimum());
+			header.colorLimits.colorRedMaximum = static_cast<double>(e57::IntegerNode(proto.get("colorRed")).maximum());
 		}
 		else if(proto.get("colorRed").type() == e57::E57_FLOAT)
 		{
-			header.colorLimits.colorRedMinimum = (double)e57::FloatNode(proto.get("colorRed")).minimum();
-			header.colorLimits.colorRedMaximum = (double)e57::FloatNode(proto.get("colorRed")).maximum();
+			header.colorLimits.colorRedMinimum = e57::FloatNode(proto.get("colorRed")).minimum();
+			header.colorLimits.colorRedMaximum = e57::FloatNode(proto.get("colorRed")).maximum();
 		}
 		else if(proto.get("colorRed").type() == e57::E57_SCALED_INTEGER)
 		{
@@ -1233,8 +1221,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			double offset = e57::ScaledIntegerNode(proto.get("colorRed")).offset();
 			int64_t minimum = e57::ScaledIntegerNode(proto.get("colorRed")).minimum();
 			int64_t maximum = e57::ScaledIntegerNode(proto.get("colorRed")).maximum();
-			header.colorLimits.colorRedMinimum = (double)minimum * scale + offset;	
-			header.colorLimits.colorRedMaximum = (double)maximum * scale + offset;
+			header.colorLimits.colorRedMinimum = minimum * scale + offset;	
+			header.colorLimits.colorRedMaximum = maximum * scale + offset;
 		}
 	}
 
@@ -1242,13 +1230,13 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 	{
 		if(proto.get("colorGreen").type() == e57::E57_INTEGER)
 		{
-			header.colorLimits.colorGreenMinimum = (double)e57::IntegerNode(proto.get("colorGreen")).minimum();
-			header.colorLimits.colorGreenMaximum = (double)e57::IntegerNode(proto.get("colorGreen")).maximum();
+			header.colorLimits.colorGreenMinimum = static_cast<double>(e57::IntegerNode(proto.get("colorGreen")).minimum());
+			header.colorLimits.colorGreenMaximum = static_cast<double>(e57::IntegerNode(proto.get("colorGreen")).maximum());
 		}
 		else if(proto.get("colorGreen").type() == e57::E57_FLOAT)
 		{
-			header.colorLimits.colorGreenMinimum = (double)e57::FloatNode(proto.get("colorGreen")).minimum();
-			header.colorLimits.colorGreenMaximum = (double)e57::FloatNode(proto.get("colorGreen")).maximum();
+			header.colorLimits.colorGreenMinimum = e57::FloatNode(proto.get("colorGreen")).minimum();
+			header.colorLimits.colorGreenMaximum = e57::FloatNode(proto.get("colorGreen")).maximum();
 		}
 		else if(proto.get("colorGreen").type() == e57::E57_SCALED_INTEGER)
 		{
@@ -1256,21 +1244,21 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			double offset = e57::ScaledIntegerNode(proto.get("colorGreen")).offset();
 			int64_t minimum = e57::ScaledIntegerNode(proto.get("colorGreen")).minimum();
 			int64_t maximum = e57::ScaledIntegerNode(proto.get("colorGreen")).maximum();
-			header.colorLimits.colorGreenMinimum = (double)minimum * scale + offset;	
-			header.colorLimits.colorGreenMaximum = (double)maximum * scale + offset;
+			header.colorLimits.colorGreenMinimum = minimum * scale + offset;	
+			header.colorLimits.colorGreenMaximum = maximum * scale + offset;
 		}
 	}
 	if((header.colorLimits.colorBlueMaximum == 0.) && proto.isDefined("colorBlue"))
 	{
 		if( proto.get("colorBlue").type() == e57::E57_INTEGER)
 		{
-			header.colorLimits.colorBlueMinimum = (double)e57::IntegerNode(proto.get("colorBlue")).minimum();
-			header.colorLimits.colorBlueMaximum = (double)e57::IntegerNode(proto.get("colorBlue")).maximum();
+			header.colorLimits.colorBlueMinimum = static_cast<double>(e57::IntegerNode(proto.get("colorBlue")).minimum());
+			header.colorLimits.colorBlueMaximum = static_cast<double>(e57::IntegerNode(proto.get("colorBlue")).maximum());
 		}
 		else if( proto.get("colorBlue").type() == e57::E57_FLOAT)
 		{
-			header.colorLimits.colorBlueMinimum = (double)e57::FloatNode(proto.get("colorBlue")).minimum();
-			header.colorLimits.colorBlueMaximum = (double)e57::FloatNode(proto.get("colorBlue")).maximum();
+			header.colorLimits.colorBlueMinimum = e57::FloatNode(proto.get("colorBlue")).minimum();
+			header.colorLimits.colorBlueMaximum = e57::FloatNode(proto.get("colorBlue")).maximum();
 		}
 		else if(proto.get("colorBlue").type() == e57::E57_SCALED_INTEGER)
 		{
@@ -1278,8 +1266,8 @@ bool DecodePrototype(e57::StructureNode& scan, e57::StructureNode& proto, E57Sca
 			double offset = e57::ScaledIntegerNode(proto.get("colorBlue")).offset();
 			int64_t minimum = e57::ScaledIntegerNode(proto.get("colorBlue")).minimum();
 			int64_t maximum = e57::ScaledIntegerNode(proto.get("colorBlue")).maximum();
-			header.colorLimits.colorRedMinimum = (double)minimum * scale + offset;	
-			header.colorLimits.colorRedMaximum = (double)maximum * scale + offset;
+			header.colorLimits.colorRedMinimum = minimum * scale + offset;	
+			header.colorLimits.colorRedMaximum = maximum * scale + offset;
 		}
 	}
 	return true;
@@ -1324,9 +1312,7 @@ static ScalarType s_maxIntensity = 0;
 static ScalarType s_minIntensity = 0;
 
 //for coordinate shif handling
-static bool s_alwaysDisplayLoadDialog = true;
-static bool s_coordinatesShiftEnabled = false;
-static CCVector3d s_coordinatesShift(0,0,0);
+FileIOFilter::LoadParameters s_loadParameters;
 
 ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=true*/)
 {
@@ -1383,7 +1369,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 			ccLog::Warning(QString("[E57Filter] No readable point in scan '%1'! (only cartesian and spherical coordinates are supported right now)").arg(scanNode.elementName().c_str()));
 			return 0;
 		}
-		sphericalMode=true;
+		sphericalMode = true;
 	}
 
 	ccPointCloud* cloud = new ccPointCloud();
@@ -1417,14 +1403,14 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 	bool validPoseMat = GetPoseInformation(scanNode, poseMat);
 
 	//if (validPoseMat)
-		//cloud->setGLTransformation(poseMat); //TODO-> apply it at the end instead! We will loose original coordinates!
+		//cloud->setGLTransformation(poseMat); //TODO-> apply it at the end instead! Otherwise we will loose original coordinates!
 
 	//prepare temporary structures
 	const unsigned nSize = MAX_NUMBER_OF_ELEMENTS_PER_CHUNK; //=GenericChunkedArray chunks size
 	TempArrays arrays;
 	std::vector<e57::SourceDestBuffer> dbufs;
 
-	if (!cloud->reserve((unsigned)pointCount))
+	if (!cloud->reserve(static_cast<unsigned>(pointCount)))
 	{
 		ccLog::Error("[E57] Not enough memory!");
 		delete cloud;
@@ -1436,25 +1422,25 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 		//spherical coordinates
 		if(header.pointFields.sphericalRangeField)
 		{
-			arrays.xData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalRange", arrays.xData, nSize, true, (prototype.get("sphericalRange").type() == e57::E57_SCALED_INTEGER)));
+			arrays.xData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalRange", &(arrays.xData.front()), nSize, true, (prototype.get("sphericalRange").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if(header.pointFields.sphericalAzimuthField)
 		{
-			arrays.yData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalAzimuth", arrays.yData, nSize, true, (prototype.get("sphericalAzimuth").type() == e57::E57_SCALED_INTEGER)));
+			arrays.yData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalAzimuth", &(arrays.yData.front()), nSize, true, (prototype.get("sphericalAzimuth").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if(header.pointFields.sphericalElevationField)
 		{
-			arrays.zData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalElevation", arrays.zData, nSize, true, (prototype.get("sphericalElevation").type() == e57::E57_SCALED_INTEGER)));
+			arrays.zData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalElevation", &(arrays.zData.front()), nSize, true, (prototype.get("sphericalElevation").type() == e57::E57_SCALED_INTEGER)));
 		}
 
 		//data validity
 		if( header.pointFields.sphericalInvalidStateField)
 		{
-			arrays.isInvalidData = new boost::int8_t[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalInvalidState", arrays.isInvalidData, nSize, true, (prototype.get("sphericalInvalidState").type() == e57::E57_SCALED_INTEGER)));
+			arrays.isInvalidData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "sphericalInvalidState", &(arrays.isInvalidData.front()), nSize, true, (prototype.get("sphericalInvalidState").type() == e57::E57_SCALED_INTEGER)));
 		}
 	}
 	else
@@ -1462,25 +1448,25 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 		//cartesian coordinates
 		if(header.pointFields.cartesianXField)
 		{
-			arrays.xData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianX", arrays.xData, nSize, true, (prototype.get("cartesianX").type() == e57::E57_SCALED_INTEGER)));
+			arrays.xData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianX", &(arrays.xData.front()), nSize, true, (prototype.get("cartesianX").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if(header.pointFields.cartesianYField)
 		{
-			arrays.yData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianY", arrays.yData, nSize, true, (prototype.get("cartesianY").type() == e57::E57_SCALED_INTEGER)));
+			arrays.yData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianY", &(arrays.yData.front()), nSize, true, (prototype.get("cartesianY").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if(header.pointFields.cartesianZField)
 		{
-			arrays.zData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianZ", arrays.zData, nSize, true, (prototype.get("cartesianZ").type() == e57::E57_SCALED_INTEGER)));
+			arrays.zData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianZ", &(arrays.zData.front()), nSize, true, (prototype.get("cartesianZ").type() == e57::E57_SCALED_INTEGER)));
 		}
 
 		//data validity
 		if( header.pointFields.cartesianInvalidStateField)
 		{
-			arrays.isInvalidData = new boost::int8_t[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianInvalidState", arrays.isInvalidData, nSize, true, (prototype.get("cartesianInvalidState").type() == e57::E57_SCALED_INTEGER)));
+			arrays.isInvalidData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "cartesianInvalidState", &(arrays.isInvalidData.front()), nSize, true, (prototype.get("cartesianInvalidState").type() == e57::E57_SCALED_INTEGER)));
 		}
 	}
 
@@ -1499,18 +1485,18 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 		cloud->showNormals(true);
 		if(header.pointFields.normXField)
 		{
-			arrays.xNormData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "nor:normalX", arrays.xNormData, nSize, true, (prototype.get("nor:normalX").type() == e57::E57_SCALED_INTEGER)));
+			arrays.xNormData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "nor:normalX", &(arrays.xNormData.front()), nSize, true, (prototype.get("nor:normalX").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if(header.pointFields.normYField)
 		{
-			arrays.yNormData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "nor:normalY", arrays.yNormData, nSize, true, (prototype.get("nor:normalY").type() == e57::E57_SCALED_INTEGER)));
+			arrays.yNormData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "nor:normalY", &(arrays.yNormData.front()), nSize, true, (prototype.get("nor:normalY").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if(header.pointFields.normZField)
 		{
-			arrays.zNormData = new double[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "nor:normalZ", arrays.zNormData, nSize, true, (prototype.get("nor:normalZ").type() == e57::E57_SCALED_INTEGER)));
+			arrays.zNormData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "nor:normalZ", &(arrays.zNormData.front()), nSize, true, (prototype.get("nor:normalZ").type() == e57::E57_SCALED_INTEGER)));
 		}
 	}
 
@@ -1532,15 +1518,15 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 		}
 		cloud->addScalarField(intensitySF);
 
-		arrays.intData = new double[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "intensity", arrays.intData, nSize, true, (prototype.get("intensity").type() == e57::E57_SCALED_INTEGER)));
+		arrays.intData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "intensity", &(arrays.intData.front()), nSize, true, (prototype.get("intensity").type() == e57::E57_SCALED_INTEGER)));
 		//intRange = header.intensityLimits.intensityMaximum - header.intensityLimits.intensityMinimum;
 		//intOffset = header.intensityLimits.intensityMinimum;
 
 		if (header.pointFields.isIntensityInvalidField)
 		{
-			arrays.isInvalidIntData = new boost::int8_t[nSize];
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "isIntensityInvalid", arrays.isInvalidIntData, nSize, true, (prototype.get("isIntensityInvalid").type() == e57::E57_SCALED_INTEGER)));
+			arrays.isInvalidIntData.resize(nSize);
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "isIntensityInvalid", &(arrays.isInvalidIntData.front()), nSize, true, (prototype.get("isIntensityInvalid").type() == e57::E57_SCALED_INTEGER)));
 		}
 
 	}
@@ -1565,30 +1551,30 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 		}
 		if (header.pointFields.colorRedField)
 		{
-			arrays.redData = new colorFieldType[nSize];
+			arrays.redData.resize(nSize);
 			colorRedOffset = header.colorLimits.colorRedMinimum;
 			colorRedRange = header.colorLimits.colorRedMaximum - header.colorLimits.colorRedMinimum;
 			if (colorRedRange<=0.0)
 				colorRedRange=1.0;
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "colorRed", arrays.redData, nSize, true, (prototype.get("colorRed").type() == e57::E57_SCALED_INTEGER)));
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "colorRed", &(arrays.redData.front()), nSize, true, (prototype.get("colorRed").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if (header.pointFields.colorGreenField)
 		{
-			arrays.greenData = new colorFieldType[nSize];
+			arrays.greenData.resize(nSize);
 			colorGreenOffset = header.colorLimits.colorGreenMinimum;
 			colorGreenRange = header.colorLimits.colorGreenMaximum - header.colorLimits.colorGreenMinimum;
 			if (colorGreenRange<=0.0)
 				colorGreenRange=1.0;
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "colorGreen", arrays.greenData, nSize, true, (prototype.get("colorGreen").type() == e57::E57_SCALED_INTEGER)));
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "colorGreen", &(arrays.greenData.front()), nSize, true, (prototype.get("colorGreen").type() == e57::E57_SCALED_INTEGER)));
 		}
 		if (header.pointFields.colorBlueField)
 		{
-			arrays.blueData = new colorFieldType[nSize];
+			arrays.blueData.resize(nSize);
 			colorBlueOffset = header.colorLimits.colorBlueMinimum;
 			colorBlueRange = header.colorLimits.colorBlueMaximum - header.colorLimits.colorBlueMinimum;
 			if (colorBlueRange<=0.0)
 				colorBlueRange=1.0;
-			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "colorBlue", arrays.blueData, nSize, true, (prototype.get("colorBlue").type() == e57::E57_SCALED_INTEGER)));
+			dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "colorBlue", &(arrays.blueData.front()), nSize, true, (prototype.get("colorBlue").type() == e57::E57_SCALED_INTEGER)));
 		}
 	}
 
@@ -1606,8 +1592,8 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 			return 0;
 		}
 		cloud->addScalarField(returnIndexSF);
-		arrays.scanIndexData = new boost::int8_t[nSize];
-		dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "returnIndex", arrays.scanIndexData, nSize, true, (prototype.get("returnIndex").type() == e57::E57_SCALED_INTEGER)));
+		arrays.scanIndexData.resize(nSize);
+		dbufs.push_back(e57::SourceDestBuffer(node.destImageFile(), "returnIndex", &(arrays.scanIndexData.front()), nSize, true, (prototype.get("returnIndex").type() == e57::E57_SCALED_INTEGER)));
 	}
 
 	//Read the point data
@@ -1615,7 +1601,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 
 	//local progress bar
 	ccProgressDialog pdlg(true);
-	CCLib::NormalizedProgress* nprogress=0;
+	CCLib::NormalizedProgress* nprogress = 0;
 	if (showProgressBar)
 	{
 		nprogress = new CCLib::NormalizedProgress(&pdlg,static_cast<unsigned>(pointCount)/nSize);
@@ -1625,22 +1611,23 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 		QApplication::processEvents();
 	}
 
+	CCVector3d Pshift(0,0,0);
 	unsigned size = 0;
 	boost::int64_t realCount = 0;
-	while(size = dataReader.read())
+	while (size = dataReader.read())
 	{
-		for(unsigned i=0; i<size; i++)
+		for (unsigned i=0; i<size; i++)
 		{
 			//we skip invalid points!
-			if(arrays.isInvalidData && arrays.isInvalidData[i] != 0)
+			if (!arrays.isInvalidData.empty() && arrays.isInvalidData[i] != 0)
 				continue;
 
 			CCVector3d Pd(0,0,0);
 			if (sphericalMode)
 			{
-				double r = (arrays.xData ? arrays.xData[i] : 0);
-				double theta = (arrays.yData ? arrays.yData[i] : 0);	//Azimuth
-				double phi = (arrays.zData ? arrays.zData[i] : 0);		//Elevation
+				double r = (arrays.xData.empty() ? 0 : arrays.xData[i]);
+				double theta = (arrays.yData.empty() ? 0 : arrays.yData[i]);	//Azimuth
+				double phi = (arrays.zData.empty() ? 0 : arrays.zData[i]);		//Elevation
 
 				double cos_phi = cos(phi);
 				Pd.x = r * cos_phi * cos(theta);
@@ -1661,45 +1648,41 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 			//*/
 			else //cartesian
 			{
-				if (arrays.xData)
+				if (!arrays.xData.empty())
 					Pd.x = arrays.xData[i];
-				if (arrays.yData)
+				if (!arrays.yData.empty())
 					Pd.y = arrays.yData[i];
-				if (arrays.zData)
+				if (!arrays.zData.empty())
 					Pd.z = arrays.zData[i];
 			}
 
 			//first point: check for 'big' coordinates
 			if (realCount == 0)
 			{
-				bool applyAll = false;
-				if (	sizeof(PointCoordinateType) < 8
-					&&	ccCoordinatesShiftManager::Handle(Pd,0,s_alwaysDisplayLoadDialog,s_coordinatesShiftEnabled,s_coordinatesShift,0,&applyAll))
+				if (FileIOFilter::HandleGlobalShift(Pd,Pshift,s_loadParameters))
 				{
-					cloud->setGlobalShift(s_coordinatesShift);
-					ccLog::Warning("[E57Filter::loadFile] Cloud %s has been recentered! Translation: (%.2f,%.2f,%.2f)",qPrintable(guidStr),s_coordinatesShift.x,s_coordinatesShift.y,s_coordinatesShift.z);
-					if (applyAll)
-						s_coordinatesShiftEnabled = true;
+					cloud->setGlobalShift(Pshift);
+					ccLog::Warning("[E57Filter::loadFile] Cloud %s has been recentered! Translation: (%.2f,%.2f,%.2f)",qPrintable(guidStr),Pshift.x,Pshift.y,Pshift.z);
 				}
 			}
 
-			CCVector3 P = CCVector3::fromArray((Pd + s_coordinatesShift).u);
+			CCVector3 P = CCVector3::fromArray((Pd + Pshift).u);
 			cloud->addPoint(P);
 
 			if (hasNormals)
 			{
 				CCVector3 N(0,0,0);
-				if (arrays.xNormData)
-					N.x = (PointCoordinateType)arrays.xNormData[i];
-				if (arrays.yNormData)
-					N.y = (PointCoordinateType)arrays.yNormData[i];
-				if (arrays.zNormData)
-					N.z = (PointCoordinateType)arrays.zNormData[i];
+				if (!arrays.xNormData.empty())
+					N.x = static_cast<PointCoordinateType>(arrays.xNormData[i]);
+				if (!arrays.yNormData.empty())
+					N.y = static_cast<PointCoordinateType>(arrays.yNormData[i]);
+				if (!arrays.zNormData.empty())
+					N.z = static_cast<PointCoordinateType>(arrays.zNormData[i]);
 				N.normalize();
 				cloud->addNorm(N);
 			}
 
-			if(arrays.intData)
+			if (!arrays.intData.empty())
 			{
 				assert(intensitySF);
 				if (!header.pointFields.isIntensityInvalidField || arrays.isInvalidIntData[i] != 0)
@@ -1709,7 +1692,7 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 					intensitySF->setValue(static_cast<unsigned>(realCount),intensity);
 
 					//track max intensity (for proper visualization)
-					if (s_absoluteScanIndex!=0 || realCount!=0)
+					if (s_absoluteScanIndex != 0 || realCount != 0)
 					{
 						if (s_maxIntensity<intensity)
 							s_maxIntensity=intensity;
@@ -1730,18 +1713,18 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 			if (hasColors)
 			{
 				//Normalize color to 0 - 255
-				colorType C[3]={0,0,0};
-				if (arrays.redData)
-					C[0] = (colorType) (((arrays.redData[i] - colorRedOffset) * 255) / colorRedRange);
-				if (arrays.greenData)
-					C[1] = (colorType) (((arrays.greenData[i] - colorGreenOffset) * 255) / colorGreenRange);
-				if (arrays.blueData)
-					C[2] = (colorType) (((arrays.blueData[i] - colorBlueOffset) * 255) / colorBlueRange);
+				colorType C[3] = { 0, 0, 0 };
+				if (!arrays.redData.empty())
+					C[0] = static_cast<colorType>(((arrays.redData[i] - colorRedOffset) * 255) / colorRedRange);
+				if (!arrays.greenData.empty())
+					C[1] = static_cast<colorType>(((arrays.greenData[i] - colorGreenOffset) * 255) / colorGreenRange);
+				if (!arrays.blueData.empty())
+					C[2] = static_cast<colorType>(((arrays.blueData[i] - colorBlueOffset) * 255) / colorBlueRange);
 				
 				cloud->addRGBColor(C);
 			}
 
-			if (arrays.scanIndexData)
+			if (!arrays.scanIndexData.empty())
 			{
 				assert(returnIndexSF);
 				ScalarType s = static_cast<ScalarType>(arrays.scanIndexData[i]);
@@ -1762,12 +1745,12 @@ ccHObject* LoadScan(e57::Node& node, QString& guidStr, bool showProgressBar/*=tr
 	if (nprogress)
 	{
 		delete nprogress;
-		nprogress=0;
+		nprogress = 0;
 	}
 
 	dataReader.close();
 
-	if (realCount==0)
+	if (realCount == 0)
 	{
 		ccLog::Warning(QString("[E57] No valid point in scan '%1'!").arg(scanNode.elementName().c_str()));
 		delete cloud;
@@ -1999,16 +1982,29 @@ ccHObject* LoadImage(e57::Node& node, QString& associatedData3DGuid)
 	case E57_PINHOLE:
 		{
 			PinholeRepresentation* pinhole = static_cast<PinholeRepresentation*>(cameraRepresentation);
-			ccCalibratedImage* calibImage = new ccCalibratedImage();
-			//pixelWidth
+			float focal_mm        = static_cast<float>(pinhole->focalLength);
+			float pixelWidth_mm   = static_cast<float>(pinhole->pixelWidth);    //FIXME: pixelWidth is in radians?!
+			float pixelHeight_mm  = static_cast<float>(pinhole->pixelHeight);   //FIXME: pixelHeight is in radians?!
+			float ccdHeight_mm    = static_cast<float>(pinhole->imageHeight * pixelHeight_mm);
+			
+			ccCameraSensor::IntrinsicParameters params;
+			params.focal_pix       = ccCameraSensor::ConvertFocalMMToPix(focal_mm,pixelHeight_mm);
+			params.arrayWidth      = pinhole->imageSize;
+			params.arrayHeight     = pinhole->imageHeight;
+			params.pixelSize_mm[0] = pixelWidth_mm;
+			params.pixelSize_mm[1] = pixelHeight_mm;
+			params.vFOV_rad         = ccCameraSensor::ComputeFovRadFromFocalMm(pinhole->focalLength,ccdHeight_mm);
+			
+			ccCameraSensor* sensor = new ccCameraSensor(params);
 			if (validPoseMat)
-				calibImage->setCameraMatrix(poseMat);
+				sensor->setRigidTransformation(poseMat);
 
-			double dx = pinhole->pixelWidth * (double)pinhole->imageWidth;
-			double f = pinhole->focalLength;
-			double fov_x = 2.0*atan(dx/(2.0*f)); //FIXME: we only take x into account! (we hope it's okay)
-			calibImage->setFov(static_cast<float>(fov_x*180.0/M_PI));
-			//calibImage->setFocal(f,false); //FIXME: focal handled in pixels only!
+			sensor->setEnabled(false);
+			sensor->setVisible(true);
+
+			ccImage* calibImage = new ccImage();
+			calibImage->addChild(sensor);
+			calibImage->setAssociatedSensor(sensor);
 
 			imageObj = calibImage;
 		}
@@ -2019,7 +2015,7 @@ ccHObject* LoadImage(e57::Node& node, QString& associatedData3DGuid)
 	}
 
 	assert(imageObj);
-	imageObj->setImage(qImage);
+	imageObj->setData(qImage);
 	imageObj->setName(name.c_str());
 
 	//don't forget image aspect ratio
@@ -2038,197 +2034,211 @@ ccHObject* LoadImage(e57::Node& node, QString& associatedData3DGuid)
 	return imageObj;
 }
 
-CC_FILE_ERROR E57Filter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR E57Filter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
-	s_alwaysDisplayLoadDialog = alwaysDisplayLoadDialog;
+	s_loadParameters = parameters;
 
 	//Read file from disk
 	e57::ImageFile imf(filename.toStdString(), "r");
 	if (!imf.isOpen())
 		return CC_FERR_READING;
 
-	//for normals handling
-	imf.extensionsAdd("nor","http://www.libe57.org/E57_NOR_surface_normals.txt");
-
-	//get root
-	e57::StructureNode root = imf.root();
-
-	//header info
-	e57::StructureNode rootStruct = e57::StructureNode(root);
-	//format name
+	try
 	{
-		if (!ChildNodeToConsole(rootStruct,"formatName"))
-			return CC_FERR_MALFORMED_FILE;
-	}
-	//GUID
-	{
-		if (!ChildNodeToConsole(rootStruct,"guid"))
-			return CC_FERR_MALFORMED_FILE;
-	}
-	//versionMajor
-	{
-		if (!ChildNodeToConsole(rootStruct,"versionMajor"))
-			return CC_FERR_MALFORMED_FILE;
-	}
-	//versionMinor
-	{
-		if (!ChildNodeToConsole(rootStruct,"versionMinor"))
-			return CC_FERR_MALFORMED_FILE;
-	}
+		//for normals handling
+		imf.extensionsAdd("nor","http://www.libe57.org/E57_NOR_surface_normals.txt");
 
-	//unroll structure in tree (it's a quick to check structure + informative for user)
-	ccHObject* fileStructureTree = new ccHObject("File structure");
-	if (!NodeStructureToTree(fileStructureTree,rootStruct))
-			return CC_FERR_MALFORMED_FILE;
-	container.addChild(fileStructureTree);
+		//get root
+		e57::StructureNode root = imf.root();
 
-	//we store (temporarily) the loaded scans associated with
-	//their unique GUID in a map (to retrieve them later if
-	//necessary - for example to associate them with images)
-	QMap<QString,ccHObject*> scans;
-
-	//3D data?
-	if (root.isDefined("/data3D"))
-	{
-		e57::Node n = root.get("/data3D"); //E57 standard: "data3D is a vector for storing an arbitrary number of 3D data sets "
-		if (n.type() != e57::E57_VECTOR)
-			return CC_FERR_MALFORMED_FILE;
-		e57::VectorNode data3D(n);
-
-		unsigned scanCount = (unsigned)data3D.childCount();
-
-		//global progress bar
-		ccProgressDialog pdlg(true);
-		CCLib::NormalizedProgress* nprogress=0;
-		if (scanCount>10)
+		//header info
+		e57::StructureNode rootStruct = e57::StructureNode(root);
+		//format name
 		{
-			//Too many scans, will display a global progress bar
-			nprogress = new CCLib::NormalizedProgress(&pdlg,scanCount);
-			pdlg.setMethodTitle("Read E57 file");
-			pdlg.setInfo(qPrintable(QString("Scans: %1").arg(scanCount)));
-			pdlg.start();
-			QApplication::processEvents();
+			if (!ChildNodeToConsole(rootStruct,"formatName"))
+				return CC_FERR_MALFORMED_FILE;
 		}
-		//static states
-		s_absoluteScanIndex = 0;
-		s_cancelRequestedByUser = false;
-		s_minIntensity = s_maxIntensity = 0;
-		for (unsigned i=0;i<scanCount;++i)
+		//GUID
 		{
-			e57::Node scanNode = data3D.get(i);
-			QString scanGUID;
-			ccHObject* scan = LoadScan(scanNode,scanGUID,nprogress==0);
-			if (scan)
-			{
-				if (scan->getName().isEmpty())
-				{
-					QString name("Scan");
-					e57::ustring nodeName = scanNode.elementName();
-					if (nodeName.c_str() != 0 && nodeName.c_str()[0]!=0)
-						name += QString(nodeName.c_str());
-					else
-						name += QString::number(i);
-					scan->setName(name);
-				}
-				container.addChild(scan);
-
-				//we also add the scan to the GUID/object map
-				if (!scanGUID.isEmpty())
-					scans.insert(scanGUID,scan);
-			}
-			if ((nprogress && !nprogress->oneStep()) || s_cancelRequestedByUser)
-				break;
-			++s_absoluteScanIndex;
+			if (!ChildNodeToConsole(rootStruct,"guid"))
+				return CC_FERR_MALFORMED_FILE;
+		}
+		//versionMajor
+		{
+			if (!ChildNodeToConsole(rootStruct,"versionMajor"))
+				return CC_FERR_MALFORMED_FILE;
+		}
+		//versionMinor
+		{
+			if (!ChildNodeToConsole(rootStruct,"versionMinor"))
+				return CC_FERR_MALFORMED_FILE;
 		}
 
-		if (nprogress)
+		//unroll structure in tree (it's a quick to check structure + informative for user)
+		ccHObject* fileStructureTree = new ccHObject("File structure");
+		if (!NodeStructureToTree(fileStructureTree,rootStruct))
+				return CC_FERR_MALFORMED_FILE;
+		container.addChild(fileStructureTree);
+
+		//we store (temporarily) the loaded scans associated with
+		//their unique GUID in a map (to retrieve them later if
+		//necessary - for example to associate them with images)
+		QMap<QString,ccHObject*> scans;
+
+		//3D data?
+		if (root.isDefined("/data3D"))
 		{
-			pdlg.stop();
-			QApplication::processEvents();
-			delete nprogress;
-			nprogress=0;
-		}
+			e57::Node n = root.get("/data3D"); //E57 standard: "data3D is a vector for storing an arbitrary number of 3D data sets "
+			if (n.type() != e57::E57_VECTOR)
+				return CC_FERR_MALFORMED_FILE;
+			e57::VectorNode data3D(n);
 
-		//set global max intensity (saturation) for proper display
-		for (unsigned i=0;i<container.getChildrenNumber();++i)
-		{
-			if (container.getChild(i)->isA(CC_TYPES::POINT_CLOUD))
-			{
-				ccPointCloud* pc = static_cast<ccPointCloud*>(container.getChild(i));
-				ccScalarField* sf = pc->getCurrentDisplayedScalarField();
-				if (sf)
-				{
-					sf->setSaturationStart(s_minIntensity);
-					sf->setSaturationStop(s_maxIntensity);
-				}
-			}
-		}
-	}
+			unsigned scanCount = (unsigned)data3D.childCount();
 
-
-	////Image data?
-	if (!s_cancelRequestedByUser && root.isDefined("/images2D"))
-	{
-		e57::Node n = root.get("/images2D"); //E57 standard: "images2D is a vector for storing two dimensional images"
-		if (n.type() != e57::E57_VECTOR)
-			return CC_FERR_MALFORMED_FILE;
-		e57::VectorNode images2D(n);
-
-		unsigned imageCount = (unsigned)images2D.childCount();
-		if (imageCount)
-		{
-			//progress bar
+			//global progress bar
 			ccProgressDialog pdlg(true);
-			CCLib::NormalizedProgress nprogress(&pdlg,imageCount);
-			pdlg.setMethodTitle("Read E57 file");
-			pdlg.setInfo(qPrintable(QString("Images: %1").arg(imageCount)));
-			pdlg.start();
-			QApplication::processEvents();
-
-			for (unsigned i=0;i<imageCount;++i)
+			CCLib::NormalizedProgress* nprogress = 0;
+			if (scanCount > 10)
 			{
-				e57::Node imageNode = images2D.get(i);
-				QString associatedData3DGuid;
-				ccHObject* image = LoadImage(imageNode,associatedData3DGuid);
-				if (image)
+				//Too many scans, will display a global progress bar
+				nprogress = new CCLib::NormalizedProgress(&pdlg,scanCount);
+				pdlg.setMethodTitle("Read E57 file");
+				pdlg.setInfo(qPrintable(QString("Scans: %1").arg(scanCount)));
+				pdlg.start();
+				QApplication::processEvents();
+			}
+			//static states
+			s_absoluteScanIndex = 0;
+			s_cancelRequestedByUser = false;
+			s_minIntensity = s_maxIntensity = 0;
+			for (unsigned i=0; i<scanCount; ++i)
+			{
+				e57::Node scanNode = data3D.get(i);
+				QString scanGUID;
+				ccHObject* scan = LoadScan(scanNode,scanGUID,nprogress==0);
+				if (scan)
 				{
-					//no name?
-					if (image->getName().isEmpty())
+					if (scan->getName().isEmpty())
 					{
-						QString name("Image");
-						e57::ustring nodeName = imageNode.elementName();
+						QString name("Scan");
+						e57::ustring nodeName = scanNode.elementName();
 						if (nodeName.c_str() != 0 && nodeName.c_str()[0]!=0)
 							name += QString(nodeName.c_str());
 						else
 							name += QString::number(i);
-						image->setName(name);
+						scan->setName(name);
 					}
-					image->setEnabled(false); //not displayed by default
+					container.addChild(scan);
 
-					//existing link to a loaded scan?
-					ccHObject* parentScan = 0;
-					if (!associatedData3DGuid.isEmpty())
-					{
-						if (scans.contains(associatedData3DGuid))
-							parentScan = scans.value(associatedData3DGuid);
-					}
-
-					if (parentScan)
-						parentScan->addChild(image);
-					else
-						container.addChild(image);
+					//we also add the scan to the GUID/object map
+					if (!scanGUID.isEmpty())
+						scans.insert(scanGUID,scan);
 				}
-
-				if (!nprogress.oneStep())
-				{
-					s_cancelRequestedByUser = true;
+				if ((nprogress && !nprogress->oneStep()) || s_cancelRequestedByUser)
 					break;
+				++s_absoluteScanIndex;
+			}
+
+			if (nprogress)
+			{
+				pdlg.stop();
+				QApplication::processEvents();
+				delete nprogress;
+				nprogress = 0;
+			}
+
+			//set global max intensity (saturation) for proper display
+			for (unsigned i=0; i<container.getChildrenNumber(); ++i)
+			{
+				if (container.getChild(i)->isA(CC_TYPES::POINT_CLOUD))
+				{
+					ccPointCloud* pc = static_cast<ccPointCloud*>(container.getChild(i));
+					ccScalarField* sf = pc->getCurrentDisplayedScalarField();
+					if (sf)
+					{
+						sf->setSaturationStart(s_minIntensity);
+						sf->setSaturationStop(s_maxIntensity);
+					}
 				}
 			}
 		}
-	}
 
-	imf.close();
+		parameters = s_loadParameters;
+
+		//Image data?
+		if (!s_cancelRequestedByUser && root.isDefined("/images2D"))
+		{
+			e57::Node n = root.get("/images2D"); //E57 standard: "images2D is a vector for storing two dimensional images"
+			if (n.type() != e57::E57_VECTOR)
+				return CC_FERR_MALFORMED_FILE;
+			e57::VectorNode images2D(n);
+
+			unsigned imageCount = static_cast<unsigned>(images2D.childCount());
+			if (imageCount)
+			{
+				//progress bar
+				ccProgressDialog pdlg(true);
+				CCLib::NormalizedProgress nprogress(&pdlg,imageCount);
+				pdlg.setMethodTitle("Read E57 file");
+				pdlg.setInfo(qPrintable(QString("Images: %1").arg(imageCount)));
+				pdlg.start();
+				QApplication::processEvents();
+
+				for (unsigned i=0; i<imageCount; ++i)
+				{
+					e57::Node imageNode = images2D.get(i);
+					QString associatedData3DGuid;
+					ccHObject* image = LoadImage(imageNode,associatedData3DGuid);
+					if (image)
+					{
+						//no name?
+						if (image->getName().isEmpty())
+						{
+							QString name("Image");
+							e57::ustring nodeName = imageNode.elementName();
+							if (nodeName.c_str() != 0 && nodeName.c_str()[0]!=0)
+								name += QString(nodeName.c_str());
+							else
+								name += QString::number(i);
+							image->setName(name);
+						}
+						image->setEnabled(false); //not displayed by default
+
+						//existing link to a loaded scan?
+						ccHObject* parentScan = 0;
+						if (!associatedData3DGuid.isEmpty())
+						{
+							if (scans.contains(associatedData3DGuid))
+								parentScan = scans.value(associatedData3DGuid);
+						}
+
+						if (parentScan)
+							parentScan->addChild(image);
+						else
+							container.addChild(image);
+					}
+
+					if (!nprogress.oneStep())
+					{
+						s_cancelRequestedByUser = true;
+						break;
+					}
+				}
+			}
+		}
+
+		imf.close();
+	}
+	catch(e57::E57Exception e)
+	{
+		ccLog::Warning(QString("[E57] LibE57 has thrown an exception: %1").arg(e57::E57Utilities().errorCodeToString(e.errorCode()).c_str()));
+		return CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+	}
+	catch(...)
+	{
+		ccLog::Warning("[E57] LibE57 has thrown an unknown exception!");
+		return CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+	}
 
 	return s_cancelRequestedByUser ? CC_FERR_CANCELED_BY_USER : CC_FERR_NO_ERROR;
 }

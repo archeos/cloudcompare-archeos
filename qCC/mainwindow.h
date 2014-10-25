@@ -116,7 +116,7 @@ public:
 		\param destWin destination window (0 = active one)
 	**/
 	virtual void addToDB(	const QStringList& filenames,
-							CC_FILE_TYPES fType = UNKNOWN_FILE,
+							QString fileFilter = QString(),
 							ccGLWindow* destWin = 0);
 
 	//inherited from ccMainAppInterface
@@ -132,6 +132,7 @@ public:
 	virtual ccHObject* dbRootObject();
 	inline virtual QMainWindow* getMainWindow() { return this; }
 	inline virtual const ccHObject::Container& getSelectedEntities() const { return m_selectedEntities; }
+	virtual ccUniqueIDGenerator::Shared getUniqueIDGenerator();
 	virtual ccColorScalesManager* getColorScalesManager();
 
 	//! Returns real 'dbRoot' object
@@ -180,21 +181,28 @@ public:
 	**/
 	void putObjectBackIntoDBTree(ccHObject* obj, const ccHObjectContext& context);
 
+	//! Shortcut: asks the user to select one cloud
+	/** \param defaultCloudEntity a cloud to select by default (optional)
+		\param inviteMessage invite message (default is something like 'Please select an entity:') (optional)
+		\return the selected cloud (or null if the user cancelled the operation)
+	**/
+	ccPointCloud* askUserToSelectACloud(ccHObject* defaultCloudEntity = 0, QString inviteMessage = QString());
+
 protected slots:
 
 	//! Creates a new 3D GL sub-window
 	ccGLWindow* new3DView();
 
 	//! Displays 'about' dialog
-	void about();
+	void doActionShawAboutDialog();
 	//! Displays 'help' dialog
-	void help();
+	void doActionShowHelpDialog();
 	//! Displays 'about plugins' dialog
-	void aboutPlugins();
+	void doActionShowAboutPluginsDialog();
 	//! Displays file open dialog
-	void loadFile();
+	void doActionLoadFile();
 	//! Displays file save dialog
-	void saveFile();
+	void doActionSaveFile();
 
 	//! Clones currently selected entities
 	void doActionClone();
@@ -224,6 +232,8 @@ protected slots:
 	virtual void toggleActiveWindowCustomLight();
 	virtual void toggleActiveWindowSunLight();
 	virtual void toggleActiveWindowViewerBasedPerspective();
+	virtual void toggleRotationAboutVertAxis();
+	virtual void doActionEnableBubbleViewMode();
 	virtual void setGlobalZoom();
 	virtual void zoomOnSelectedEntities();
 	virtual void setPivotAlwaysOn();
@@ -263,6 +273,7 @@ protected slots:
 	void echoPivotPointChanged(const CCVector3d&);
 	void echoPixelSizeChanged(float);
 
+	void toggleSelectedEntitiesActivation();
 	void toggleSelectedEntitiesVisibility();
 	void toggleSelectedEntitiesNormals();
 	void toggleSelectedEntitiesColors();
@@ -289,8 +300,7 @@ protected slots:
 	void doActionAddIdField();
 	void doActionSetSFAsCoord();
 
-	void doComputeApproximateDensity();
-	void doComputeAccurateDensity();
+	void doComputeDensity();
 	void doComputeCurvature();
 	void doActionSFGradient();
 	void doComputeRoughness();
@@ -335,6 +345,8 @@ protected slots:
 	void doActionComputeMeshLS();
 	void doActionComputeDistToBestFitQuadric3D();
 	void doActionMeasureMeshSurface();
+	void doActionMeasureMeshVolume();
+	void doActionFlagMeshVetices();
 	void doActionSmoothMeshLaplacian();
 	void doActionSubdivideMesh();
 	void doActionComputeCPS();
@@ -423,6 +435,12 @@ protected slots:
 	//! Batch export some pieces of info from a set of selected clouds
 	void doActionExportCloudsInfo();
 
+	//! Generates a matrix with the best (registration) RMS for all possible couple among the selected entities
+	void doActionComputeBestICPRmsMatrix();
+
+	//! Creates a cloud with the (bounding-box) centers of all selected entities
+	void doActionCreateCloudFromEntCenters();
+
 protected:
 
 	//! Normals conversion destinations
@@ -458,7 +476,6 @@ protected:
 	void closeEvent(QCloseEvent* event);
 	void moveEvent(QMoveEvent* event);
 	void resizeEvent(QResizeEvent* event);
-	//void keyPressEvent(QKeyEvent* event);
 
 	void loadPlugins();
 	bool dispatchPlugin(QObject* plugin);

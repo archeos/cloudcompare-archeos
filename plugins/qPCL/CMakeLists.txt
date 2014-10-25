@@ -13,70 +13,36 @@ option( INSTALL_QPCL_PLUGIN "Check to install qPCL plugin" OFF )
 
 if (INSTALL_QPCL_PLUGIN)
 
+#requires PCL
+find_package(PCL REQUIRED)
+
+#PCL bridge library
+add_subdirectory(PclUtils)
+
+#CloudCompare 'qPCLIO' I/O plugin (to load PCD files)
+add_subdirectory(PclIO)
+
 #CloudCompare 'PCL' bridge plugin
 project( QPCL_PLUGIN )
 
-add_subdirectory(PclUtils)
+#documentation
 add_subdirectory(doc)
 
-#include_directories(pcl)
-#include_directories(filters)
-#include_directories(filters/dialogs)
 include_directories( ${QPCL_PLUGIN_UTILS_LIB_SOURCE_DIR}/filters )
 include_directories( ${QPCL_PLUGIN_UTILS_LIB_BINARY_DIR} )
-include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/../) #the plugin dir
-
-
-
-#requires PCL
-find_package(PCL REQUIRED)
+include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/../ ) #the plugin dir
+include_directories( ${PCL_INCLUDE_DIRS} )
 
 include( ../CMakePluginTpl.cmake )
 
 target_link_libraries(${PROJECT_NAME} QPCL_PLUGIN_UTILS_LIB)
 
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
+link_directories( ${PCL_LIBRARY_DIRS} )
+add_definitions( ${PCL_DEFINITIONS} )
 
-
-#import PCL dlls (if any)
-if (WIN32 AND PCL_DIR)
-
-# first of all check if is setted as "${PCL_DIR}" or "${PCL_DIR}/cmake". Not sure way but it happen on my win7 system
-
-get_filename_component(last_dir ${PCL_DIR} NAME) # get the last line of ${PCL_DIR}
-if(last_dir STREQUAL "cmake")
-	get_filename_component(PCL_DIR ${PCL_DIR} PATH) #trim PCL_DIR path if needed
-endif()
-
-# now find pcl libs we need
-file( GLOB pcl_release_dlls ${PCL_DIR}/bin/*${PCL_RELEASE_SUFFIX}.dll  )
-file( GLOB pcl_debug_dlls ${PCL_DIR}/bin/*${PCL_DEBUG_SUFFIX}.dll  )
-	
-
-
-	#release DLLs
-	file( GLOB pcl_release_dlls ${PCL_DIR}/bin/*${PCL_RELEASE_SUFFIX}.dll  )
-	foreach( filename ${pcl_release_dlls} )
-		if( CMAKE_CONFIGURATION_TYPES )
-			install( FILES ${filename} DESTINATION ${CLOUDCOMPARE_DEST_FOLDER} )
-		else()
-			install( FILES ${filename} CONFIGURATIONS Release DESTINATION ${CLOUDCOMPARE_DEST_FOLDER} )
-			install( FILES ${filename} CONFIGURATIONS RelWithDebInfo DESTINATION ${CLOUDCOMPARE_DEST_FOLDER}_withDebInfo )
-		endif()
-	endforeach()
-
-	#debug DLLs
-	if( CMAKE_CONFIGURATION_TYPES )
-		file( GLOB pcl_debug_dlls ${PCL_DIR}/bin/*${PCL_DEBUG_SUFFIX}.dll  )
-		foreach( filename ${pcl_debug_dlls} )
-			install( FILES ${filename} CONFIGURATIONS Debug DESTINATION ${CLOUDCOMPARE_DEST_FOLDER}_debug )
-		endforeach()
-	endif()
-
-endif()
-
+#import PCL dlls (if any, WIN32 only)
+include( ExportPCLDlls.cmake )
+export_PCL_dlls( ${CLOUDCOMPARE_DEST_FOLDER} )
 
 endif()
 

@@ -20,16 +20,16 @@
 //Local
 #include "BundlerImportDlg.h"
 #include "BinFilter.h"
-#include "ccCoordinatesShiftManager.h"
 
 //qCC_db
 #include <ccLog.h>
-#include <ccCalibratedImage.h>
+#include <ccImage.h>
 #include <ccGenericPointCloud.h>
 #include <ccPointCloud.h>
 #include <ccProgressDialog.h>
 #include <ccGLMatrix.h>
 #include <ccHObjectCaster.h>
+#include <ccCameraSensor.h>
 //#define TEST_TEXTURED_BUNDLER_IMPORT
 #ifdef TEST_TEXTURED_BUNDLER_IMPORT
 #include <ccMaterialSet.h>
@@ -59,28 +59,39 @@ struct BundlerCamera
 {
 	//! Default constructor
 	BundlerCamera()
-		: f(0.0f)
-		, k1(0.0f)
-		, k2(0.0f)
+		: f_pix(0)
+		, k1(0)
+		, k2(0)
 		, trans()
 		, isValid(true)
 	{}
 
-	//! focal
-	float f;
+	//! focal (in pixels)
+	float f_pix;
 	//! First radial distortion coef.
 	float k1;
 	//! Second radial distortion coef.
 	float k2;
 	//! Rotation + translation
-	ccGLMatrix trans;
+	ccGLMatrixd trans;
 	//! Validity
 	bool isValid;
 };
 
-CC_FILE_ERROR BundlerFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+bool BundlerFilter::canLoadExtension(QString upperCaseExt) const
 {
-	return loadFileExtended(filename,container,true,coordinatesShiftEnabled,coordinatesShift);
+	return (upperCaseExt == "OUT");
+}
+
+bool BundlerFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	//no output yet
+	return false;
+}
+
+CC_FILE_ERROR BundlerFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
+{
+	return loadFileExtended(filename,container,parameters);
 }
 
 //ortho-rectified image related information
@@ -93,9 +104,7 @@ struct ORImageInfo
 
 CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 												ccHObject& container,
-												bool alwaysDisplayLoadDialog/*=true*/,
-												bool* coordinatesShiftEnabled/*=0*/,
-												CCVector3d* coordinatesShift/*=0*/,
+												LoadParameters& parameters,
 												const QString& _altKeypointsFilename/*=QString()*/,
 												bool _undistortImages/*=false*/,
 												bool _generateColoredDTM/*=false*/,
@@ -129,16 +138,16 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	QStringList list = currentLine.split(QRegExp("\\s+"),QString::SkipEmptyParts);
 	if (list.size() != 2)
 	{
-		ccLog::Error("[BundlerFilter::loadFile] Second line should be <num_cameras> <num_points>!");
+		ccLog::Error("[Bundler] Second line should be <num_cameras> <num_points>!");
 		return CC_FERR_MALFORMED_FILE;
 	}
 	unsigned camCount = list[0].toInt();
 	if (camCount == 0)
-		ccLog::Warning("[BundlerFilter::loadFile] No camera defined in Bundler file!");
+		ccLog::Warning("[Bundler] No camera defined in Bundler file!");
 
 	unsigned ptsCount = list[1].toInt();
 	if (ptsCount == 0)
-		ccLog::Warning("[BundlerFilter::loadFile] No keypoints defined in Bundler file!");
+		ccLog::Warning("[Bundler] No keypoints defined in Bundler file!");
 
 	//parameters
 	bool importKeypoints = false;
@@ -152,14 +161,16 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	unsigned coloredDTMVerticesCount = 1000000;
 	float scaleFactor = 1.0f;
 	bool keepImagesInMemory = false;
+	bool applyOptMatrix = false;
 	ccGLMatrix orthoOptMatrix;
-	bool applyOptMatrix;
+	orthoOptMatrix.toIdentity();
+	BundlerImportDlg::OrthoRectMethod orthoRectMethod = BundlerImportDlg::OPTIMIZED;
 
 	//default paths
 	QString imageListFilename = QFileInfo(f).dir().absoluteFilePath("list.txt");
 	QString altKeypointsFilename = QFileInfo(f).dir().absoluteFilePath("pmvs.ply");
 
-	if (alwaysDisplayLoadDialog)
+	if (parameters.alwaysDisplayLoadDialog)
 	{
 		//open dialog
 		BundlerImportDlg biDlg;
@@ -182,10 +193,11 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 		orthoRectifyImagesAsImages = biDlg.orthoRectifyImagesAsImages();
 		generateColoredDTM = biDlg.generateColoredDTM();
 		coloredDTMVerticesCount = biDlg.getDTMVerticesCount();
-		scaleFactor = (float)biDlg.getScaleFactor();
+		scaleFactor = static_cast<float>(biDlg.getScaleFactor());
 		keepImagesInMemory = biDlg.keepImagesInMemory();
 		imageListFilename = biDlg.getImageListFilename();
 		applyOptMatrix = biDlg.getOptionalTransfoMatrix(orthoOptMatrix);
+		orthoRectMethod = biDlg.getOrthorectificationMethod();
 	}
 	else
 	{
@@ -210,10 +222,10 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	std::vector<BundlerCamera> cameras;
 	ccPointCloud* keypointsCloud = 0;
 	ccHObject* altEntity = 0;
-	typedef std::pair<unsigned,ccCalibratedImage::KeyPoint> KeypointAndCamIndex;
+	typedef std::pair<unsigned,ccCameraSensor::KeyPoint> KeypointAndCamIndex;
 	std::vector<KeypointAndCamIndex> keypointsDescriptors;
 
-	//Read Bundler's 'out' file
+	//Read Bundler '.out' file
 	{
 		//progress dialog
 		ccProgressDialog pdlg(true); //cancel available
@@ -237,15 +249,15 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				if (tokens.size() < 3)
 					return CC_FERR_MALFORMED_FILE;
 				bool ok[3] = {true,true,true};
-				it->f = tokens[0].toFloat(ok);
+				it->f_pix = tokens[0].toFloat(ok);
 				it->k1 = tokens[1].toFloat(ok+1);
 				it->k2 = tokens[2].toFloat(ok+2);
 				if (!ok[0] ||!ok[1] || !ok[2])
 					return CC_FERR_MALFORMED_FILE;
 			}
 			//Rotation matrix
-			float* mat = (importImages ? it->trans.data() : 0);
-			float sum = 0;
+			double* mat = (importImages ? it->trans.data() : 0);
+			double sum = 0;
 			for (unsigned l=0; l<3; ++l)
 			{
 				currentLine = stream.readLine();
@@ -257,9 +269,9 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					if (tokens.size() < 3)
 						return CC_FERR_MALFORMED_FILE;
 					bool ok[3] = {true,true,true};
-					mat[l] = tokens[0].toFloat(ok);
-					mat[4+l] = tokens[1].toFloat(ok+1);
-					mat[8+l] = tokens[2].toFloat(ok+2);
+					mat[l] = tokens[0].toDouble(ok);
+					mat[4+l] = tokens[1].toDouble(ok+1);
+					mat[8+l] = tokens[2].toDouble(ok+2);
 					if (!ok[0] ||!ok[1] || !ok[2])
 						return CC_FERR_MALFORMED_FILE;
 					sum += fabs(mat[l]) + fabs(mat[4+l]) + fabs(mat[8+l]);
@@ -267,9 +279,10 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 			}
 			if (importImages && sum < ZERO_TOLERANCE)
 			{
-				ccLog::Warning("[BundlerFilter::loadFile] Camera #%i is invalid!",camIndex+1);
+				ccLog::Warning("[Bundler] Camera #%i is invalid!",camIndex+1);
 				it->isValid = false;
 			}
+
 			//Translation
 			currentLine = stream.readLine();
 			if (currentLine.isEmpty())
@@ -280,9 +293,9 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				if (tokens.size() < 3)
 					return CC_FERR_MALFORMED_FILE;
 				bool ok[3] = {true,true,true};
-				mat[12] = tokens[0].toFloat(ok);
-				mat[13] = tokens[1].toFloat(ok+1);
-				mat[14] = tokens[2].toFloat(ok+2);
+				mat[12] = tokens[0].toDouble(ok);
+				mat[13] = tokens[1].toDouble(ok+1);
+				mat[14] = tokens[2].toDouble(ok+2);
 				if (!ok[0] ||!ok[1] || !ok[2])
 					return CC_FERR_MALFORMED_FILE;
 			}
@@ -306,12 +319,25 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 			{
 				hasColors = keypointsCloud->reserveTheRGBTable();
 				if (!hasColors)
-					ccLog::Warning("[BundlerFilter::loadFile] Not enough memory to load colors!");
+					ccLog::Warning("[Bundler] Not enough memory to load colors!");
 				else
 					keypointsCloud->showColors(true);
 			}
-			if (orthoRectifyImages)
-				keypointsDescriptors.reserve(ptsCount*camCount/2); //at least!
+			
+			bool storeKeypoints = orthoRectifyImages/* && !useAltKeypoints*/;
+			//we'll check if all cameras are used or not!
+			std::vector<bool> camUsage;
+			//if (!useAltKeypoints)
+			{
+				try
+				{
+					camUsage.resize(cameras.size(),false);
+				}
+				catch(std::bad_alloc)
+				{
+					//nothing serious here
+				}
+			}
 
 			CCVector3d Pshift(0,0,0);
 			for (unsigned i=0; i<ptsCount; ++i)
@@ -350,22 +376,18 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				//first point: check for 'big' coordinates
 				if (i == 0)
 				{
-					bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
-					if (shiftAlreadyEnabled)
-						Pshift = *coordinatesShift;
-					bool applyAll = false;
-					if (	sizeof(PointCoordinateType) < 8
-						&&	ccCoordinatesShiftManager::Handle(Pd,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll) )
+					if (HandleGlobalShift(Pd,Pshift,parameters))
 					{
 						keypointsCloud->setGlobalShift(Pshift);
-						ccLog::Warning("[BundlerFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
-
-						//we save coordinates shift information
-						if (applyAll && coordinatesShiftEnabled && coordinatesShift)
+						//we must apply the shift to the cameras as well!!!
+						for (size_t j=0; j<cameras.size(); ++j)
 						{
-							*coordinatesShiftEnabled = true;
-							*coordinatesShift = Pshift;
+							ccGLMatrixd& trans = cameras[j].trans;
+							trans.invert();
+							trans.setTranslation(trans.getTranslationAsVec3D() + Pshift);
+							trans.invert();
 						}
+						ccLog::Warning("[Bundler] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
 					}
 				}
 				keypointsCloud->addPoint(CCVector3::fromArray((Pd+Pshift).u));
@@ -402,7 +424,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				{
 					//sometimes, it appears that keypoints has no associated color!
 					//so we skip the line and assume it's in fact the keypoint description...
-					ccLog::Warning("[BundlerFilter::loadFile] Keypoint #%i has no associated color!",i);
+					ccLog::Warning("[Bundler] Keypoint #%i has no associated color!",i);
 					if (hasColors)
 						keypointsCloud->addRGBColor(0,0,0); //black by default
 				}
@@ -419,7 +441,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					return CC_FERR_READING;
 				}
 
-				if (orthoRectifyImages && !useAltKeypoints)
+				if (storeKeypoints || !camUsage.empty())
 				{
 					QStringList parts = currentLine.split(" ",QString::SkipEmptyParts);
 					if (!parts.isEmpty())
@@ -428,7 +450,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 						unsigned nviews = parts[0].toInt(&ok);
 						if (!ok || nviews*4+1 > static_cast<unsigned>(parts.size()))
 						{
-							ccLog::Warning("[BundlerFilter::loadFile] View list for point #%i is invalid!",i);
+							ccLog::Warning("[Bundler] View list for point #%i is invalid!",i);
 						}
 						else
 						{
@@ -436,19 +458,37 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 							for (unsigned n=0; n<nviews; ++n)
 							{
 								int cam = parts[pos++].toInt();			//camera index
-								//int key = parts[pos++].toInt();	//index of the SIFT keypoint where the point was detected in that camera
-								++pos;
-								float x = parts[pos++].toFloat();		//detected positions of that keypoint (x)
-								float y = parts[pos++].toFloat();		//detected positions of that keypoint (y)
-								if (cam >= 0 && static_cast<unsigned>(cam) < camCount)
+								++pos; //int key = parts[pos++].toInt();		//index of the SIFT keypoint where the point was detected in that camera (not used)
+								if (cam < 0 || static_cast<unsigned>(cam) >= camCount)
 								{
+									pos += 2;
+									continue;
+								}
+								if (!camUsage.empty())
+								{
+									camUsage[cam] = true;
+								}
+								if (storeKeypoints)
+								{
+									float x = parts[pos++].toFloat();		//detected positions of that keypoint (x)
+									float y = parts[pos++].toFloat();		//detected positions of that keypoint (y)
 									//add key point
 									KeypointAndCamIndex lastKeyPoint;
 									lastKeyPoint.first = static_cast<unsigned>(cam);
 									lastKeyPoint.second.index = i;
-									lastKeyPoint.second.x = x*scaleFactor;	//the origin is the center of the image, the x-axis increases to the right
+									lastKeyPoint.second.x =  x*scaleFactor;	//the origin is the center of the image, the x-axis increases to the right
 									lastKeyPoint.second.y = -y*scaleFactor;	//and the y-axis increases towards the top of the image
-									keypointsDescriptors.push_back(lastKeyPoint);
+									try
+									{
+										keypointsDescriptors.push_back(lastKeyPoint);
+									}
+									catch(std::bad_alloc)
+									{
+										ccLog::Warning("[Bundler] Not enough memory to store keypoints!");
+										keypointsDescriptors.clear();
+										orthoRectifyImages = false;
+										storeKeypoints = false;
+									}
 								}
 							}
 						}
@@ -462,11 +502,20 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				}
 			}
 
+			if (!camUsage.empty())
+			{
+				for (size_t i=0; i<camUsage.size(); ++i)
+				{
+					if (!camUsage[i])
+						ccLog::Warning(QString("[Bundler] Camera #%1 has no associated keypoints!").arg(i+1));
+				}
+			}
+
 			//apply optional matrix (if any)
 			if (applyOptMatrix)
 			{
 				keypointsCloud->applyGLTransformation_recursive(&orthoOptMatrix);
-				ccLog::Print("[BundlerFilter::loadFile] Keypoints cloud has been transformed with input matrix!");
+				ccLog::Print("[Bundler] Keypoints cloud has been transformed with input matrix!");
 			}
 
 			if (importKeypoints)
@@ -480,15 +529,16 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	//use alternative cloud/mesh as keypoints
 	if (useAltKeypoints)
 	{
-		ccHObject* altKeypointsContainer = FileIOFilter::LoadFromFile(altKeypointsFilename);
+		FileIOFilter::LoadParameters altKeypointsParams;
+		ccHObject* altKeypointsContainer = FileIOFilter::LoadFromFile(altKeypointsFilename,altKeypointsParams);
 		if (	!altKeypointsContainer
 			||	altKeypointsContainer->getChildrenNumber() != 1
 			||	(!altKeypointsContainer->getChild(0)->isKindOf(CC_TYPES::POINT_CLOUD) && !altKeypointsContainer->getChild(0)->isKindOf(CC_TYPES::MESH)))
 		{
 			if (!altKeypointsContainer)
-				ccLog::Error(QString("[BundlerFilter::loadFile] Failed to load alternative keypoints file:\n'%1'").arg(altKeypointsFilename));
+				ccLog::Error(QString("[Bundler] Failed to load alternative keypoints file:\n'%1'").arg(altKeypointsFilename));
 			else
-				ccLog::Error("[BundlerFilter::loadFile] Can't use this kind of entities as keypoints (need one and only one cloud or mesh)");
+				ccLog::Error("[Bundler] Can't use this kind of entities as keypoints (need one and only one cloud or mesh)");
 
 			return CC_FERR_WRONG_FILE_TYPE;
 		}
@@ -515,7 +565,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 		QFile imageListFile(imageListFilename);
 		if (!imageListFile.exists() || !imageListFile.open(QIODevice::ReadOnly))
 		{
-			ccLog::Error(QString("[BundlerFilter::loadFile] Failed to open image list file! (%1)").arg(imageListFilename));
+			ccLog::Error(QString("[Bundler] Failed to open image list file! (%1)").arg(imageListFilename));
 			if (!importKeypoints && keypointsCloud)
 				delete keypointsCloud;
 			if (!importKeypoints && altEntity)
@@ -538,7 +588,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				imageFilenames << parts[0];
 			else
 			{
-				ccLog::Error(QString("[BundlerFilter::loadFile] Couldn't extract image name from line %1 in file '%2'!").arg(lineIndex).arg(imageListFilename));
+				ccLog::Error(QString("[Bundler] Couldn't extract image name from line %1 in file '%2'!").arg(lineIndex).arg(imageListFilename));
 				break;
 			}
 		}
@@ -547,9 +597,9 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	if (imageFilenames.size() < static_cast<int>(camCount)) //not enough images!
 	{
 		if (imageFilenames.isEmpty())
-			ccLog::Error(QString("[BundlerFilter::loadFile] No filename could be extracted from file '%1'!").arg(imageListFilename));
+			ccLog::Error(QString("[Bundler] No filename could be extracted from file '%1'!").arg(imageListFilename));
 		else
-			ccLog::Error(QString("[BundlerFilter::loadFile] Only %1 filenames (out of %2) could be extracted\nfrom file '%3'!").arg(imageFilenames.size()).arg(camCount).arg(imageListFilename));
+			ccLog::Error(QString("[Bundler] Only %1 filenames (out of %2) could be extracted\nfrom file '%3'!").arg(imageFilenames.size()).arg(camCount).arg(imageListFilename));
 		if (!importKeypoints && keypointsCloud)
 			delete keypointsCloud;
 		if (!importKeypoints && altEntity)
@@ -589,7 +639,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 			dummyMesh = CCLib::PointProjectionTools::computeTriangulation(altKeypoints ? altKeypoints : keypointsCloud,GENERIC_BEST_LS_PLANE);
 			if (!dummyMesh)
 			{
-				ccLog::Warning("[BundlerFilter::loadFile] Failed to generate DTM! (not enough memory?)");
+				ccLog::Warning("[Bundler] Failed to generate DTM! (not enough memory?)");
 			}
 		}
 		else
@@ -647,36 +697,84 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 		if (!cam.isValid)
 			continue;
 
-		ccCalibratedImage* image = new ccCalibratedImage();
+		ccImage* image = new ccImage();
 		QString errorStr;
 		if (!image->load(imageDir.absoluteFilePath(imageFilenames[i]),errorStr))
 		{
-			ccLog::Error(QString("[BundlerFilter::loadFile] %1 (image '%2')").arg(errorStr).arg(imageFilenames[i]));
+			ccLog::Error(QString("[Bundler] %1 (image '%2')").arg(errorStr).arg(imageFilenames[i]));
 			delete image;
 			image = 0;
 			break;
 		}
 
 		image->setName(imageFilenames[i]);
+		image->setEnabled(false);
+		image->setAlpha(0.75f); //semi transparent by default
 
 		//associate image with calibration information
-		image->setFocal(cameras[i].f * scaleFactor);
-		image->setDistortionCoefficients(cameras[i].k1,cameras[i].k2);
-		image->setCameraMatrix(cameras[i].trans);
-		image->setEnabled(false);
+		ccCameraSensor* sensor = 0;
+		{
+			ccCameraSensor::IntrinsicParameters params;
+			params.arrayWidth = static_cast<int>(image->getW());
+			params.arrayHeight = static_cast<int>(image->getH());
+			//we use an arbitray 'pixel size'
+			params.pixelSize_mm[0] = params.pixelSize_mm[1] = 1.0f / std::max(params.arrayWidth,params.arrayHeight);
+			params.focal_pix = cam.f_pix * scaleFactor;
+			params.vFOV_rad = ccCameraSensor::ComputeFovRadFromFocalPix(cam.f_pix,params.arrayHeight);
+
+			//camera position/orientation
+			ccGLMatrix transf(cameras[i].trans.inverse().data());
+			
+			//dist to cloud
+			PointCoordinateType dist = (transf.getTranslationAsVec3D() - keypointsCloud->getBBCenter()).norm();
+			params.zFar_mm = dist;
+			params.zNear_mm = 0.001f;
+
+			sensor = new ccCameraSensor(params);
+			sensor->setName(QString("Camera #%1").arg(i+1));
+			sensor->setEnabled(true);
+			sensor->setVisible(true/*false*/);
+			sensor->setGraphicScale(keypointsCloud->getBB().getDiagNorm() / 10);
+			sensor->setRigidTransformation(transf);
+
+			//distortion parameters
+			if (cameras[i].k1 != 0 || cameras[i].k2 != 0)
+			{
+				ccCameraSensor::RadialDistortionParameters* distParams = new ccCameraSensor::RadialDistortionParameters;
+				distParams->k1 = cameras[i].k1;
+				distParams->k2 = cameras[i].k2;
+				sensor->setDistortionParameters(ccCameraSensor::LensDistortionParameters::Shared(distParams));
+			}
+
+			//apply optional matrix (if any)
+			if (applyOptMatrix)
+			{
+				sensor->applyGLTransformation_recursive(&orthoOptMatrix);
+				//ccLog::Print("[Bundler] Camera cloud has been transformed with input matrix!");
+			}
+		}
+		//the image is a child of the sensor!
+		image->setAssociatedSensor(sensor);
+		sensor->addChild(image);
 
 		//ortho-rectification
 		if (orthoRectifyImages)
 		{
-			assert(_keypointsCloud);
+			assert(sensor && _keypointsCloud);
 
 			//select image keypoints
-			std::vector<ccCalibratedImage::KeyPoint> keypointsImage;
+			std::vector<ccCameraSensor::KeyPoint> keypointsImage;
+			ccBBox keypointsImageBB;
 			if (_keypointsCloud == keypointsCloud) //keypoints from Bundler file
 			{
 				for (std::vector<KeypointAndCamIndex>::const_iterator key = keypointsDescriptors.begin(); key != keypointsDescriptors.end(); ++key)
+				{
 					if (key->first == i)
+					{
 						keypointsImage.push_back(key->second);
+						keypointsImageBB.add(CCVector3(key->second.x,key->second.y,0));
+					}
+				}
 			}
 			else
 			{
@@ -684,7 +782,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				_keypointsCloud->placeIteratorAtBegining();
 				int half_w = (image->getW()>>1);
 				int half_h = (image->getH()>>1);
-				ccCalibratedImage::KeyPoint kp;
+				ccCameraSensor::KeyPoint kp;
 				unsigned keyptsCount = _keypointsCloud->size();
 				for (unsigned k=0; k<keyptsCount; ++k)
 				{
@@ -692,20 +790,25 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					//apply bundler equation
 					cam.trans.apply(P);
 					//convert to keypoint
-					kp.x = -cam.f * static_cast<float>(P.x/P.z);
-					kp.y =  cam.f * static_cast<float>(P.y/P.z);
+					kp.x = -cam.f_pix * static_cast<float>(P.x/P.z);
+					kp.y =  cam.f_pix * static_cast<float>(P.y/P.z);
 					if (	static_cast<int>(kp.x) > -half_w && static_cast<int>(kp.x < half_w)
 						&&	static_cast<int>(kp.y) > -half_h && static_cast<int>(kp.y < half_h))
 					{
 						kp.index = k;
 						keypointsImage.push_back(kp);
+						keypointsImageBB.add(CCVector3(kp.x,kp.y,0));
 					}
 				}
 			}
 
-			if (keypointsImage.size()<4)
+			if (keypointsImage.size() < 4)
 			{
-				ccLog::Warning(QString("[BundlerFilter::loadFile] Not enough keypoints descriptors for image '%1'!").arg(image->getName()));
+				ccLog::Warning(QString("[Bundler] Not enough keypoints descriptors for image '%1'!").arg(image->getName()));
+			}
+			else if (!keypointsImageBB.isValid() || keypointsImageBB.getDiagNorm() < PC_ONE)
+			{
+				ccLog::Warning(QString("[Bundler] Keypoints descriptors for image '%1' are invalid (= all the same)").arg(image->getName()));
 			}
 			else
 			{
@@ -714,12 +817,39 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					//for ortho-rectification log
 					ORImageInfo info;
 					double corners[8];
-					ccImage* orthoImage = image->orthoRectifyAsImage(_keypointsCloud,
-																		keypointsImage,
+					ccImage* orthoImage = 0;
+					
+					//"standard" ortho-rectification method
+					if (orthoRectMethod == BundlerImportDlg::OPTIMIZED)
+					{
+						orthoImage = sensor->orthoRectifyAsImage(	image,
+																	_keypointsCloud,
+																	keypointsImage,
+																	OR_pixelSize,
+																	info.minC,
+																	info.maxC,
+																	corners);
+					}
+					//"direct" ortho-rectification method
+					else
+					{
+						assert(	orthoRectMethod == BundlerImportDlg::DIRECT
+							||	orthoRectMethod == BundlerImportDlg::DIRECT_UNDISTORTED );
+
+						//we take the keypoints 'middle altitude' by default
+						CCVector3 bbMin,bbMax;
+						_keypointsCloud->getBoundingBox(bbMin.u,bbMax.u);
+						PointCoordinateType Z0 = (bbMin.z + bbMax.z)/2;
+
+						orthoImage = sensor->orthoRectifyAsImageDirect(	image,
+																		Z0,
 																		OR_pixelSize,
+																		orthoRectMethod == BundlerImportDlg::DIRECT_UNDISTORTED,
 																		info.minC,
 																		info.maxC,
 																		corners);
+					}
+
 					if (orthoImage)
 					{
 						assert(!orthoImage->data().isNull());
@@ -727,7 +857,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 						info.w = orthoImage->getW();
 						info.h = orthoImage->getH();
 						orthoImage->data().save(imageDir.absoluteFilePath(info.name));
-						ccLog::Print(QString("[BundlerFilter] Ortho-rectified version of image '%1' saved to '%2'").arg(imageFilenames[i]).arg(imageDir.absoluteFilePath(info.name)));
+						ccLog::Print(QString("[Bundler] Ortho-rectified version of image '%1' (%2 x %3) saved to '%4'").arg(imageFilenames[i]).arg(info.w).arg(info.h).arg(imageDir.absoluteFilePath(info.name)));
 
 #ifdef TEST_TEXTURED_BUNDLER_IMPORT
 
@@ -735,10 +865,10 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 						#define TBI_DEFAULT_TILE_POW 10 // 2^10 = 1024
 						const unsigned tileDim = (1<<TBI_DEFAULT_TILE_POW);
 						unsigned horiTile = (info.w >> TBI_DEFAULT_TILE_POW);
-						if (info.w-horiTile*tileDim!=0)
+						if (info.w-horiTile*tileDim != 0)
 							++horiTile;
 						unsigned vertTile = (info.h >> TBI_DEFAULT_TILE_POW);
-						if (info.h-vertTile*tileDim!=0)
+						if (info.h-vertTile*tileDim != 0)
 							++vertTile;
 						unsigned tiles = horiTile*vertTile;
 						unsigned verts = (horiTile+1)*(vertTile+1);
@@ -764,10 +894,10 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 							//float maxu = 1.0-1.0f/(float)(2*tileDim);
 							float minu = 0.0f;
 							float maxu = 1.0f;
-							float TA[2]={minu,minu};
-							float TB[2]={maxu,minu};
-							float TC[2]={maxu,maxu};
-							float TD[2]={minu,maxu};
+							float TA[2] = {minu,minu};
+							float TB[2] = {maxu,minu};
+							float TC[2] = {maxu,maxu};
+							float TD[2] = {minu,maxu};
 							texCoords->addElement(TA);
 							texCoords->addElement(TB);
 							texCoords->addElement(TC);
@@ -786,11 +916,11 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 						for (unsigned ti=0; ti<=horiTile; ++ti)
 						{
 							unsigned x = std::min(ti*tileDim,info.w);
-							double xRel = (double)x/(double)info.w;
+							double xRel = static_cast<double>(x)/info.w;
 							for (unsigned tj=0; tj<=vertTile; ++tj)
 							{
 								unsigned y = std::min(tj*tileDim,info.h);
-								double yRel = (double)y/(double)info.h;
+								double yRel = static_cast<double>(y)/info.h;
 
 								//add vertices
 								CCVector3 P(info.minC[0]+dcx*xRel,
@@ -802,7 +932,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 								//float T0[2]={xRel,1.0-yRel};
 								//texCoords->addElement(T0);
 
-								if (ti<horiTile && tj<vertTile)
+								if (ti < horiTile && tj < vertTile)
 								{
 									unsigned w = std::min(info.w-x,tileDim);
 									unsigned h = std::min(info.h-y,tileDim);
@@ -841,7 +971,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 #endif
 
 						delete orthoImage;
-						orthoImage=0;
+						orthoImage = 0;
 
 						OR_infos.push_back(info);
 
@@ -857,13 +987,13 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					}
 					else
 					{
-						ccLog::Warning(QString("[BundlerFilter::loadFile] Failed to ortho-rectify image '%1'!").arg(image->getName()));
+						ccLog::Warning(QString("[Bundler] Failed to ortho-rectify image '%1'!").arg(image->getName()));
 					}
 				}
 
 				if (orthoRectifyImagesAsClouds)
 				{
-					ccPointCloud* orthoCloud = image->orthoRectifyAsCloud(_keypointsCloud,keypointsImage);
+					ccPointCloud* orthoCloud = sensor->orthoRectifyAsCloud(image,_keypointsCloud,keypointsImage);
 					if (orthoCloud)
 					{
 						orthoCloud->setGlobalScale(_keypointsCloud->getGlobalScale());
@@ -872,23 +1002,25 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					}
 					else
 					{
-						ccLog::Warning(QString("[BundlerFilter::loadFile] Failed to ortho-rectify image '%1' as a cloud!").arg(image->getName()));
+						ccLog::Warning(QString("[Bundler] Failed to ortho-rectify image '%1' as a cloud!").arg(image->getName()));
 					}
 				}
 			}
 		}
 
 		//undistortion
-		if (undistortImages)
-			if (!image->undistort())
-				ccLog::Warning(QString("[BundlerFilter::loadFile] Failed to undistort image '%1'!").arg(image->getName()));
+		if (sensor && undistortImages)
+			if (!sensor->undistort(image,true))
+				ccLog::Warning(QString("[Bundler] Failed to undistort image '%1'!").arg(image->getName()));
 
 		//DTM color 'blending'
-		if (generateColoredDTM)
+		if (sensor && generateColoredDTM)
 		{
 			assert(mntSamples && mntColors);
 			unsigned sampleCount = mntSamples->size();
 			const QRgb blackValue = QColor( Qt::black ).rgb();
+
+			ccGLMatrix sensorMatrix = sensor->getRigidTransformation().inverse();
 
 			//back project each MNT samples in this image to get color
 			for (unsigned k=0; k<sampleCount; ++k)
@@ -896,14 +1028,14 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				CCVector3 P = *mntSamples->getPointPersistentPtr(k);
 
 				//apply bundler equation
-				image->getCameraMatrix().apply(P);
+				sensorMatrix.apply(P);
 				if (fabs(P.z) > ZERO_TOLERANCE)
 				{
 					CCVector3 p(-P.x/P.z,-P.y/P.z,0.0);
 					//float norm_p2 = p.norm2();
 					//float rp = 1.0+norm_p2*(cam.k1+cam.k2*norm_p2); //images are already undistorted
 					float rp = 1.0f;
-					CCVector3 pprime = image->getFocal() * rp * p;
+					CCVector3 pprime = cam.f_pix * rp * p;
 
 					int px = static_cast<int>(0.5f*static_cast<float>(image->getW()) + pprime.x);
 					if (px >=0 && px < static_cast<int>(image->getW()))
@@ -928,12 +1060,12 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 
 		if (keepImagesInMemory)
 		{
-			container.addChild(image);
+			container.addChild(sensor);
 		}
 		else
 		{
-			delete image;
-			image = 0;
+			delete sensor;
+			sensor = 0;
 		}
 
 		QApplication::processEvents();
@@ -969,7 +1101,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 			int globalHeight = static_cast<int>((OR_globalCorners[3]-OR_globalCorners[1])/OR_pixelSize);
 			stream << "Global2DBBox" << ' ' << 0 << ' ' << 0 << ' ' << globalWidth-1 << ' ' << globalHeight-1 << endl;
 
-			for (unsigned i=0;i<OR_infos.size();++i)
+			for (unsigned i=0; i<OR_infos.size(); ++i)
 			{
 				stream << "Image" << ' ' << OR_infos[i].name << ' ';
 				stream << "Local3DBBox" << ' ' << OR_infos[i].minC[0] << ' ' << OR_infos[i].minC[1] << ' ' << OR_infos[i].maxC[0] << ' ' << OR_infos[i].maxC[1] << ' ';
@@ -1001,7 +1133,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				const int* col = mntColors;
 				for (unsigned i=0; i<sampleCount; ++i,col+=4)
 				{
-					if (col[3]>0) //accum
+					if (col[3] > 0) //accum
 					{
 						const CCVector3* X = mntSamples->getPointPersistentPtr(i);
 						colorType avgCol[3]= {	static_cast<colorType>(col[0]/col[3]),
@@ -1013,34 +1145,34 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					}
 				}
 
-				if (realCount!=0)
+				if (realCount != 0)
 				{
-					if (realCount  <sampleCount)
+					if (realCount < sampleCount)
 						mntCloud->resize(realCount);
 
 					mntCloud->showColors(true);
 					container.addChild(mntCloud);
-					ccLog::Warning("[BundlerFilter::loadFile] DTM vertices sucessfully generated: clean it if necessary then use 'Edit > Mesh > Compute Delaunay 2D (Best LS plane)' then 'Smooth' to get a proper mesh");
+					ccLog::Warning("[Bundler] DTM vertices sucessfully generated: clean it if necessary then use 'Edit > Mesh > Compute Delaunay 2D (Best LS plane)' then 'Smooth' to get a proper mesh");
 
-					if (!alwaysDisplayLoadDialog)
+					if (!parameters.alwaysDisplayLoadDialog)
 					{
 						//auto save DTM vertices
 						BinFilter bf;
 						QString outputFile = imageDir.absoluteFilePath("colored_dtm_vertices.bin");
 						if (bf.saveToFile(mntCloud,outputFile) == CC_FERR_NO_ERROR)
-							ccLog::Print(QString("[BundlerFilter] Color DTM vertices automatically saved to '%2'").arg(outputFile));
+							ccLog::Print(QString("[Bundler] Color DTM vertices automatically saved to '%2'").arg(outputFile));
 						else
-							ccLog::Warning(QString("[BundlerFilter] Failed to save DTM vertices to '%2'").arg(outputFile));
+							ccLog::Warning(QString("[Bundler] Failed to save DTM vertices to '%2'").arg(outputFile));
 					}
 				}
 				else
 				{
-					ccLog::Warning("[BundlerFilter::loadFile] Failed to generate DTM! (no point viewed in images?)");
+					ccLog::Warning("[Bundler] Failed to generate DTM! (no point viewed in images?)");
 				}
 			}
 			else
 			{
-				ccLog::Warning("[BundlerFilter::loadFile] Failed to generate DTM vertices cloud! (not enough memory?)");
+				ccLog::Warning("[Bundler] Failed to generate DTM vertices cloud! (not enough memory?)");
 				delete mntCloud;
 				mntCloud = 0;
 			}

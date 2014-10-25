@@ -50,6 +50,7 @@
 //system
 #include <assert.h>
 #include <algorithm>
+#include <string.h>
 
 //Minimum width of the left column of the properties tree view
 static const int c_propViewLeftColumnWidth = 115;
@@ -448,7 +449,9 @@ QVariant ccDBRoot::data(const QModelIndex &index, int role) const
 			return QIcon(QString::fromUtf8(":/CC/images/dbImageSymbol.png"));
 		case CC_TYPES::SENSOR:
 		case CC_TYPES::GBL_SENSOR:
-			return QIcon(QString::fromUtf8(":/CC/images/dbSensorSymbol.png"));
+			return QIcon(QString::fromUtf8(":/CC/images/dbGBLSensorSymbol.png"));
+		case CC_TYPES::CAMERA_SENSOR:
+			return QIcon(QString::fromUtf8(":/CC/images/dbCamSensorSymbol.png"));
 		case CC_TYPES::MATERIAL_SET:
 			return QIcon(QString::fromUtf8(":/CC/images/dbMaterialSymbol.png"));
 		case CC_TYPES::NORMALS_ARRAY:
@@ -1194,7 +1197,7 @@ void ccDBRoot::collapseBranch()
 void ccDBRoot::expandOrCollapseHoveredBranch(bool expand)
 {
 	//not initialized?
-	if (m_contextMenuPos.x()<0 || m_contextMenuPos.y()<0)
+	if (m_contextMenuPos.x() < 0 || m_contextMenuPos.y() < 0)
 		return;
 
 	QModelIndex clickIndex = m_dbTreeWidget->indexAt(m_contextMenuPos);
@@ -1203,7 +1206,7 @@ void ccDBRoot::expandOrCollapseHoveredBranch(bool expand)
 	ccHObject* item = static_cast<ccHObject*>(clickIndex.internalPointer());
 	assert(item);
 
-	if (!item || item->getChildrenNumber()==0)
+	if (!item || item->getChildrenNumber() == 0)
 		return;
 	
 	//we recursively expand sub-branches
@@ -1223,10 +1226,10 @@ void ccDBRoot::expandOrCollapseHoveredBranch(bool expand)
 				m_dbTreeWidget->collapse(itemIndex);
 		}
 
-		assert(item->getChildrenNumber()>0);
-		for (unsigned i=0;i<item->getChildrenNumber();++i)
+		assert(item->getChildrenNumber() > 0);
+		for (unsigned i=0; i<item->getChildrenNumber(); ++i)
 		{
-			if (item->getChild(i)->getChildrenNumber()>0)
+			if (item->getChild(i)->getChildrenNumber() > 0)
 				toExpand.push_back(item->getChild(i));
 		}
 	}
@@ -1494,7 +1497,7 @@ void ccDBRoot::sortSelectedEntitiesSiblings(SortRules sortRule)
 	{
 		ccHObject* item = static_cast<ccHObject*>(selectedIndexes[i].internalPointer());
 		unsigned childCount = (item ? item->getChildrenNumber() : 0);
-		if (childCount>1)
+		if (childCount > 1)
 		{
 			//remove all children from DB tree
 			beginRemoveRows(selectedIndexes[i],0,childCount-1);
@@ -1503,23 +1506,23 @@ void ccDBRoot::sortSelectedEntitiesSiblings(SortRules sortRule)
 			endRemoveRows();
 
 			//sort
-			for (unsigned k=0;k<childCount-1;++k)
+			for (unsigned k=0; k<childCount-1; ++k)
 			{
 				unsigned firstChildIndex = k;
 				ccHObject* firstChild = item->getChild(k);
 				QString firstChildName = firstChild->getName().toUpper();
 
-				for (unsigned j=k+1;j<childCount;++j)
+				for (unsigned j=k+1; j<childCount; ++j)
 				{
 					bool swap = false;
 					QString currentName = item->getChild(j)->getName().toUpper();
 					switch(sortRule)
 					{
 					case SORT_A2Z:
-						swap = (firstChildName.compare(currentName)>0);
+						swap = (firstChildName.compare(currentName) > 0);
 						break;
 					case SORT_Z2A:
-						swap = (firstChildName.compare(currentName)<0);
+						swap = (firstChildName.compare(currentName) < 0);
 						break;
 					case SORT_BY_TYPE:
 						if (firstChild->getClassID() == item->getChild(j)->getClassID())
@@ -1536,7 +1539,7 @@ void ccDBRoot::sortSelectedEntitiesSiblings(SortRules sortRule)
 					}
 				}
 
-				if (k!=firstChildIndex)
+				if (k != firstChildIndex)
 					item->swapChildren(k,firstChildIndex);
 			}
 
@@ -1645,7 +1648,7 @@ void ccDBRoot::toggleSelectedEntitiesProperty(unsigned prop)
 void ccDBRoot::addEmptyGroup()
 {
 	//not initialized?
-	if (m_contextMenuPos.x()<0 || m_contextMenuPos.y()<0)
+	if (m_contextMenuPos.x() < 0 || m_contextMenuPos.y() < 0)
 		return;
 
 	QModelIndex index = m_dbTreeWidget->indexAt(m_contextMenuPos);
@@ -1788,4 +1791,3 @@ QItemSelectionModel::SelectionFlags ccCustomQTreeView::selectionCommand(const QM
 
 	return QTreeView::selectionCommand(index,event);
 }
-

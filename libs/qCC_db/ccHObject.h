@@ -37,6 +37,8 @@ public:
 	/** \param name object name (optional)
 	**/
 	ccHObject(QString name = QString());
+	//! Copy constructor
+	ccHObject(const ccHObject& object);
 
 	//! Default destructor
 	virtual ~ccHObject();
@@ -100,7 +102,7 @@ public:
 	//! Removes any dependency flags with a given object
 	/** \param otherObject other object
 	**/
-	void removeDependencyWith(const ccHObject* otherObject);
+	void removeDependencyWith(ccHObject* otherObject);
 
 	//! Removes a given dependency flag
 	/** \param otherObject other object
@@ -136,7 +138,7 @@ public:
 	/** \param uniqueID child unique ID
 		\return child (or NULL if not found)
 	**/
-	ccHObject* find(int uniqueID);
+	ccHObject* find(unsigned uniqueID);
 
 	//! standard ccHObject container (for children, etc.)
 	typedef std::vector<ccHObject*> Container;
@@ -145,9 +147,13 @@ public:
 	/** \param filteredChildren result container
 		\param recursive specifies if the search should be recursive
 		\param filter pattern for children selection
+		\param strict whether the search is strict on the type (i.e 'isA') or not (i.e. 'isKindOf')
 		\return number of collected children
 	**/
-	unsigned filterChildren(Container& filteredChildren, bool recursive = false, CC_CLASS_ENUM filter = CC_TYPES::OBJECT) const;
+	unsigned filterChildren(Container& filteredChildren,
+							bool recursive = false,
+							CC_CLASS_ENUM filter = CC_TYPES::OBJECT,
+							bool strict = false) const;
 
 	//! Detaches a specific child
 	/** This method does not delete the child.
@@ -229,12 +235,17 @@ public:
 	ccHObject_recursive_call1(removeFromDisplay,ccGenericGLDisplay*,removeFromDisplay_recursive);
 	ccHObject_recursive_call0(prepareDisplayForRefresh,prepareDisplayForRefresh_recursive);
 	ccHObject_recursive_call0(refreshDisplay,refreshDisplay_recursive);
+	ccHObject_recursive_call0(resetGLTransformationHistory,resetGLTransformationHistory_recursive);
+	ccHObject_recursive_call0(toggleActivation,toggleActivation_recursive);
 	ccHObject_recursive_call0(toggleVisibility,toggleVisibility_recursive);
 	ccHObject_recursive_call0(toggleColors,toggleColors_recursive);
 	ccHObject_recursive_call0(toggleNormals,toggleNormals_recursive);
 	ccHObject_recursive_call0(toggleSF,toggleSF_recursive);
 	ccHObject_recursive_call0(toggleShowName,toggleShowName_recursive);
 	ccHObject_recursive_call0(toggleMaterials,toggleMaterials_recursive);
+
+	//! Returns the max 'unique ID' of this entity and its siblings
+	unsigned findMaxUniqueID_recursive() const;
 
 	//! Applies the active OpenGL transformation to the entity (recursive)
 	/** The input ccGLMatrix should be left to 0, unless you want to apply
@@ -304,6 +315,13 @@ public:
 	//! Returns object unqiue ID used for display
 	virtual unsigned getUniqueIDForDisplay() const { return getUniqueID(); }
 
+	//! Returns the transformation 'history' matrix
+	const ccGLMatrix& getGLTransformationHistory() const { return m_glTransHistory; }
+	//! Sets the transformation 'history' matrix (handle with care!)
+	void setGLTransformationHistory(const ccGLMatrix& mat) { m_glTransHistory = mat; }
+	//! Resets the transformation 'history' matrix
+	void resetGLTransformationHistory() { m_glTransHistory.toIdentity(); }
+
 protected:
 
 	//! Sets parent object
@@ -316,7 +334,7 @@ protected:
 	/** this = rotMat*(this-rotCenter)+(rotCenter+trans)
 		\param trans a ccGLMatrix structure
 	**/
-	virtual void applyGLTransformation(const ccGLMatrix& trans) { /*does nothing by default*/ }
+	virtual void applyGLTransformation(const ccGLMatrix& trans);
 
 	//! Save own object data
 	/** Called by 'toFile' (recursive scheme)
@@ -362,12 +380,26 @@ protected:
 		Second parameter: dependency flags (see DEPENDENCY_FLAGS)
 	**/
 	std::map<ccHObject*,int> m_dependencies;
+
+	//! Cumulative GL transformation
+	/** History of all the applied transformations since the creation of the object
+		as a single transformation.
+	**/
+	ccGLMatrix m_glTransHistory;
+
+	//! Flag to safely handle dependencies when the object is being deleted
+	bool m_isDeleting;
 };
 
 /*** Helpers ***/
 
-//! standard ccHObject container (for children, etc.)
-inline void RemoveSiblings(const ccHObject::Container& origin, ccHObject::Container& dest)
+//! Puts all entities inside a container in a group
+/** Automatically removes siblings so as to get a valid hierarchy object.
+	\param origin origin container
+	\param dest destination group
+	\param dependencyFlags default dependency link for the children added to the group
+**/
+inline void ConvertToGroup(const ccHObject::Container& origin, ccHObject& dest, int dependencyFlags = ccHObject::DP_NONE)
 {
 	size_t count = origin.size();
 	for (size_t i=0; i<count; ++i)
@@ -384,7 +416,9 @@ inline void RemoveSiblings(const ccHObject::Container& origin, ccHObject::Contai
 		}
 
 		if (!isSiblingOfAnotherOne)
-			dest.push_back(origin[i]);
+		{
+			dest.addChild(origin[i],dependencyFlags);
+		}
 	}
 }
 

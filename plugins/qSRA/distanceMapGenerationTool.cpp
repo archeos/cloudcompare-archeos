@@ -114,9 +114,9 @@ bool DistanceMapGenerationTool::ComputeRadialDist(	ccPointCloud* cloud,
 
 	//reserve a new scalar field (or take the old one if it already exists)
 	int sfIdx = cloud->getScalarFieldIndexByName(RADIAL_DIST_SF_NAME);
-	if (sfIdx<0)
+	if (sfIdx < 0)
 		sfIdx = cloud->addScalarField(RADIAL_DIST_SF_NAME);
-	if (sfIdx<0)
+	if (sfIdx < 0)
 	{
 		if (app)
 			app->dispToConsole(QString("Failed to allocate a new scalar field for computing distances! Try to free some memory ..."),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
@@ -130,9 +130,9 @@ bool DistanceMapGenerationTool::ComputeRadialDist(	ccPointCloud* cloud,
 	if (storeRadiiAsSF)
 	{
 		int sfIdxRadii = cloud->getScalarFieldIndexByName(RADII_SF_NAME);
-		if (sfIdxRadii<0)
+		if (sfIdxRadii < 0)
 			sfIdxRadii = cloud->addScalarField(RADII_SF_NAME);
-		if (sfIdxRadii<0)
+		if (sfIdxRadii < 0)
 		{
 			if (app)
 				app->dispToConsole(QString("Failed to allocate a new scalar field for storing radii! You should try to free some memory ..."),ccMainAppInterface::WRN_CONSOLE_MESSAGE);
@@ -445,13 +445,14 @@ QSharedPointer<DistanceMapGenerationTool::Map> DistanceMapGenerationTool::Create
 		int j = static_cast<int>((y-grid->yMin)/grid->yStep);
 
 		//if we fall exactly on the max corner of the grid box
-		if (i == (int)grid->xSteps)
+		if (i == static_cast<int>(grid->xSteps))
 			--i;
-		if (j == (int)grid->ySteps)
+		if (j == static_cast<int>(grid->ySteps))
 			--j;
 
 		//we skip points outside the box!
-		if (i<0 || i>=(int)grid->xSteps || j<0 || j>=(int)grid->ySteps)
+		if (	i < 0 || i >= static_cast<int>(grid->xSteps)
+			||	j < 0 || j >= static_cast<int>(grid->ySteps) )
 		{
 			continue;
 		}
@@ -553,10 +554,11 @@ QSharedPointer<DistanceMapGenerationTool::Map> DistanceMapGenerationTool::Create
 
 				//mesh the '2D' points
 				CCLib::Delaunay2dMesh* dm = new CCLib::Delaunay2dMesh();
-				if (!dm->build(the2DPoints))
+				char errorStr[1024];
+				if (!dm->buildMesh(the2DPoints,0,errorStr))
 				{
 					if (app)
-						app->dispToConsole(QString("[DistanceMapGenerationTool] Not enough memory to interpolate!"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+						app->dispToConsole(QString("[DistanceMapGenerationTool] Interpolation failed: Triangle lib. said '%1'").arg(errorStr),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 				}
 				else
 				{
@@ -585,10 +587,10 @@ QSharedPointer<DistanceMapGenerationTool::Map> DistanceMapGenerationTool::Create
 						//now scan the cells
 						{
 							//pre-computation for barycentric coordinates
-							const double& valA = cells[P[0][0]+P[0][1]*grid->xSteps].value;
-							const double& valB = cells[P[1][0]+P[1][1]*grid->xSteps].value;
-							const double& valC = cells[P[2][0]+P[2][1]*grid->xSteps].value;
-							int det = ((P[1][1]-P[2][1])*(P[0][0]-P[2][0])+(P[2][0]-P[1][0])*(P[0][1]-P[2][1]));
+							const double& valA = cells[P[0][0] + P[0][1] * grid->xSteps].value;
+							const double& valB = cells[P[1][0] + P[1][1] * grid->xSteps].value;
+							const double& valC = cells[P[2][0] + P[2][1] * grid->xSteps].value;
+							int det = (P[1][1]-P[2][1])*(P[0][0]-P[2][0]) + (P[2][0]-P[1][0])*(P[0][1]-P[2][1]);
 
 							for (int j=yMin; j<=yMax; ++j)
 							{
@@ -684,10 +686,10 @@ ccMesh* DistanceMapGenerationTool::ConvertConicalMapToMesh(	const QSharedPointer
 	unsigned meshFaceCount = (map->xSteps-1) * (map->ySteps-1) * 2;
 	ccPointCloud* cloud = new ccPointCloud();
 	ccMesh* mesh = new ccMesh(cloud);
+	mesh->addChild(cloud);
 	if (!cloud->reserve(meshVertCount) || !mesh->reserve(meshFaceCount))
 	{
 		//not enough memory
-		delete cloud;
 		delete mesh;
 		return 0;
 	}
@@ -732,8 +734,8 @@ ccMesh* DistanceMapGenerationTool::ConvertConicalMapToMesh(	const QSharedPointer
 				unsigned vertC = vertB + 1;
 				unsigned vertD = vertA + 1;
 
-				mesh->addTriangle(vertB,vertD,vertC);
-				mesh->addTriangle(vertB,vertA,vertD);
+				mesh->addTriangle(vertB,vertC,vertD);
+				mesh->addTriangle(vertB,vertD,vertA);
 			}
 		}
 	}
@@ -779,8 +781,8 @@ ccMesh* DistanceMapGenerationTool::ConvertConicalMapToMesh(	const QSharedPointer
 					unsigned vertC = vertB + 1;
 					unsigned vertD = vertA + 1;
 
-					mesh->addTriangleTexCoordIndexes(vertB,vertD,vertC);
-					mesh->addTriangleTexCoordIndexes(vertB,vertA,vertD);
+					mesh->addTriangleTexCoordIndexes(vertB,vertC,vertD);
+					mesh->addTriangleTexCoordIndexes(vertB,vertD,vertA);
 				}
 			}
 		}
@@ -799,7 +801,7 @@ ccMesh* DistanceMapGenerationTool::ConvertConicalMapToMesh(	const QSharedPointer
 		//set material
 		{
 			ccMaterial material("texture");
-			material.texture = mapTexture;
+			material.setTexture(mapTexture, QString(), false);
 
 			ccMaterialSet* materialSet = new ccMaterialSet();
 			materialSet->addMaterial(material);
@@ -1227,8 +1229,8 @@ ccMesh* DistanceMapGenerationTool::ConvertProfileToMesh(ccPolyline* profile,
 				unsigned vertC = vertB+1;
 				unsigned vertD = vertA+1;
 
-				mesh->addTriangle(vertB,vertD,vertC);
-				mesh->addTriangle(vertB,vertA,vertD);
+				mesh->addTriangle(vertB,vertC,vertD);
+				mesh->addTriangle(vertB,vertD,vertA);
 			}
 		}
 	}
@@ -1280,8 +1282,8 @@ ccMesh* DistanceMapGenerationTool::ConvertProfileToMesh(ccPolyline* profile,
 					unsigned vertC = vertB+1;
 					unsigned vertD = vertA+1;
 
-					mesh->addTriangleTexCoordIndexes(vertB,vertD,vertC);
-					mesh->addTriangleTexCoordIndexes(vertB,vertA,vertD);
+					mesh->addTriangleTexCoordIndexes(vertB,vertC,vertD);
+					mesh->addTriangleTexCoordIndexes(vertB,vertD,vertA);
 				}
 			}
 		}
@@ -1302,7 +1304,7 @@ ccMesh* DistanceMapGenerationTool::ConvertProfileToMesh(ccPolyline* profile,
 			ccMaterial material("texture");
 		
 			//invert texture?
-			material.texture = mapTexture;
+			material.setTexture(mapTexture, QString(), false);
 
 			ccMaterialSet* materialSet = new ccMaterialSet();
 			materialSet->addMaterial(material);

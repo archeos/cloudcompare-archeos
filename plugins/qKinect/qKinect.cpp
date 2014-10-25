@@ -135,8 +135,8 @@ bool getResolution(freenect_resolution& resolution, unsigned& w, unsigned &h)
 
 
 //FIXME: should be qKinect class' arguments!
-static freenect_context* f_ctx=0;
-static freenect_device* f_dev=0;
+static freenect_context* f_ctx = 0;
+static freenect_device* f_dev = 0;
 static unsigned s_grabIndex = 0;
 
 void qKinect::doStartGrabbing()
@@ -151,7 +151,7 @@ void qKinect::doStartGrabbing()
 
 	if (m_kDlg)
 		delete m_kDlg;
-	m_kDlg=0;
+	m_kDlg = 0;
 
 	s_max_depth_count = 0;
 	if (s_depth_data)
@@ -172,17 +172,22 @@ void qKinect::doStartGrabbing()
 		return;
 	}
 
-	freenect_set_log_level(f_ctx, FREENECT_LOG_DEBUG);
+	//freenect_set_log_level(f_ctx, FREENECT_LOG_FATAL);
+	freenect_select_subdevices(f_ctx, (freenect_device_flags)(FREENECT_DEVICE_MOTOR | FREENECT_DEVICE_CAMERA));
 
 	int nr_devices = freenect_num_devices(f_ctx);
 	m_app->dispToConsole(qPrintable(QString("[qKinect] Number of devices found: %1").arg(nr_devices)));
 
 	if (nr_devices < 1)
-		return;
-
-	if (freenect_open_device(f_ctx, &f_dev, 0) < 0)
 	{
-		m_app->dispToConsole("[qKinect] Failed to initialize kinect device!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		m_app->dispToConsole(QString("[qKinect] No device found"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		return;
+	}
+
+	int returnCode = freenect_open_device(f_ctx, &f_dev, 0);
+	if (returnCode < 0)
+	{
+		m_app->dispToConsole(QString("[qKinect] Failed to initialize kinect device! (error code: %1)").arg(returnCode),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		return;
 	}
 
@@ -548,35 +553,30 @@ void qKinect::grabCloud()
 			QString cloudName = m_kDlg->getCloudName() + QString::number(++s_grabIndex);
 			depthMap->setName(qPrintable(cloudName));
 			//associate sensor
-			ccGBLSensor* sensor = new ccGBLSensor(ccGBLSensor::THETA_PHI);
+			ccGBLSensor* sensor = new ccGBLSensor(ccGBLSensor::YAW_THEN_PITCH);
 			ccGLMatrix rot;
 			{
 				float* mat = rot.data();
-				mat[0] = 1.0f;
-				mat[1] = 0.0f;
-				mat[2] = 0.0f;
+				mat[0] =  1.0f;
+				mat[1] =  0.0f;
+				mat[2] =  0.0f;
 
-				mat[4] = 0.0f;
-				mat[5] = 0.0f;
+				mat[4] =  0.0f;
+				mat[5] =  0.0f;
 				mat[6] = -1.0f;
 
-				mat[8] = 0.0f;
-				mat[9] = 1.0f;
+				mat[8] =  0.0f;
+				mat[9] =  1.0f;
 				mat[10] = 0.0f;
 
 				mat[15] = 1.0f;
 			}
 			sensor->setRigidTransformation(rot);
-			sensor->setDeltaPhi(0.0017f);
-			sensor->setDeltaTheta(0.0017f);
+			sensor->setYawStep(0.0017f);
+			sensor->setPitchStep(0.0017f);
 			sensor->setUncertainty(1e-3f);
 			{
-				int errorCode = 0;
-				CCLib::SimpleCloud* cloud = sensor->project(depthMap,errorCode,true);
-				if (cloud)
-					delete cloud;
-				cloud = 0;
-				if (errorCode == 0)
+				if (sensor->computeAutoParameters(depthMap))
 				{
 					sensor->setName("Kinect");
 					sensor->setGraphicScale(20.0f);

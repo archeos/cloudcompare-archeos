@@ -28,14 +28,25 @@
 #include <QSharedPointer>
 
 //! ASCII point cloud I/O filter
-class AsciiFilter : public FileIOFilter
+class QCC_IO_LIB_API AsciiFilter : public FileIOFilter
 {
 public:
 
-	//inherited from FileIOFilter
-	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
-	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	//static accessors
+	static inline QString GetFileFilter() { return "ASCII cloud (*.txt *.asc *.neu *.xyz *.pts *.csv)"; }
+	static inline QString GetDefaultExtension() { return "asc"; }
 
+	//inherited from FileIOFilter
+	virtual bool importSupported() const { return true; }
+	virtual bool exportSupported() const { return true; }
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
+	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
+	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
+	virtual bool canLoadExtension(QString upperCaseExt) const;
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const;
+
+	//! Loads an ASCII file with a predefined format
 	CC_FILE_ERROR loadCloudFromFormatedAsciiFile(	const QString& filename,
 													ccHObject& container,
 													const AsciiOpenDlg::Sequence& openSequence,
@@ -43,10 +54,8 @@ public:
 													unsigned approximateNumberOfLines,
 													qint64 fileSize,
 													unsigned maxCloudSize,
-													unsigned skipLines=0,
-													bool alwaysDisplayLoadDialog=true,
-													bool* coordinatesShiftEnabled=0,
-													CCVector3d* coordinatesShift=0);
+													unsigned skipLines,
+													LoadParameters& parameters);
 
 	//! Returns associated dialog (creates it if necessary)
 	static QSharedPointer<AsciiOpenDlg> GetOpenDialog();
@@ -64,4 +73,4 @@ protected:
 	static QSharedPointer<AsciiOpenDlg> s_openDialog;
 };
 
-#endif
+#endif //CC_ASCII_FILTER_HEADER

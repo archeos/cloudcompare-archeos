@@ -29,8 +29,9 @@
 #define CC_CLOUD2MESH_CHAMFER_DISTANCES_DEFAULT_SF_NAME "C2M Chamfer distances"
 #define CC_CHI2_DISTANCES_DEFAULT_SF_NAME "Chi2 distances"
 #define CC_CONNECTED_COMPONENTS_DEFAULT_LABEL_NAME "CC labels"
-#define CC_LOCAL_DENSITY_FIELD_NAME "Local density"
-#define CC_LOCAL_DENSITY_APPROX_FIELD_NAME "Dist to nearest neighbor"
+#define CC_LOCAL_KNN_DENSITY_FIELD_NAME "Number of neighbors"
+#define CC_LOCAL_SURF_DENSITY_FIELD_NAME "Surface density"
+#define CC_LOCAL_VOL_DENSITY_FIELD_NAME "Volume density"
 #define CC_MEAN_CURVATURE_FIELD_NAME "Mean curvature"
 #define CC_ROUGHNESS_FIELD_NAME "Roughness"
 #define CC_GAUSSIAN_CURVATURE_FIELD_NAME "Gaussian curvature"
@@ -43,6 +44,8 @@
 #define CC_DEFAULT_SQUARED_RANGES_SF_NAME "Ranges (squared)"
 #define CC_DEFAULT_DIP_SF_NAME "Dip (degrees)"
 #define CC_DEFAULT_DIP_DIR_SF_NAME "Dip direction (degrees)"
+#define CC_DEFAULT_MESH_VERT_FLAGS_SF_NAME "Vertex type"
+#define CC_DEFAULT_ID_SF_NAME "Id"
 
 //Qt
 #include <QString>

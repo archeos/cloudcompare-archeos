@@ -32,8 +32,7 @@ ccPlane::ccPlane(PointCoordinateType xWidth, PointCoordinateType yWidth, const c
 	, m_xWidth(xWidth)
 	, m_yWidth(yWidth)
 {
-	buildUp();
-	applyTransformationToVertices();
+	updateRepresentation();
 }
 
 ccPlane::ccPlane(QString name /*=QString("Plane")*/)
@@ -259,7 +258,7 @@ bool ccPlane::setAsTexture(QImage image)
 	//add new material
 	{
 		ccMaterial material("texture");
-		material.texture = image;
+		material.setTexture(image,QString(),false);
 		materialSet->addMaterial(material);
 		//dirty trick: reset material association so that texture will be refreshed!
 		materialSet->associateTo(0);

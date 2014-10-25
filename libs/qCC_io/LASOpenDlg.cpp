@@ -24,10 +24,14 @@
 #include <string.h>
 #include <assert.h>
 
-LASOpenDlg::LASOpenDlg(QWidget* parent) : QDialog(parent), Ui::OpenLASFileDialog()
+LASOpenDlg::LASOpenDlg(QWidget* parent)
+	: QDialog(parent)
+	, Ui::OpenLASFileDialog()
 {
 	setupUi(this);
 	autoSkipNextCheckBox->setChecked(false); //just to be sure
+
+	clearEVLRs();
 }
 
 bool FieldIsPresent(const std::vector<std::string>& dimensions, LAS_FIELDS field)
@@ -102,6 +106,8 @@ bool LASOpenDlg::doLoad(LAS_FIELDS field) const
 		return blueCheckBox->isEnabled() && blueCheckBox->isChecked();
 	case LAS_TIME:
 		return timeCheckBox->isEnabled() && timeCheckBox->isChecked();
+	case LAS_EXTRA:
+		return extraFieldGroupBox->isEnabled() && extraFieldGroupBox->isChecked();
 	case LAS_CLASSIF_VALUE:
 		return classifCheckBox->isEnabled() && classifCheckBox->isChecked() && decomposeClassifGroupBox->isChecked() && classifValueCheckBox->isChecked();
 	case LAS_CLASSIF_SYNTHETIC:
@@ -117,6 +123,33 @@ bool LASOpenDlg::doLoad(LAS_FIELDS field) const
 	}
 
 	return false;
+}
+
+void LASOpenDlg::clearEVLRs()
+{
+	evlrListWidget->clear();
+	extraFieldGroupBox->setEnabled(false);
+	extraFieldGroupBox->setChecked(false);
+}
+
+void LASOpenDlg::addEVLR(QString description)
+{
+	QListWidgetItem* item = new QListWidgetItem(description);
+	evlrListWidget->addItem(item);
+	//auto select the entry
+	item->setSelected(true);
+	//auto enable the extraFieldGroupBox
+	extraFieldGroupBox->setEnabled(true);
+	extraFieldGroupBox->setChecked(true);
+}
+
+bool LASOpenDlg::doLoadEVLR(size_t index) const
+{
+	if (!extraFieldGroupBox->isChecked())
+		return false;
+	
+	QListWidgetItem* item = evlrListWidget->item(static_cast<int>(index));
+	return item && item->isSelected();
 }
 
 bool LASOpenDlg::autoSkipMode() const

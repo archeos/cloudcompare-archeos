@@ -29,13 +29,19 @@
 #include "ccOctree.h"
 #include "ccKdTree.h"
 #include "ccImage.h"
-#include "ccCalibratedImage.h"
 #include "ccGBLSensor.h"
 #include "ccCameraSensor.h"
 #include "cc2DLabel.h"
 #include "cc2DViewportLabel.h"
 #include "cc2DViewportObject.h"
 #include "ccGenericPrimitive.h"
+#include "ccSphere.h"
+#include "ccCylinder.h"
+#include "ccCone.h"
+#include "ccPlane.h"
+#include "ccDish.h"
+#include "ccExtru.h"
+#include "ccTorus.h"
 
 /*** helpers ***/
 
@@ -121,6 +127,41 @@ ccGenericPrimitive* ccHObjectCaster::ToPrimitive(ccHObject* obj)
 	return obj && obj->isKindOf(CC_TYPES::PRIMITIVE) ? static_cast<ccGenericPrimitive*>(obj) : 0;
 }
 
+ccSphere*	ccHObjectCaster::ToSphere(ccHObject* obj)
+{
+	return obj && obj->isA(CC_TYPES::SPHERE) ? static_cast<ccSphere*>(obj) : 0;
+}
+
+ccCylinder*	ccHObjectCaster::ToCylinder(ccHObject* obj)
+{
+	return obj && obj->isA(CC_TYPES::CYLINDER) ? static_cast<ccCylinder*>(obj) : 0;
+}
+
+ccCone*		ccHObjectCaster::ToCone(ccHObject* obj)
+{
+	return obj && obj->isA(CC_TYPES::CONE) ? static_cast<ccCone*>(obj) : 0;
+}
+
+ccPlane*	ccHObjectCaster::ToPlane(ccHObject* obj)
+{
+	return obj && obj->isA(CC_TYPES::PLANE) ? static_cast<ccPlane*>(obj) : 0;
+}
+
+ccDish*		ccHObjectCaster::ToDish(ccHObject* obj)
+{
+	return obj && obj->isA(CC_TYPES::DISH) ? static_cast<ccDish*>(obj) : 0;
+}
+
+ccExtru*	ccHObjectCaster::ToExtru(ccHObject* obj)
+{
+	return obj && obj->isA(CC_TYPES::EXTRU) ? static_cast<ccExtru*>(obj) : 0;
+}
+
+ccTorus*	ccHObjectCaster::ToTorus(ccHObject* obj)
+{
+	return obj && obj->isA(CC_TYPES::TORUS) ? static_cast<ccTorus*>(obj) : 0;
+}
+
 ccOctree* ccHObjectCaster::ToOctree(ccHObject* obj)
 {
 	return obj && obj->isA(CC_TYPES::POINT_OCTREE) ? static_cast<ccOctree*>(obj) : 0;
@@ -149,11 +190,6 @@ ccCameraSensor* ccHObjectCaster::ToCameraSensor(ccHObject* obj)
 ccImage* ccHObjectCaster::ToImage(ccHObject* obj)
 {
 	return obj && obj->isKindOf(CC_TYPES::IMAGE) ? static_cast<ccImage*>(obj) : 0;
-}
-
-ccCalibratedImage* ccHObjectCaster::ToCalibratedImage(ccHObject* obj)
-{
-	return obj && obj->isA(CC_TYPES::CALIBRATED_IMAGE) ? static_cast<ccCalibratedImage*>(obj) : 0;
 }
 
 cc2DLabel* ccHObjectCaster::To2DLabel(ccHObject* obj)

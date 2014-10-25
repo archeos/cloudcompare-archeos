@@ -17,11 +17,13 @@
 //#                                                                        #
 //##########################################################################
 
-#include "ccPlatform.h"
 #include "ccCommon.h"
 
-#define CC_VER_NUM "2.5"
-#define CC_SUB_VER "6.beta" //2014-07-23
+//CCLib
+#include <CCPlatform.h>
+
+#define CC_VER_NUM "2.6"
+#define CC_SUB_VER "0" //2014-10-24
 
 //! Returns current version as a string
 QString ccCommon::GetCCVersion(bool full/*=true*/)
@@ -54,6 +56,10 @@ QString ccCommon::GetCCVersion(bool full/*=true*/)
 	{
 		verStr += QString(" [%1]").arg(arch);
 	}
+
+#ifdef _DEBUG
+	verStr += QString(" [DEBUG]");
+#endif
 
 	return verStr;
 };
