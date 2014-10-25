@@ -20,11 +20,14 @@
 
 #include "ccImage.h"
 
+//Local
 #include "ccGenericGLDisplay.h"
+#include "ccCameraSensor.h"
 
 //Qt
 #include <QImageReader>
 #include <QFileInfo>
+#include <QDataStream>
 
 //System
 #include <assert.h>
@@ -39,9 +42,7 @@ ccImage::ccImage()
 	, m_texAlpha(1.0f)
 	, m_textureID(0)
 	, m_boundWin(0)
-#ifdef INCLUDE_IMAGE_FILENAME
-	, m_completeFileName("")
-#endif
+	, m_associatedSensor(0)
 {
 	setVisible(true);
 	lockVisibility(false);
@@ -52,16 +53,16 @@ ccImage::ccImage(const QImage& image, const QString& name)
 	: ccHObject(name)
 	, m_width(image.width())
 	, m_height(image.height())
+	, m_aspectRatio(1.0f)
 	, m_texU(1.0f)
 	, m_texV(1.0f)
 	, m_texAlpha(1.0f)
 	, m_textureID(0)
 	, m_boundWin(0)
 	, m_image(image)
-#ifdef INCLUDE_IMAGE_FILENAME
-	, m_completeFileName("")
-#endif
+	, m_associatedSensor(0)
 {
+	updateAspectRatio();
 	setVisible(true);
 	lockVisibility(false);
 	setEnabled(true);
@@ -78,19 +79,15 @@ bool ccImage::load(const QString& filename, QString& error)
 		return false;
 	}
 
-	setImage(image);
+	setData(image);
 
 	setName(QFileInfo(filename).fileName());
 	setEnabled(true);
 
-#ifdef INCLUDE_IMAGE_FILENAME
-	setCompleteFileName(filename);
-#endif
-
 	return true;
 }
 
-void ccImage::setImage(const QImage& image)
+void ccImage::setData(const QImage& image)
 {
 	//previous image?
 	if (!m_image.isNull())
@@ -99,12 +96,17 @@ void ccImage::setImage(const QImage& image)
 	m_image = image;
 	m_width = m_image.width();
 	m_height = m_image.height();
-	setAspectRatio(m_height>0 ? (float)m_width/(float)m_height : 1.0f);
+	updateAspectRatio();
 
 	//default behavior (this will be updated later, depending
 	//on the OpenGL version of the bound QGLWidget)
 	m_texU = 1.0;
 	m_texV = 1.0;
+}
+
+void ccImage::updateAspectRatio()
+{
+	setAspectRatio(m_height != 0 ? static_cast<float>(m_width)/m_height : 1.0f);
 }
 
 bool ccImage::unbindTexture()
@@ -127,9 +129,9 @@ bool ccImage::bindToGlTexture(ccGenericGLDisplay* win, bool pow2Texture/*=false*
 	if (m_image.isNull())
 		return false;
 
-	if (!m_textureID || m_boundWin!=win)
+	if (!m_textureID || m_boundWin != win)
 	{
-		if (m_textureID && m_boundWin!=win)
+		if (m_textureID && m_boundWin != win)
 			unbindTexture();
 
 		m_boundWin = win;
@@ -188,10 +190,10 @@ void ccImage::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 				glColor4f(1, 1, 1, m_texAlpha);
 				glBegin(GL_QUADS);
-				glTexCoord2f(0,m_texV);		glVertex2f(-dX, -dY);
+				glTexCoord2f(0,m_texV);			glVertex2f(-dX, -dY);
 				glTexCoord2f(m_texU,m_texV);	glVertex2f(dX, -dY);
-				glTexCoord2f(m_texU,0);		glVertex2f(dX, dY);
-				glTexCoord2f(0,0);		glVertex2f(-dX, dY);
+				glTexCoord2f(m_texU,0);			glVertex2f(dX, dY);
+				glTexCoord2f(0,0);				glVertex2f(-dX, dY);
 				glEnd();
 			}
 
@@ -212,9 +214,72 @@ void ccImage::setAlpha(float value)
 		m_texAlpha = value;
 }
 
-#ifdef INCLUDE_IMAGE_FILENAME
-void ccImage::setCompleteFileName(const char* name)
+void ccImage::setAssociatedSensor(ccCameraSensor* sensor)
 {
-	strcpy(completeFileName,name);
+	m_associatedSensor = sensor;
+
+	if (m_associatedSensor)
+		m_associatedSensor->addDependency(this,DP_NOTIFY_OTHER_ON_DELETE);
 }
-#endif
+
+void ccImage::onDeletionOf(const ccHObject* obj)
+{
+	if (obj == m_associatedSensor)
+		setAssociatedSensor(0);
+
+	ccHObject::onDeletionOf(obj);
+}
+
+bool ccImage::toFile_MeOnly(QFile& out) const
+{
+	if (!ccHObject::toFile_MeOnly(out))
+		return false;
+
+	//we can't save the associated sensor here (as it may be shared by multiple images)
+	//so instead we save it's unique ID (dataVersion>=38)
+	//WARNING: the sensor must be saved in the same BIN file! (responsibility of the caller)
+	uint32_t sensorUniqueID = (m_associatedSensor ? (uint32_t)m_associatedSensor->getUniqueID() : 0);
+	if (out.write((const char*)&sensorUniqueID,4) < 0)
+		return WriteError();
+
+	QDataStream outStream(&out);
+	outStream << m_width;
+	outStream << m_height;
+	outStream << m_aspectRatio;
+	outStream << m_texU;
+	outStream << m_texV;
+	outStream << m_texAlpha;
+	outStream << m_image;
+	QString fakeString;
+	outStream << fakeString; //formerly: 'complete filename'
+
+	return true;
+}
+
+bool ccImage::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
+{
+	if (!ccHObject::fromFile_MeOnly(in, dataVersion, flags))
+		return false;
+
+	//as the associated sensor can't be saved directly (as it may be shared by multiple images)
+	//we only store its unique ID (dataVersion >= 38) --> we hope we will find it at loading time (i.e. this
+	//is the responsibility of the caller to make sure that all dependencies are saved together)
+	uint32_t sensorUniqueID = 0;
+	if (in.read((char*)&sensorUniqueID,4) < 0)
+		return ReadError();
+	//[DIRTY] WARNING: temporarily, we set the vertices unique ID in the 'm_associatedCloud' pointer!!!
+	*(uint32_t*)(&m_associatedSensor) = sensorUniqueID;
+
+	QDataStream inStream(&in);
+	inStream >> m_width;
+	inStream >> m_height;
+	inStream >> m_aspectRatio;
+	inStream >> m_texU;
+	inStream >> m_texV;
+	inStream >> m_texAlpha;
+	inStream >> m_image;
+	QString fakeString;
+	inStream >> fakeString; //formerly: 'complete filename'
+
+	return true;
+}

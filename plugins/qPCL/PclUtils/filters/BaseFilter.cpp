@@ -21,8 +21,8 @@
 #include <ccPointCloud.h>
 #include <ccHObjectCaster.h>
 
-//qCC_db
-#include <ccPlatform.h>
+//CCLib
+#include <CCPlatform.h>
 
 //qCC
 #include <ccMainAppInterface.h>
@@ -157,7 +157,7 @@ static void doCompute()
 {
 	if (!s_filter)
 	{
-		s_computeStatus=-1;
+		s_computeStatus = -1;
 		return;
 	}
 

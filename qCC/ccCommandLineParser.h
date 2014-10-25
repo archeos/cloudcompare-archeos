@@ -13,7 +13,7 @@
 #include <QString>
 #include <QStringList>
 
-//STL
+//system
 #include <vector>
 
 class ccProgressDialog;
@@ -47,6 +47,11 @@ protected:
 	bool commandICP							(QStringList& arguments, QDialog* parent = 0);
 	bool commandChangeCloudOutputFormat		(QStringList& arguments);
 	bool commandChangeMeshOutputFormat		(QStringList& arguments);
+	bool commandChangeFBXOutputFormat		(QStringList& arguments);
+	bool commandForcePTXNormalsComputation	(QStringList& arguments);
+	bool commandSaveClouds					(QStringList& arguments);
+	bool commandSaveMeshes					(QStringList& arguments);
+	bool commandAutoSave					(QStringList& arguments);
 	bool setActiveSF						(QStringList& arguments);
 
 protected:
@@ -73,6 +78,21 @@ protected:
 		EntityDesc(QString filename);
 		EntityDesc(QString basename, QString path);
 		virtual ccHObject* getEntity() = 0;
+	};
+
+	//! Loaded group description
+	struct GroupDesc : EntityDesc
+	{
+		ccHObject* groupEntity;
+
+		GroupDesc(	ccHObject* group,
+					QString basename,
+					QString path = QString())
+			: EntityDesc(basename, path)
+			, groupEntity(group)
+		{}
+
+		virtual ccHObject* getEntity() { return groupEntity; }
 	};
 
 	//! Loaded cloud description
@@ -129,22 +149,22 @@ protected:
 	//! Exports a cloud or a mesh
 	/** \return error string (if any)
 	**/
-	static QString Export(EntityDesc& cloudDesc, QString suffix = QString(), QString* outputFilename = 0);
+	static QString Export(EntityDesc& cloudDesc, QString suffix = QString(), QString* outputFilename = 0, bool forceIsCloud = false);
 
 	//! Reads out file format
-	static CC_FILE_TYPES getFileFormat(QStringList& arguments);
+	static QString GetFileFormatFilter(QStringList& arguments, QString& defaultExt);
 
 	//! Saves all clouds
 	/** \param suffix optional suffix
 		\return success
 	**/
-	bool saveClouds(QString suffix = QString());
+	bool saveClouds(QString suffix = QString(), bool allAtOnce = false);
 
 	//! Saves all meshes
 	/** \param suffix optional suffix
 		\return success
 	**/
-	bool saveMeshes(QString suffix = QString());
+	bool saveMeshes(QString suffix = QString(), bool allAtOnce = false);
 
 	//! Removes all clouds
 	void removeClouds();

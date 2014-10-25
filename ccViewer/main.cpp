@@ -25,12 +25,17 @@
 #include <QFileOpenEvent>
 #endif
 
+//Local
+#include "ccviewerlog.h"
+
 //qCC_db
 #include <ccIncludeGL.h>
 #include <ccTimer.h>
-#include <ccObject.h>
 #include <ccNormalVectors.h>
 #include <ccColorScalesManager.h>
+
+//qCC_io
+#include <FileIOFilter.h>
 
 #ifdef USE_VLD
 //VLD
@@ -100,8 +105,8 @@ int main(int argc, char *argv[])
 	}
 
 	//common data initialization
-	ccObject::ResetUniqueIDCounter();
 	ccTimer::Init();
+	FileIOFilter::InitInternalFilters(); //load all known I/O filters (plugins will come later!)
 	ccNormalVectors::GetUniqueInstance(); //force pre-computed normals array initialization
 	ccColorScalesManager::GetUniqueInstance(); //force pre-computed color tables initialization
 
@@ -109,30 +114,35 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_MAC
 	a.setViewer( &w );
 #endif
+
+	//register minimal logger to display errors
+	ccViewerLog logger(&w);
+	ccLog::RegisterInstance(&logger);
+
 	w.show();
 
 	//files to open are passed as argument
-	if (argc>1)
+	if (argc > 1)
 	{
 		//parse arguments
 		QStringList filenames;
-		int i=1;
-		while (i<argc)
+		int i = 1;
+		while ( i < argc)
 		{
 			QString argument = QString(argv[i++]).toUpper();
 
 			//Argument '-WIN X Y W H' (to set window size and position)
 			if (argument.toUpper() == "-WIN")
 			{
-				bool ok=true;
-				if (i+3<argc)
+				bool ok = true;
+				if (i+3 < argc)
 				{
 					bool converionOk;
-					int x = QString(argv[i]).toInt(&converionOk); ok &= converionOk;
-					int y = QString(argv[i+1]).toInt(&converionOk); ok &= converionOk;
-					int width = QString(argv[i+2]).toInt(&converionOk); ok &= converionOk;
+					int x      = QString(argv[i  ]).toInt(&converionOk); ok &= converionOk;
+					int y      = QString(argv[i+1]).toInt(&converionOk); ok &= converionOk;
+					int width  = QString(argv[i+2]).toInt(&converionOk); ok &= converionOk;
 					int height = QString(argv[i+3]).toInt(&converionOk); ok &= converionOk;
-					i+=4;
+					i += 4;
 
 					if (ok)
 					{

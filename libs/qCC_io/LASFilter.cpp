@@ -19,17 +19,18 @@
 
 #include "LASFilter.h"
 
-//qCC
-#include "ccCoordinatesShiftManager.h"
+//Local
 #include "LASOpenDlg.h"
 
 //qCC_db
 #include <ccLog.h>
-#include <ccPlatform.h>
 #include <ccPointCloud.h>
 #include <ccProgressDialog.h>
 #include <ccScalarField.h>
 #include "ccColorScalesManager.h"
+
+//CCLib
+#include <CCPlatform.h>
 
 //Liblas
 #include <liblas/point.hpp>
@@ -46,21 +47,117 @@
 #include <fstream>				// std::ifstream
 #include <iostream>				// std::cout
 
-//LAS field descriptor
+bool LASFilter::canLoadExtension(QString upperCaseExt) const
+{
+	return (	upperCaseExt == "LAS"
+			||	upperCaseExt == "LAZ");
+}
+
+bool LASFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	if (type == CC_TYPES::POINT_CLOUD)
+	{
+		multiple = false;
+		exclusive = true;
+		return true;
+	}
+	return false;
+}
+
+//! LAS field descriptor
 struct LasField
 {
+	//! Shared type
+	typedef QSharedPointer<LasField> Shared;
+
+	//! Default constructor
+	LasField(LAS_FIELDS fieldType = LAS_INVALID, double defaultVal = 0, double min = 0.0, double max = -1.0)
+		: type(fieldType)
+		, sf(0)
+		, firstValue(0.0)
+		, minValue(min)
+		, maxValue(max)
+		, defaultValue(defaultVal)
+	{}
+
+	//! Returns official field name
+	virtual inline QString getName() const	{ return type < LAS_INVALID ? QString(LAS_FIELD_NAMES[type]) : QString(); }
+
 	LAS_FIELDS type;
 	ccScalarField* sf;
 	double firstValue;
 	double minValue;
 	double maxValue;
 	double defaultValue;
+};
 
-	LasField() : type(LAS_INVALID), sf(0), firstValue(0.0), minValue(0.0), maxValue(-1.0), defaultValue(0.0) {}
-	LasField(LAS_FIELDS fieldType, double defaultVal, double min, double max) : type(fieldType), sf(0), firstValue(0.0), minValue(min), maxValue(max), defaultValue(defaultVal) {}
+//! Custom ("Extra bytes") field
+struct ExtraLasField : LasField
+{
+	//! Extra field type
+	enum Type {	EXTRA_INVALID	= 0,
+				EXTRA_UINT8		= 1,
+				EXTRA_INT8		= 2,
+				EXTRA_UINT16	= 3,
+				EXTRA_INT16		= 4,
+				EXTRA_UINT32	= 5,
+				EXTRA_INT32		= 6,
+				EXTRA_UINT64	= 7,
+				EXTRA_INT64		= 8,
+				EXTRA_FLOAT		= 9,
+				EXTRA_DOUBLE	= 10 };
 
-	//! Returns officiel field name
-	inline const char* getName() { return (type < LAS_INVALID ? LAS_FIELD_NAMES[type] : 0); }
+	//! Default constructor
+	ExtraLasField(QString name, Type type, int off, double defaultVal = 0, double min = 0.0, double max = -1.0)
+		: LasField(LAS_EXTRA,defaultVal,min,max)
+		, fieldName(name)
+		, valType(type)
+		, dataOffset(off)
+		, scale(1.0)
+		, offset(0.0)
+	{}
+
+	//reimplemented from LasField
+	virtual inline QString getName() const	{ return fieldName; }
+
+	//! Returns the size (in bytes) of the specified type
+	static size_t GetSizeBytes(Type type)
+	{
+		switch(type)
+		{
+		case EXTRA_INVALID:
+			return 0;
+		case EXTRA_UINT8:
+		case EXTRA_INT8:
+			return 1;
+			break;
+		case EXTRA_UINT16:
+		case EXTRA_INT16:
+			return 2;
+			break;
+		case EXTRA_UINT32:
+		case EXTRA_INT32:
+		case EXTRA_FLOAT:
+			return 4;
+			break;
+		case EXTRA_UINT64:
+		case EXTRA_INT64:
+		case EXTRA_DOUBLE:
+			return 8;
+			break;
+		default:
+			assert(false);
+			break;
+		}
+
+		return 0;
+	}
+
+	QString fieldName;
+	Type valType;
+	int dataOffset;
+	double scale;
+	double offset;
 };
 
 CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
@@ -68,31 +165,18 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 	if (!entity || filename.isEmpty())
 		return CC_FERR_BAD_ARGUMENT;
 
-	ccHObject::Container clouds;
-	if (entity->isKindOf(CC_TYPES::POINT_CLOUD))
-		clouds.push_back(entity);
-	else
-		entity->filterChildren(clouds, true, CC_TYPES::POINT_CLOUD);
-
-	if (clouds.empty())
+	ccGenericPointCloud* theCloud = ccHObjectCaster::ToGenericPointCloud(entity);
+	if (!theCloud)
 	{
-		ccLog::Error("No point cloud in input selection!");
-		return CC_FERR_BAD_ENTITY_TYPE;
-	}
-	else if (clouds.size()>1)
-	{
-		ccLog::Error("Can't save more than one cloud per LAS file!");
+		ccLog::Warning("[LAS] This filter can only save one cloud at a time!");
 		return CC_FERR_BAD_ENTITY_TYPE;
 	}
 
-	//the cloud to save
-	ccGenericPointCloud* theCloud = ccHObjectCaster::ToGenericPointCloud(clouds[0]);
 	unsigned numberOfPoints = theCloud->size();
-
-	if (numberOfPoints==0)
+	if (numberOfPoints == 0)
 	{
-		ccLog::Error("Cloud is empty!");
-		return CC_FERR_BAD_ENTITY_TYPE;
+		ccLog::Warning("[LAS] Cloud is empty!");
+		return CC_FERR_NO_SAVE;
 	}
 
 	//colors
@@ -136,7 +220,7 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 				for (size_t j=0; j<lasFields.size(); ++j)
 				{
 					//if the name matches
-					if (sfName == QString(lasFields[j].getName()).toUpper())
+					if (sfName == lasFields[j].getName().toUpper())
 					{
 						//check bounds
 						if (sf->getMin() < lasFields[j].minValue || (lasFields[j].maxValue != -1.0 && sf->getMax() > lasFields[j].maxValue)) //outbounds?
@@ -227,7 +311,7 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 	}
 	catch (...)
 	{
-		return CC_FERR_WRITING;
+		return CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
 	}
 
 	//progress dialog
@@ -242,6 +326,8 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 	//liblas::Point point(boost::shared_ptr<liblas::Header>(new liblas::Header(writer->GetHeader())));
 	liblas::Point point(&writer->GetHeader());
 	liblas::Classification classif = point.GetClassification();
+
+	CC_FILE_ERROR result = CC_FERR_NO_ERROR;
 
 	for (unsigned i=0; i<numberOfPoints; i++)
 	{
@@ -269,23 +355,23 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 				assert(false);
 				break;
 			case LAS_INTENSITY:
-				point.SetIntensity((boost::uint16_t)it->sf->getValue(i));
+				point.SetIntensity(static_cast<boost::uint16_t>(it->sf->getValue(i)));
 				break;
 			case LAS_RETURN_NUMBER:
-				point.SetReturnNumber((boost::uint16_t)it->sf->getValue(i));
+				point.SetReturnNumber(static_cast<boost::uint16_t>(it->sf->getValue(i)));
 				break;
 			case LAS_NUMBER_OF_RETURNS:
-				point.SetNumberOfReturns((boost::uint16_t)it->sf->getValue(i));
+				point.SetNumberOfReturns(static_cast<boost::uint16_t>(it->sf->getValue(i)));
 				break;
 			case LAS_SCAN_DIRECTION:
-				point.SetScanDirection((boost::uint16_t)it->sf->getValue(i));
+				point.SetScanDirection(static_cast<boost::uint16_t>(it->sf->getValue(i)));
 				break;
 			case LAS_FLIGHT_LINE_EDGE:
-				point.SetFlightLineEdge((boost::uint16_t)it->sf->getValue(i));
+				point.SetFlightLineEdge(static_cast<boost::uint16_t>(it->sf->getValue(i)));
 				break;
 			case LAS_CLASSIFICATION:
 				{
-					boost::uint32_t val = (boost::uint32_t)it->sf->getValue(i);
+					boost::uint32_t val = static_cast<boost::uint32_t>(it->sf->getValue(i));
 					classif.SetClass(val & 31);		//first 5 bits
 					classif.SetSynthetic(val & 32); //6th bit
 					classif.SetKeyPoint(val & 64);	//7th bit
@@ -293,13 +379,13 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 				}
 				break;
 			case LAS_SCAN_ANGLE_RANK:
-				point.SetScanAngleRank((boost::uint8_t)it->sf->getValue(i));
+				point.SetScanAngleRank(static_cast<boost::uint8_t>(it->sf->getValue(i)));
 				break;
 			case LAS_USER_DATA:
-				point.SetUserData((boost::uint8_t)it->sf->getValue(i));
+				point.SetUserData(static_cast<boost::uint8_t>(it->sf->getValue(i)));
 				break;
 			case LAS_POINT_SOURCE_ID:
-				point.SetPointSourceID((boost::uint16_t)it->sf->getValue(i));
+				point.SetPointSourceID(static_cast<boost::uint16_t>(it->sf->getValue(i)));
 				break;
 			case LAS_RED:
 			case LAS_GREEN:
@@ -307,19 +393,19 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 				assert(false);
 				break;
 			case LAS_TIME:
-				point.SetTime((double)it->sf->getValue(i));
+				point.SetTime(static_cast<double>(it->sf->getValue(i)));
 				break;
 			case LAS_CLASSIF_VALUE:
-				classif.SetClass((boost::uint32_t)it->sf->getValue(i));
+				classif.SetClass(static_cast<boost::uint32_t>(it->sf->getValue(i)));
 				break;
 			case LAS_CLASSIF_SYNTHETIC:
-				classif.SetSynthetic((boost::uint32_t)it->sf->getValue(i));
+				classif.SetSynthetic(static_cast<boost::uint32_t>(it->sf->getValue(i)));
 				break;
 			case LAS_CLASSIF_KEYPOINT:
-				classif.SetKeyPoint((boost::uint32_t)it->sf->getValue(i));
+				classif.SetKeyPoint(static_cast<boost::uint32_t>(it->sf->getValue(i)));
 				break;
 			case LAS_CLASSIF_WITHHELD:
-				classif.SetWithheld((boost::uint32_t)it->sf->getValue(i));
+				classif.SetWithheld(static_cast<boost::uint32_t>(it->sf->getValue(i)));
 				break;
 			case LAS_INVALID:
 			default:
@@ -331,7 +417,15 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 		//set classification (it's mandatory anyway ;)
 		point.SetClassification(classif);
 
-		writer->WritePoint(point);
+		try
+		{
+			writer->WritePoint(point);
+		}
+		catch (...)
+		{
+			result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+			break;
+		}
 
 		if (!nprogress.oneStep())
 			break;
@@ -340,12 +434,52 @@ CC_FILE_ERROR LASFilter::saveToFile(ccHObject* entity, QString filename)
 	delete writer;
 	ofs.close();
 
-	return CC_FERR_NO_ERROR;
+	return result;
 }
 
 QSharedPointer<LASOpenDlg> s_lasOpenDlg(0);
 
-CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+//! LAS 1.4 EVLR record
+struct EVLR
+{
+	unsigned char reserved[2]; // 2 bytes 
+	unsigned char data_type; // 1 byte 
+	unsigned char options; // 1 byte 
+	static const unsigned NAME_MAX_LENGTH = 32;
+	char name[NAME_MAX_LENGTH]; // 32 bytes 
+	unsigned char unused[4]; // 4 bytes 
+	double no_data[3]; // 24 = 3*8 bytes 
+	double min[3]; // 24 = 3*8 bytes 
+	double max[3]; // 24 = 3*8 bytes 
+	double scale[3]; // 24 = 3*8 bytes 
+	double offset[3]; // 24 = 3*8 bytes 
+	static const unsigned DESC_MAX_LENGTH = 32;
+	char description[DESC_MAX_LENGTH]; // 32 bytes 
+
+	//! Returns the field name
+	QString getName() const
+	{
+		//if the name uses the full record length (32 bytes)
+		//we must add a 0 at the end so as to make a valid string!
+		char tempName[NAME_MAX_LENGTH+1];
+		memcpy(tempName,name,NAME_MAX_LENGTH);
+		tempName[NAME_MAX_LENGTH] = 0;
+		return QString(tempName);
+	}
+
+	//! Returns the field description
+	QString getDescription() const
+	{
+		//if the name uses the full record length (32 bytes)
+		//we must add a 0 at the end so as to make a valid string!
+		char tempDesc[DESC_MAX_LENGTH+1];
+		memcpy(tempDesc,description,DESC_MAX_LENGTH);
+		tempDesc[DESC_MAX_LENGTH] = 0;
+		return QString(tempDesc);
+	}
+}; // total of 192 bytes 
+
+CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
 	//opening file
 	std::ifstream ifs;
@@ -361,6 +495,8 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 	liblas::Reader reader(liblas::ReaderFactory().CreateWithStream(ifs));
 	unsigned nbOfPoints = 0;
 	std::vector<std::string> dimensions;
+	const liblas::Dimension* extraDimension = 0;
+	std::vector<EVLR> evlrs;
 
 	try
 	{
@@ -381,7 +517,44 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 			liblas::index_by_position::const_iterator it = position_index.begin();
 			while (it != position_index.end())
 			{
-				dimensions.push_back(it->GetName());
+				//specific case: 'extra bytes' field
+				if (it->GetName() == "extra")
+				{
+					//look for the corresponding EVLRs
+					const std::vector<liblas::VariableRecord>& vlrs = header.GetVLRs();
+					{
+						for (size_t i=0; i<vlrs.size(); ++i)
+						{
+							const liblas::VariableRecord& vlr = vlrs[i];
+							if (vlr.GetUserId(false) == "LASF_Spec" && vlr.GetRecordId() == 4)
+							{
+								//EXTRA BYTES record length is 192
+								static unsigned EB_RECORD_SIZE = 192;
+								
+								assert((vlr.GetData().size() % EB_RECORD_SIZE) == 0);
+								size_t count = vlr.GetData().size() / EB_RECORD_SIZE;
+								const uint8_t* vlrData = &(vlr.GetData()[0]);
+								for (size_t j=0; j<count; ++j)
+								{
+									const EVLR* evlr = reinterpret_cast<const EVLR*>(vlrData + j*EB_RECORD_SIZE);
+									evlrs.push_back(*evlr);
+									ccLog::PrintDebug(QString("Extra bytes VLR found: %1 (%2)").arg(evlr->getName()).arg(evlr->getDescription()));
+								}
+							}
+						}
+					}
+
+					if (!evlrs.empty())
+					{
+						//we'll handle this one separately!
+						extraDimension = &(*it);
+					}
+				}
+				else
+				{
+					dimensions.push_back(it->GetName());
+				}
+				ccLog::PrintDebug(QString("\tDimension: %1 (size: %2 - type: %3)").arg(QString::fromStdString(it->GetName())).arg(it->GetByteSize()).arg(it->IsNumeric() ? (it->IsInteger() ? "integer" : "Float") : "Non numeric"));
 				it++;
 			}
 		}
@@ -406,7 +579,17 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 	if (!s_lasOpenDlg)
 		s_lasOpenDlg = QSharedPointer<LASOpenDlg>(new LASOpenDlg());
 	s_lasOpenDlg->setDimensions(dimensions);
-	if (alwaysDisplayLoadDialog && !s_lasOpenDlg->autoSkipMode() && !s_lasOpenDlg->exec())
+	s_lasOpenDlg->clearEVLRs();
+	if (extraDimension)
+	{
+		assert(!evlrs.empty());
+		for (size_t i=0; i<evlrs.size(); ++i)
+		{
+			s_lasOpenDlg->addEVLR(QString("%1 (%2)").arg(evlrs[i].getName()).arg(evlrs[i].getDescription()));
+		}
+	}
+
+	if (parameters.alwaysDisplayLoadDialog && !s_lasOpenDlg->autoSkipMode() && !s_lasOpenDlg->exec())
 	{
 		ifs.close();
 		return CC_FERR_CANCELED_BY_USER;
@@ -441,16 +624,27 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 	colorType rgb[3] = {0,0,0};
 
 	ccPointCloud* loadedCloud = 0;
-	std::vector<LasField> fieldsToLoad;
+	std::vector< LasField::Shared > fieldsToLoad;
 
 	//if the file is too big, we will chunck it in multiple parts
 	unsigned int fileChunkPos = 0;
 	unsigned int fileChunkSize = 0;
 
+	CC_FILE_ERROR result = CC_FERR_NO_ERROR;
+
 	while (true)
 	{
 		//if we reach the end of the file, or the max. cloud size limit (in which case we cerate a new chunk)
-		bool newPointAvailable = (nprogress.oneStep() && reader.ReadNextPoint());
+		bool newPointAvailable = false;
+		try
+		{
+			newPointAvailable = (nprogress.oneStep() && reader.ReadNextPoint());
+		}
+		catch (...)
+		{
+			result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+			break;
+		}
 
 		if (!newPointAvailable || pointsRead == fileChunkPos+fileChunkSize)
 		{
@@ -465,37 +659,41 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 
 					while (!fieldsToLoad.empty())
 					{
-						LasField& field = fieldsToLoad.back();
-						if (field.sf)
+						LasField::Shared& field = fieldsToLoad.back();
+						if (field && field->sf)
 						{
-							field.sf->computeMinAndMax();
+							field->sf->computeMinAndMax();
 
-							if (field.type == LAS_CLASSIFICATION
-								|| field.type == LAS_RETURN_NUMBER
-								|| field.type == LAS_NUMBER_OF_RETURNS)
+							if (	field->type == LAS_CLASSIFICATION
+								||	field->type == LAS_CLASSIF_VALUE
+								||	field->type == LAS_CLASSIF_SYNTHETIC
+								||	field->type == LAS_CLASSIF_KEYPOINT
+								||	field->type == LAS_CLASSIF_WITHHELD
+								||	field->type == LAS_RETURN_NUMBER
+								||	field->type == LAS_NUMBER_OF_RETURNS)
 							{
-								int cMin = (int)field.sf->getMin();
-								int cMax = (int)field.sf->getMax();
-								field.sf->setColorRampSteps(std::min<int>(cMax-cMin+1,256));
+								int cMin = static_cast<int>(field->sf->getMin());
+								int cMax = static_cast<int>(field->sf->getMax());
+								field->sf->setColorRampSteps(std::min<int>(cMax-cMin+1,256));
 								//classifSF->setMinSaturation(cMin);
 							}
-							else if (field.type == LAS_INTENSITY)
+							else if (field->type == LAS_INTENSITY)
 							{
-								field.sf->setColorScale(ccColorScalesManager::GetDefaultScale(ccColorScalesManager::GREY));
+								field->sf->setColorScale(ccColorScalesManager::GetDefaultScale(ccColorScalesManager::GREY));
 							}
 
-							int sfIndex = loadedCloud->addScalarField(field.sf);
+							int sfIndex = loadedCloud->addScalarField(field->sf);
 							if (!loadedCloud->hasDisplayedScalarField())
 							{
 								loadedCloud->setCurrentDisplayedScalarField(sfIndex);
 								loadedCloud->showSF(!thisChunkHasColors);
 							}
-							field.sf->release();
-							field.sf=0;
+							field->sf->release();
+							field->sf = 0;
 						}
 						else
 						{
-							ccLog::Warning(QString("[LAS FILE] All '%1' values were the same (%2)! We ignored them...").arg(LAS_FIELD_NAMES[field.type]).arg(field.firstValue));
+							ccLog::Warning(QString("[LAS FILE] All '%1' values were the same (%2)! We ignored them...").arg(field->type == LAS_EXTRA ? field->getName() : QString(LAS_FIELD_NAMES[field->type])).arg(field->firstValue));
 						}
 
 						fieldsToLoad.pop_back();
@@ -507,22 +705,22 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 
 					QString chunkName("unnamed - Cloud");
 					unsigned n = container.getChildrenNumber();
-					if (n!=0) //if we have more than one cloud, we append an index
+					if (n != 0) //if we have more than one cloud, we append an index
 					{
-						if (n==1)  //we must also update the first one!
+						if (n == 1)  //we must also update the first one!
 							container.getChild(0)->setName(chunkName+QString(" #1"));
 						chunkName += QString(" #%1").arg(n+1);
 					}
 					loadedCloud->setName(chunkName);
 
 					container.addChild(loadedCloud);
-					loadedCloud=0;
+					loadedCloud = 0;
 				}
 				else
 				{
 					//empty cloud?!
 					delete loadedCloud;
-					loadedCloud=0;
+					loadedCloud = 0;
 				}
 			}
 
@@ -544,33 +742,121 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 
 			//DGM: from now on, we only enable scalar fields when we detect a valid value!
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIFICATION))
-				fieldsToLoad.push_back(LasField(LAS_CLASSIFICATION,0,0,255)); //unsigned char: between 0 and 255
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_CLASSIFICATION,0,0,255))); //unsigned char: between 0 and 255
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIF_VALUE))
-				fieldsToLoad.push_back(LasField(LAS_CLASSIF_VALUE,0,0,31)); //5 bits: between 0 and 31
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_CLASSIF_VALUE,0,0,31))); //5 bits: between 0 and 31
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIF_SYNTHETIC))
-				fieldsToLoad.push_back(LasField(LAS_CLASSIF_SYNTHETIC,0,0,1)); //1 bit: 0 or 1
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_CLASSIF_SYNTHETIC,0,0,1))); //1 bit: 0 or 1
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIF_KEYPOINT))
-				fieldsToLoad.push_back(LasField(LAS_CLASSIF_KEYPOINT,0,0,1)); //1 bit: 0 or 1
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_CLASSIF_KEYPOINT,0,0,1))); //1 bit: 0 or 1
 			if (s_lasOpenDlg->doLoad(LAS_CLASSIF_WITHHELD))
-				fieldsToLoad.push_back(LasField(LAS_CLASSIF_WITHHELD,0,0,1)); //1 bit: 0 or 1
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_CLASSIF_WITHHELD,0,0,1))); //1 bit: 0 or 1
 			if (s_lasOpenDlg->doLoad(LAS_INTENSITY))
-				fieldsToLoad.push_back(LasField(LAS_INTENSITY,0,0,65535)); //16 bits: between 0 and 65536
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_INTENSITY,0,0,65535))); //16 bits: between 0 and 65536
 			if (s_lasOpenDlg->doLoad(LAS_TIME))
-				fieldsToLoad.push_back(LasField(LAS_TIME,0,0,-1.0)); //8 bytes (double)
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_TIME,0,0,-1.0))); //8 bytes (double)
 			if (s_lasOpenDlg->doLoad(LAS_RETURN_NUMBER))
-				fieldsToLoad.push_back(LasField(LAS_RETURN_NUMBER,1,1,7)); //3 bits: between 1 and 7
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_RETURN_NUMBER,1,1,7))); //3 bits: between 1 and 7
 			if (s_lasOpenDlg->doLoad(LAS_NUMBER_OF_RETURNS))
-				fieldsToLoad.push_back(LasField(LAS_NUMBER_OF_RETURNS,1,1,7)); //3 bits: between 1 and 7
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_NUMBER_OF_RETURNS,1,1,7))); //3 bits: between 1 and 7
 			if (s_lasOpenDlg->doLoad(LAS_SCAN_DIRECTION))
-				fieldsToLoad.push_back(LasField(LAS_SCAN_DIRECTION,0,0,1)); //1 bit: 0 or 1
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_SCAN_DIRECTION,0,0,1))); //1 bit: 0 or 1
 			if (s_lasOpenDlg->doLoad(LAS_FLIGHT_LINE_EDGE))
-				fieldsToLoad.push_back(LasField(LAS_FLIGHT_LINE_EDGE,0,0,1)); //1 bit: 0 or 1
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_FLIGHT_LINE_EDGE,0,0,1))); //1 bit: 0 or 1
 			if (s_lasOpenDlg->doLoad(LAS_SCAN_ANGLE_RANK))
-				fieldsToLoad.push_back(LasField(LAS_SCAN_ANGLE_RANK,0,-90,90)); //signed char: between -90 and +90
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_SCAN_ANGLE_RANK,0,-90,90))); //signed char: between -90 and +90
 			if (s_lasOpenDlg->doLoad(LAS_USER_DATA))
-				fieldsToLoad.push_back(LasField(LAS_USER_DATA,0,0,255)); //unsigned char: between 0 and 255
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_USER_DATA,0,0,255))); //unsigned char: between 0 and 255
 			if (s_lasOpenDlg->doLoad(LAS_POINT_SOURCE_ID))
-				fieldsToLoad.push_back(LasField(LAS_POINT_SOURCE_ID,0,0,65535)); //16 bits: between 0 and 65536
+				fieldsToLoad.push_back(LasField::Shared(new LasField(LAS_POINT_SOURCE_ID,0,0,65535))); //16 bits: between 0 and 65536
+
+			//Extra fields
+			if (s_lasOpenDlg->doLoad(LAS_EXTRA))
+			{
+				if (extraDimension)
+				{
+					assert(!evlrs.empty());
+					const size_t extraBytesOffset = extraDimension->GetByteOffset();
+					size_t localOffset = 0;
+					for (size_t i=0; i<evlrs.size(); ++i)
+					{
+						unsigned char data_type = evlrs[i].data_type;
+						//We split the fields with mutliple values in multiple scalar fields!
+						unsigned subFieldCount = 1;
+						if (evlrs[i].data_type > 20)
+						{
+							subFieldCount = 3;
+							data_type -= 20;
+						}
+						else if (evlrs[i].data_type > 20)
+						{
+							subFieldCount = 2;
+							data_type -= 10;
+						}
+
+						for (unsigned j=0; j<subFieldCount; ++j)
+						{
+							size_t dataOffset = extraBytesOffset + localOffset;
+
+							//move forward (and check that the byte count is ok!
+							assert(data_type <= ExtraLasField::EXTRA_DOUBLE);
+							ExtraLasField::Type type = static_cast<ExtraLasField::Type>(data_type);
+							localOffset += ExtraLasField::GetSizeBytes(type);
+							
+							if (localOffset <= extraDimension->GetByteSize())
+							{
+								if (s_lasOpenDlg->doLoadEVLR(i))
+								{
+									QString fieldName(evlrs[i].getName());
+									if (subFieldCount > 1)
+										fieldName += QString(".%1").arg(j+1);
+
+									const unsigned char options = evlrs[i].options;
+
+									//read the first optional informations
+									double defaultVal = 0;
+									double minVal = 0;
+									double maxVal = -1.0;
+									//DGM: the first 3 (no_data, min and max) are a bit
+									//dangerous to use because we don't know if they have
+									//been saved as double values (as Laspy do!) or if
+									//the same type as ExtraLasField::Type is used!
+									if (false)
+									{
+										if (options & 1) //1st bit = no_data_bit
+											defaultVal = evlrs[i].no_data[j];
+										if (options & 2) //2nd bit = min_bit
+											minVal = evlrs[i].min[j];
+										if (options & 3) //3rd bit = max_bit
+											maxVal = evlrs[i].max[j];
+									}
+
+									ExtraLasField* eField = new ExtraLasField(fieldName,type,static_cast<int>(dataOffset),defaultVal,minVal,maxVal);
+
+									//read the other optional information (scale and offset)
+									{
+										if (options & 4) //4th bit = scale_bit
+											eField->scale = evlrs[i].scale[j];
+										if (options & 5) //5th bit = offset_bit
+											eField->offset = evlrs[i].offset[j];
+									}
+									fieldsToLoad.push_back(LasField::Shared(eField));
+								}
+							}
+							else
+							{
+								ccLog::Warning("[LAS] Internal consistency of extra fields is broken! (more values defined that available types...)");
+								break;
+							}
+						}
+					}
+				}
+				else
+				{
+					//shouldn't happen:
+					assert(false);
+				}
+			}
 		}
 
 		assert(newPointAvailable);
@@ -580,22 +866,10 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 		if (pointsRead == 0)
 		{
 			CCVector3d P( p.GetX(),p.GetY(),p.GetZ() );
-			bool shiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
-			if (shiftAlreadyEnabled)
-				Pshift = *coordinatesShift;
-			bool applyAll = false;
-			if (	sizeof(PointCoordinateType) < 8
-				&&	ccCoordinatesShiftManager::Handle(P,0,alwaysDisplayLoadDialog,shiftAlreadyEnabled,Pshift,0,&applyAll))
+			if (HandleGlobalShift(P,Pshift,parameters))
 			{
 				loadedCloud->setGlobalShift(Pshift);
 				ccLog::Warning("[LASFilter::loadFile] Cloud has been recentered! Translation: (%.2f,%.2f,%.2f)",Pshift.x,Pshift.y,Pshift.z);
-
-				//we save coordinates shift information
-				if (applyAll && coordinatesShiftEnabled && coordinatesShift)
-				{
-					*coordinatesShiftEnabled = true;
-					*coordinatesShift = Pshift;
-				}
 			}
 		}
 
@@ -646,8 +920,8 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 				if (!forced8bitRgbMode && colorCompBitShift == 0)
 				{
 					if (	(col[0] & 0xFF00)
-						||  (col[1] & 0xFF00)
-						||  (col[2] & 0xFF00))
+						||	(col[1] & 0xFF00)
+						||	(col[2] & 0xFF00))
 					{
 						//the color components are on 16 bits!
 						ccLog::Print("[LAS FILE] Color components are coded on 16 bits");
@@ -667,10 +941,12 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 		}
 		
 		//additional fields
-		for (std::vector<LasField>::iterator it = fieldsToLoad.begin(); it != fieldsToLoad.end(); ++it)
+		for (std::vector<LasField::Shared>::iterator it = fieldsToLoad.begin(); it != fieldsToLoad.end(); ++it)
 		{
+			LasField::Shared field = *it;
+			
 			double value = 0.0;
-			switch (it->type)
+			switch (field->type)
 			{
 			case LAS_X:
 			case LAS_Y:
@@ -678,31 +954,78 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 				assert(false);
 				break;
 			case LAS_INTENSITY:
-				value = (double)p.GetIntensity();
+				value = static_cast<double>(p.GetIntensity());
 				break;
 			case LAS_RETURN_NUMBER:
-				value = (double)p.GetReturnNumber();
+				value = static_cast<double>(p.GetReturnNumber());
 				break;
 			case LAS_NUMBER_OF_RETURNS:
-				value = (double)p.GetNumberOfReturns();
+				value = static_cast<double>(p.GetNumberOfReturns());
 				break;
 			case LAS_SCAN_DIRECTION:
-				value = (double)p.GetScanDirection();
+				value = static_cast<double>(p.GetScanDirection());
 				break;
 			case LAS_FLIGHT_LINE_EDGE:
-				value = (double)p.GetFlightLineEdge();
+				value = static_cast<double>(p.GetFlightLineEdge());
 				break;
 			case LAS_CLASSIFICATION:
-				value = (double)p.GetClassification().GetClass();
+				value = static_cast<double>(p.GetClassification().GetClass());
 				break;
 			case LAS_SCAN_ANGLE_RANK:
-				value = (double)p.GetScanAngleRank();
+				value = static_cast<double>(p.GetScanAngleRank());
 				break;
 			case LAS_USER_DATA:
-				value = (double)p.GetUserData();
+				value = static_cast<double>(p.GetUserData());
 				break;
 			case LAS_POINT_SOURCE_ID:
-				value = (double)p.GetPointSourceID();
+				value = static_cast<double>(p.GetPointSourceID());
+				break;
+			case LAS_EXTRA:
+				{
+					//we must dynamically extract the value in the right format
+					ExtraLasField* extraField = static_cast<ExtraLasField*>((*it).data());
+					assert(extraDimension && extraField->dataOffset < static_cast<int>(p.GetData().size()));
+					const uint8_t* v = &(p.GetData()[extraField->dataOffset]);
+
+					switch(extraField->valType)
+					{
+					case ExtraLasField::EXTRA_UINT8:
+						value = static_cast<double>(*(reinterpret_cast<const uint8_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_INT8:
+						value = static_cast<double>(*(reinterpret_cast<const int8_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_UINT16:
+						value = static_cast<double>(*(reinterpret_cast<const uint16_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_INT16:
+						value = static_cast<double>(*(reinterpret_cast<const int16_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_UINT32:
+						value = static_cast<double>(*(reinterpret_cast<const uint32_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_INT32:
+						value = static_cast<double>(*(reinterpret_cast<const int32_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_UINT64:
+						value = static_cast<double>(*(reinterpret_cast<const uint64_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_INT64:
+						value = static_cast<double>(*(reinterpret_cast<const int64_t*>(v)));
+						break;
+					case ExtraLasField::EXTRA_FLOAT:
+						value = static_cast<double>(*(reinterpret_cast<const float*>(v)));
+						break;
+					case ExtraLasField::EXTRA_DOUBLE:
+						value = static_cast<double>(*(reinterpret_cast<const double*>(v)));
+						break;
+					default:
+						assert(false);
+						break;
+					}
+
+					value = extraField->offset + extraField->scale * value;
+				}
 				break;
 			case LAS_RED:
 			case LAS_GREEN:
@@ -713,16 +1036,16 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 				value = p.GetTime();
 				break;
 			case LAS_CLASSIF_VALUE:
-				value = (double)(p.GetClassification().GetClass() & 31); //5 bits
+				value = static_cast<double>(p.GetClassification().GetClass() & 31); //5 bits
 				break;
 			case LAS_CLASSIF_SYNTHETIC:
-				value = (double)(p.GetClassification().GetClass() & 32); //bit #6
+				value = static_cast<double>(p.GetClassification().GetClass() & 32); //bit #6
 				break;
 			case LAS_CLASSIF_KEYPOINT:
-				value = (double)(p.GetClassification().GetClass() & 64); //bit #7
+				value = static_cast<double>(p.GetClassification().GetClass() & 64); //bit #7
 				break;
 			case LAS_CLASSIF_WITHHELD:
-				value = (double)(p.GetClassification().GetClass() & 128); //bit #8
+				value = static_cast<double>(p.GetClassification().GetClass() & 128); //bit #8
 				break;
 			case LAS_INVALID:
 			default:
@@ -730,38 +1053,38 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 				break;
 			}
 
-			if (it->sf)
+			if (field->sf)
 			{
 				ScalarType s = static_cast<ScalarType>(value);
-				it->sf->addElement(s);
+				field->sf->addElement(s);
 			}
 			else
 			{
 				//first point? we track its value
 				if (loadedCloud->size() == 1)
 				{
-					it->firstValue = value;
+					field->firstValue = value;
 				}
 				
-				if (!ignoreDefaultFields || value != it->firstValue || it->firstValue != it->defaultValue)
+				if (!ignoreDefaultFields || value != field->firstValue || (field->firstValue != field->defaultValue && field->firstValue >= field->minValue))
 				{
-					it->sf = new ccScalarField(it->getName());
-					if (it->sf->reserve(fileChunkSize))
+					field->sf = new ccScalarField(qPrintable(field->getName()));
+					if (field->sf->reserve(fileChunkSize))
 					{
-						it->sf->link();
+						field->sf->link();
 						//we must set the value (firstClassifValue) of all the previously skipped points
-						ScalarType firstS = static_cast<ScalarType>(it->firstValue);
+						ScalarType firstValue = static_cast<ScalarType>(field->firstValue);
 						for (unsigned i=0; i<loadedCloud->size()-1; ++i)
-							it->sf->addElement(firstS);
+							field->sf->addElement(firstValue);
 
 						ScalarType s = static_cast<ScalarType>(value);
-						it->sf->addElement(s);
+						field->sf->addElement(s);
 					}
 					else
 					{
-						ccLog::Warning(QString("[LAS FILE] Not enough memory: '%1' field will be ignored!").arg(LAS_FIELD_NAMES[it->type]));
-						it->sf->release();
-						it->sf = 0;
+						ccLog::Warning(QString("[LAS FILE] Not enough memory: '%1' field will be ignored!").arg(LAS_FIELD_NAMES[field->type]));
+						field->sf->release();
+						field->sf = 0;
 					}
 				}
 			}
@@ -772,7 +1095,7 @@ CC_FILE_ERROR LASFilter::loadFile(QString filename, ccHObject& container, bool a
 
 	ifs.close();
 
-	return CC_FERR_NO_ERROR;
+	return result;
 }
 
 #endif

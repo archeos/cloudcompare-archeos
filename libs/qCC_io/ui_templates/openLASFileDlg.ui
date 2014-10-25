@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>260</width>
-    <height>522</height>
+    <width>300</width>
+    <height>542</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -92,35 +92,88 @@
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <layout class="QVBoxLayout" name="verticalLayout_2">
-          <item>
-           <widget class="QCheckBox" name="classifCheckBox">
-            <property name="text">
-             <string>Classification</string>
-            </property>
-            <property name="checked">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <spacer name="verticalSpacer">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-         </layout>
+       <layout class="QFormLayout" name="formLayout">
+        <item row="1" column="0">
+         <widget class="QCheckBox" name="timeCheckBox">
+          <property name="text">
+           <string>Time</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
         </item>
-        <item>
+        <item row="1" column="1">
+         <widget class="QCheckBox" name="pointSourceIDCheckBox">
+          <property name="text">
+           <string>Point source ID</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QCheckBox" name="numberOfReturnsCheckBox">
+          <property name="text">
+           <string>Number of returns</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QCheckBox" name="returnNumberCheckBox">
+          <property name="text">
+           <string>Return number</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QCheckBox" name="scanDirFlagCheckBox">
+          <property name="text">
+           <string>Scan direction flag</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QCheckBox" name="edgeOfFlightCheckBox">
+          <property name="text">
+           <string>Edge of flight line</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QCheckBox" name="scanAngleRankCheckBox">
+          <property name="text">
+           <string>Scan angle rank</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QCheckBox" name="userDataCheckBox">
+          <property name="text">
+           <string>User data</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
          <widget class="QGroupBox" name="decomposeClassifGroupBox">
           <property name="title">
            <string>decompose</string>
@@ -175,85 +228,37 @@
           </layout>
          </widget>
         </item>
+        <item row="0" column="0">
+         <widget class="QCheckBox" name="classifCheckBox">
+          <property name="text">
+           <string>Classification</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="extraFieldGroupBox">
+     <property name="title">
+      <string>Load additional field(s)</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="checked">
+      <bool>false</bool>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
-       <widget class="QCheckBox" name="timeCheckBox">
-        <property name="text">
-         <string>Time</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="returnNumberCheckBox">
-        <property name="text">
-         <string>Return number</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="numberOfReturnsCheckBox">
-        <property name="text">
-         <string>Number of returns</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="scanDirFlagCheckBox">
-        <property name="text">
-         <string>Scan direction flag</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="edgeOfFlightCheckBox">
-        <property name="text">
-         <string>Edge of flight line</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="scanAngleRankCheckBox">
-        <property name="text">
-         <string>Scan angle rank</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="userDataCheckBox">
-        <property name="text">
-         <string>User data</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="pointSourceIDCheckBox">
-        <property name="text">
-         <string>Point source ID</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
+       <widget class="QListWidget" name="evlrListWidget">
+        <property name="selectionMode">
+         <enum>QAbstractItemView::MultiSelection</enum>
         </property>
        </widget>
       </item>

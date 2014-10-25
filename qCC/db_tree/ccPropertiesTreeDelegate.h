@@ -32,7 +32,6 @@ class ccGenericPrimitive;
 class ccOctree;
 class ccKdTree;
 class ccImage;
-class ccCalibratedImage;
 class ccGBLSensor;
 class ccCameraSensor;
 class ccMaterialSet;
@@ -55,7 +54,7 @@ class ccPropertiesTreeDelegate : public QStyledItemDelegate
 public:
 
 	//! Delegate items roles
-	enum CC_PROPERTY_ROLE { OBJECT_NO_PROPERTY		= 0				,
+	enum CC_PROPERTY_ROLE { OBJECT_NO_PROPERTY					= 0	,
 							OBJECT_NAME								,
 							OBJECT_VISIBILITY						,
 							OBJECT_CURRENT_DISPLAY					,
@@ -73,7 +72,9 @@ public:
 							OBJECT_CURRENT_COLOR_RAMP				,
 							OBJECT_IMAGE_ALPHA						,
 							OBJECT_APPLY_IMAGE_VIEWPORT				,
+							OBJECT_APPLY_SENSOR_VIEWPORT			,
 							OBJECT_CLOUD_SF_EDITOR					,
+							OBJECT_SENSOR_MATRIX_EDITOR				,
 							OBJECT_SENSOR_DISPLAY_SCALE				,
 							OBJECT_COLOR_RAMP_STEPS					,
 							OBJECT_MATERIALS						,
@@ -81,6 +82,10 @@ public:
 							OBJECT_LABEL_DISP_2D					,
 							OBJECT_LABEL_DISP_3D					,
 							OBJECT_PRIMITIVE_PRECISION				,
+							OBJECT_SPHERE_RADIUS					,
+							OBJECT_CONE_HEIGHT						,
+							OBJECT_CONE_BOTTOM_RADIUS				,
+							OBJECT_CONE_TOP_RADIUS					,
 							OBJECT_CLOUD_POINT_SIZE					,
 							OBJECT_NAME_IN_3D						,
 							OBJECT_FACET_CONTOUR					,
@@ -90,6 +95,8 @@ public:
 							OBJECT_SHOW_TRANS_BUFFER_PATH			,
 							OBJECT_SHOW_TRANS_BUFFER_TRIHDERONS		,
 							OBJECT_TRANS_BUFFER_TRIHDERONS_SCALE	,
+							OBJECT_HISTORY_MATRIX_EDITOR			,
+							TREE_VIEW_HEADER						,
 	};
 
 	//! Default constructor
@@ -126,8 +133,13 @@ protected slots:
 	void octreeDisplayTypeChanged(int);
 	void octreeDisplayedLevelChanged(int);
 	void primitivePrecisionChanged(int);
+	void sphereRadiusChanged(double);
+	void coneHeightChanged(double);
+	void coneBottomRadiusChanged(double);
+	void coneTopRadiusChanged(double);
 	void imageAlphaChanged(int);
 	void applyImageViewport();
+	void applySensorViewport();
 	void applyLabelViewport();
 	void updateDisplay();
 	void objectDisplayChanged(const QString &);
@@ -142,6 +154,7 @@ protected:
 
 	void addSeparator(QString title);
 	void appendRow(QStandardItem* leftItem, QStandardItem* rightItem, bool openPersistentEditor = false);
+	void appendWideRow(QStandardItem* item, bool openPersistentEditor = true);
 
 	void fillWithHObject(ccHObject*);
 	void fillWithPointCloud(ccGenericPointCloud*);
@@ -155,7 +168,6 @@ protected:
 	void fillWithPointOctree(ccOctree*);
 	void fillWithPointKdTree(ccKdTree*);
 	void fillWithImage(ccImage*);
-	void fillWithCalibratedImage(ccCalibratedImage*);
 	void fillWithLabel(cc2DLabel*);
 	void fillWithViewportObject(cc2DViewportObject*);
 	void fillWithGBLSensor(ccGBLSensor*);
@@ -164,6 +176,9 @@ protected:
 	void fillWithShareable(CCShareable*);
 	void fillWithMetaData(ccObject*);
 	template<int N, class ElementType> void fillWithChunkedArray(ccChunkedArray<N,ElementType>*);
+
+	//! Returns whether the editor is wide (i.e. spans on two columns) or not
+	bool isWideEditor(int itemData) const;
 
 	//! Updates the current model (assuming object is the same)
 	void updateModel();

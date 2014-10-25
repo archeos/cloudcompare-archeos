@@ -37,8 +37,7 @@ ccExtru::ccExtru(const std::vector<CCVector2>& profile,
 	m_profile = profile;
 	assert(m_profile.size()>2);
 
-	buildUp();
-	applyTransformationToVertices();
+	updateRepresentation();
 }
 
 ccExtru::ccExtru(QString name/*="Plane"*/)
@@ -54,7 +53,7 @@ ccGenericPrimitive* ccExtru::clone() const
 
 bool ccExtru::buildUp()
 {
-	unsigned count = (unsigned)m_profile.size();
+	unsigned count = static_cast<unsigned>(m_profile.size());
 	if (count < 3)
 		return false;
 
@@ -65,9 +64,10 @@ bool ccExtru::buildUp()
 	if (m_profile.back().x == m_profile.front().x &&  m_profile.back().y == m_profile.front().y)
 		--count;
 
-	if (!mesh.build(m_profile,count,true))
+	char errorStr[1024];
+	if (!mesh.buildMesh(m_profile,count,errorStr))
 	{
-		ccLog::Error("[ccPlane::buildUp] Profile triangulation failed");
+		ccLog::Warning(QString("[ccPlane::buildUp] Profile triangulation failed (CClib said: '%1'").arg(errorStr));
 		return false;
 	}
 

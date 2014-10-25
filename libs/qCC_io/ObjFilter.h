@@ -20,21 +20,25 @@
 
 #include "FileIOFilter.h"
 
-class ccGenericMesh;
-
 //! Wavefront meshes file I/O filter
-class ObjFilter : public FileIOFilter
+class QCC_IO_LIB_API ObjFilter : public FileIOFilter
 {
 public:
 
+	//static accessors
+	static inline QString GetFileFilter() { return "OBJ mesh (*.obj)"; }
+	static inline QString GetDefaultExtension() { return "obj"; }
+
 	//inherited from FileIOFilter
-	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
+	virtual bool importSupported() const { return true; }
+	virtual bool exportSupported() const { return true; }
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
 	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
+	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
+	virtual bool canLoadExtension(QString upperCaseExt) const;
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const;
 
-protected:
-
-	//! Custom save method
-	CC_FILE_ERROR saveToFile(ccGenericMesh* mesh, FILE *theFile, QString filename);
 };
 
-#endif
+#endif //CC_OBJ_FILTER_HEADER

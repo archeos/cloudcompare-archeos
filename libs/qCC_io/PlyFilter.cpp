@@ -19,7 +19,6 @@
 
 //Local
 #include "PlyOpenDlg.h"
-#include "ccCoordinatesShiftManager.h"
 
 //Qt
 #include <QProgressDialog>
@@ -49,6 +48,23 @@
 #endif
 
 using namespace CCLib;
+
+bool PlyFilter::canLoadExtension(QString upperCaseExt) const
+{
+	return (upperCaseExt == "PLY");
+}
+
+bool PlyFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const
+{
+	if (	type == CC_TYPES::MESH
+		||	type == CC_TYPES::POINT_CLOUD)
+	{
+		multiple = false;
+		exclusive = true;
+		return true;
+	}
+	return false;
+}
 
 CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, QString filename)
 {
@@ -223,7 +239,7 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, QString filename, e_ply_s
 	if (material)
 	{
 		//Material without texture?
-		if (material->texture.isNull())
+		if (!material->hasTexture())
 		{
 			uniqueColor[0] = (colorType)(material->diffuseFront[0]*MAX_COLOR_COMP);
 			uniqueColor[1] = (colorType)(material->diffuseFront[1]*MAX_COLOR_COMP);
@@ -310,13 +326,16 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, QString filename, e_ply_s
 			//texture & texture coordinates?
 			if (material)
 			{
-				assert(!material->texture.isNull() && mesh->getTexCoordinatesTable());
+				assert(material->hasTexture() && mesh->getTexCoordinatesTable());
+				QFileInfo fileInfo(material->getAbsoluteFilename());
+				QString defaultTextureName = fileInfo.fileName();
+				if (fileInfo.suffix().isNull())
+					defaultTextureName += QString(".png");
 				//try to save the texture!
-				const QString defaultTextureName("cc_ply_texture.png");
-				QString textureFilePath = QFileInfo(filename).absolutePath()+QString('/')+defaultTextureName;
-				if (!material->texture.mirrored().save(textureFilePath))
+				QString textureFilePath = QFileInfo(filename).absolutePath() + QString('/') + defaultTextureName;
+				if (!material->getTexture().mirrored().save(textureFilePath)) //mirrored --> see ccMaterial
 				{
-					ccLog::Error("Failed to save texture!");
+					ccLog::Warning(QString("[PLY] Failed to save texture in '%1'!").arg(textureFilePath));
 					material = 0;
 				}
 				else
@@ -325,6 +344,8 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, QString filename, e_ply_s
 					result = ply_add_comment(ply,qPrintable(QString("TEXTUREFILE %1").arg(defaultTextureName)));
 					//DGM FIXME: is this the right name?
 					result = ply_add_list_property(ply, "texcoord", PLY_UCHAR, PLY_FLOAT); //'texcoord' to mimick Photoscan
+					
+					ccLog::Print(QString("[PLY] Texture file: %1").arg(textureFilePath));
 				}
 			}
 		}
@@ -427,9 +448,7 @@ CC_FILE_ERROR PlyFilter::saveToFile(ccHObject* entity, QString filename, e_ply_s
 static CCVector3d s_Point(0,0,0);
 static int s_PointCount = 0;
 static bool s_PointDataCorrupted = false;
-static bool s_ShiftAlreadyEnabled = false;
-static bool s_AlwaysDisplayLoadDialog = true;
-static bool s_ShiftApplyAll = false;
+static FileIOFilter::LoadParameters s_loadParameters;
 static CCVector3d s_Pshift(0,0,0);
 
 static int vertex_cb(p_ply_argument argument)
@@ -459,9 +478,7 @@ static int vertex_cb(p_ply_argument argument)
 		//first point: check for 'big' coordinates
 		if (s_PointCount == 0)
 		{
-			s_ShiftApplyAll = false; //should already be false!
-			if (	sizeof(PointCoordinateType) < 8
-				&&	ccCoordinatesShiftManager::Handle(s_Point,0,s_AlwaysDisplayLoadDialog,s_ShiftAlreadyEnabled,s_Pshift,0,&s_ShiftApplyAll))
+			if (FileIOFilter::HandleGlobalShift(s_Point,s_Pshift,s_loadParameters))
 			{
 				cloud->setGlobalShift(s_Pshift);
 				ccLog::Warning("[PLYFilter::loadFile] Cloud (vertices) has been recentered! Translation: (%.2f,%.2f,%.2f)",s_Pshift.x,s_Pshift.y,s_Pshift.z);
@@ -626,12 +643,12 @@ static int face_cb(p_ply_argument argument)
 		s_unsupportedPolygonType = true;
 		return 1;
 	}
-	if (value_index<0 || value_index>2)
+	if (value_index < 0 || value_index > 2)
 		return 1;
 
-	s_tri[value_index] = (unsigned)ply_get_argument_value(argument);
+	s_tri[value_index] = static_cast<unsigned>(ply_get_argument_value(argument));
 
-	if (value_index==2)
+	if (value_index == 2)
 	{
 		mesh->addTriangle(s_tri[0],s_tri[1],s_tri[2]);
 		++s_triCount;
@@ -648,7 +665,7 @@ static unsigned s_texCoordCount = 0;
 static bool s_invalidTexCoordinates = false;
 static int texCoords_cb(p_ply_argument argument)
 {
-	TextureCoordsContainer* texCoords=0;
+	TextureCoordsContainer* texCoords = 0;
 	ply_get_argument_user_data(argument, (void**)(&texCoords), NULL);
 	assert(texCoords);
 	if (!texCoords)
@@ -662,12 +679,12 @@ static int texCoords_cb(p_ply_argument argument)
 		s_invalidTexCoordinates = true;
 		return 1;
 	}
-	if (value_index<0 || value_index>5)
+	if (value_index < 0 || value_index > 5)
 		return 1;
 
-	s_texCoord[value_index] = (float)ply_get_argument_value(argument);
+	s_texCoord[value_index] = static_cast<float>(ply_get_argument_value(argument));
 
-	if (((value_index+1)%2)==0)
+	if (((value_index+1) % 2) == 0)
 	{
 		texCoords->addElement(s_texCoord+value_index-1);
 		++s_texCoordCount;
@@ -679,7 +696,7 @@ static int texCoords_cb(p_ply_argument argument)
 	return 1;
 }
 
-CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog/*=true*/, bool* coordinatesShiftEnabled/*=0*/, CCVector3d* coordinatesShift/*=0*/)
+CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
 	//reset statics!
 	s_triCount = 0;
@@ -692,13 +709,8 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool a
 	s_NormalCount = 0;
 	s_PointCount = 0;
 	s_PointDataCorrupted = false;
-	s_AlwaysDisplayLoadDialog = alwaysDisplayLoadDialog;
-	s_ShiftApplyAll = false;
-	s_ShiftAlreadyEnabled = (coordinatesShiftEnabled && *coordinatesShiftEnabled && coordinatesShift);
-	if (s_ShiftAlreadyEnabled)
-		s_Pshift = *coordinatesShift;
-	else
-		s_Pshift = CCVector3d(0,0,0);
+	s_loadParameters = parameters;
+	s_Pshift = CCVector3d(0,0,0);
 
 	/****************/
 	/***  Header  ***/
@@ -949,9 +961,10 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool a
 	//we need at least 2 coordinates!
 	if (stdPropsCount < 2)
 	{
-		return CC_FERR_BAD_ENTITY_TYPE;
+		ccLog::Warning("[PLY] This ply file has less than 2 properties defined! (not even X and Y ;)");
+		return CC_FERR_MALFORMED_FILE;
 	}
-	else if (stdPropsCount < 4 && !alwaysDisplayLoadDialog)
+	else if (stdPropsCount < 4 && !parameters.alwaysDisplayLoadDialog)
 	{
 		//brute force heuristic
 		xIndex = 1;
@@ -976,11 +989,12 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool a
 					++assignedListProperties;
 		}
 
-		if (	alwaysDisplayLoadDialog
+		if (	parameters.alwaysDisplayLoadDialog
 			||	stdPropsCount > assignedStdProperties+1		//+1 because of the first item in the combo box ('none')
 			||	listPropsCount > assignedListProperties+1 )	//+1 because of the first item in the combo box ('none')
 		{
 			PlyOpenDlg pod/*(MainWindow::TheInstance())*/;
+
 			pod.plyTypeEdit->setText(e_ply_storage_mode_names[storage_mode]);
 			pod.elementsEdit->setText(QString::number(pointElements.size()));
 			pod.propertiesEdit->setText(QString::number(listProperties.size()+stdProperties.size()));
@@ -989,30 +1003,39 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool a
 			pod.setDefaultComboItems(stdPropsText);
 			pod.setListComboItems(listPropsText);
 
-			//Set default/guessed element
-			pod.xComboBox->setCurrentIndex(xIndex);
-			pod.yComboBox->setCurrentIndex(yIndex);
-			pod.zComboBox->setCurrentIndex(zIndex);
+			//try to restore previous context (if any)
+			bool hasAPreviousContext = false;
+			if (!pod.restorePreviousContext(hasAPreviousContext))
+			{
+				if (hasAPreviousContext)
+					ccLog::Warning("[PLY] Too many differences with the previous file, we reset the dialog.");
+				//Set default/guessed element
+				pod.xComboBox->setCurrentIndex(xIndex);
+				pod.yComboBox->setCurrentIndex(yIndex);
+				pod.zComboBox->setCurrentIndex(zIndex);
 
-			pod.rComboBox->setCurrentIndex(rIndex);
-			pod.gComboBox->setCurrentIndex(gIndex);
-			pod.bComboBox->setCurrentIndex(bIndex);
+				pod.rComboBox->setCurrentIndex(rIndex);
+				pod.gComboBox->setCurrentIndex(gIndex);
+				pod.bComboBox->setCurrentIndex(bIndex);
 
-			pod.iComboBox->setCurrentIndex(iIndex);
+				pod.iComboBox->setCurrentIndex(iIndex);
 
-			pod.sfComboBox->setCurrentIndex(sfPropIndexes.empty() ? 0 : sfPropIndexes.front());
-			for (size_t j=1; j<sfPropIndexes.size(); ++j)
-				pod.addSFComboBox(sfPropIndexes[j]);
-			
-			pod.nxComboBox->setCurrentIndex(nxIndex);
-			pod.nyComboBox->setCurrentIndex(nyIndex);
-			pod.nzComboBox->setCurrentIndex(nzIndex);
+				pod.sfComboBox->setCurrentIndex(sfPropIndexes.empty() ? 0 : sfPropIndexes.front());
+				for (size_t j=1; j<sfPropIndexes.size(); ++j)
+					pod.addSFComboBox(sfPropIndexes[j]);
 
-			pod.facesComboBox->setCurrentIndex(facesIndex);
-			pod.textCoordsComboBox->setCurrentIndex(texCoordsIndex);
+				pod.nxComboBox->setCurrentIndex(nxIndex);
+				pod.nyComboBox->setCurrentIndex(nyIndex);
+				pod.nzComboBox->setCurrentIndex(nzIndex);
 
-			//We execute dialog
-			if (alwaysDisplayLoadDialog && !pod.exec())
+				pod.facesComboBox->setCurrentIndex(facesIndex);
+				pod.textCoordsComboBox->setCurrentIndex(texCoordsIndex);
+			}
+
+			//We show the dialog (or we try to skip it ;)
+			if (parameters.alwaysDisplayLoadDialog
+				&& !pod.canBeSkipped()
+				&& !pod.exec())
 			{
 				ply_close(ply);
 				return CC_FERR_CANCELED_BY_USER;
@@ -1374,7 +1397,7 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool a
 	}
 
 	QProgressDialog pDlg(QString("Loading in progress..."),QString(),0,0);
-	if (alwaysDisplayLoadDialog)
+	if (parameters.alwaysDisplayLoadDialog)
 	{
 		pDlg.setWindowTitle("PLY file");
 		pDlg.show();
@@ -1420,12 +1443,8 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool a
 		texCoords=0;
 	}
 
-	//we save coordinates shift information
-	if (s_ShiftApplyAll && coordinatesShiftEnabled && coordinatesShift)
-	{
-		*coordinatesShiftEnabled = true;
-		*coordinatesShift = s_Pshift;
-	}
+	//we save parameters
+	parameters = s_loadParameters;
 
 	//we update scalar field(s)
 	{
@@ -1503,19 +1522,20 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, bool a
 		{
 			if (!textureFileName.isEmpty())
 			{
-				QString textureFilePath = QFileInfo(filename).absolutePath()+QString('/')+textureFileName;
-				QImage texture = QImage(textureFilePath).mirrored();
-				if (!texture.isNull())
+				QString textureFilePath = QFileInfo(filename).absolutePath() + QString('/') + textureFileName;
+				ccMaterial material(textureFileName);
+				if (material.setTexture(textureFilePath))
 				{
 					if (mesh->reservePerTriangleTexCoordIndexes() && mesh->reservePerTriangleMtlIndexes())
 					{
+						const QImage texture = material.getTexture();
 						ccLog::Print(QString("[PLY][Texture] Successfully loaded texture '%1' (%2x%3 pixels)").arg(textureFileName).arg(texture.width()).arg(texture.height()));
 						//materials
 						ccMaterialSet* materials = new ccMaterialSet("materials");
-						ccMaterial material(textureFileName);
-						material.texture = texture;
-						memcpy(material.specular,ccColor::bright,sizeof(float)*4);
-						memcpy(material.ambient,ccColor::bright,sizeof(float)*4);
+						memcpy(material.diffuseFront,ccColor::bright,sizeof(float)*4);
+						memcpy(material.diffuseBack,ccColor::bright,sizeof(float)*4);
+						memcpy(material.specular,ccColor::darker,sizeof(float)*4);
+						memcpy(material.ambient,ccColor::darker,sizeof(float)*4);
 						materials->push_back(material);
 						mesh->setMaterialSet(materials);
 						mesh->setTexCoordinatesTable(texCoords);

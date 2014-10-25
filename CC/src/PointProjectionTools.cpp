@@ -27,6 +27,7 @@
 
 //system
 #include <assert.h>
+#include <string.h>
 
 using namespace CCLib;
 
@@ -106,7 +107,7 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 	if (!theCloud)
 		return 0;
 
-	unsigned count=theCloud->size();
+	unsigned count = theCloud->size();
 
 	SimpleCloud* cloud = new SimpleCloud();
 	if (!cloud->reserve(count)) //not enough memory
@@ -115,7 +116,7 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 	uchar dim1 = (dim>0 ? dim-1 : 2);
 	uchar dim2 = (dim<2 ? dim+1 : 0);
 
-	float tan_alpha = tan(alpha*(float)(CC_DEG_TO_RAD));
+	float tan_alpha = tan(alpha*static_cast<float>(CC_DEG_TO_RAD));
 	//float cos_alpha = cos(alpha*CC_DEG_TO_RAD);
 	//float sin_alpha = sin(alpha*CC_DEG_TO_RAD);
 	float q = 1.0f/(1.0f+tan_alpha*tan_alpha);
@@ -138,7 +139,7 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 		progressCb->start();
 	}
 
-	for (unsigned i=0;i<count;i++)
+	for (unsigned i=0; i<count; i++)
 	{
 		const CCVector3 *Q = theCloud->getNextPoint();
 		P = *Q-center;
@@ -153,7 +154,8 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 		//#define ORTHO_CONIC_PROJECTION
 		#ifdef ORTHO_CONIC_PROJECTION
 		lat = sqrt(x2*x2+z2*z2)*cos_alpha;
-		if (lat*z2<0.0) lat=-lat;
+		if (lat*z2 < 0.0)
+			lat=-lat;
 		#else
 		lat = P.u[dim];
 		#endif
@@ -162,21 +164,22 @@ SimpleCloud* PointProjectionTools::developCloudOnCone(GenericCloud* theCloud, uc
 		dZ = P.u[dim]-z2;
 		alt = sqrt(dX*dX+dZ*dZ);
 		//on regarde de quel cote de la surface du cone le resultat tombe par p.v.
-		if (x2*P.u[dim] - z2*u<0.0)
+		if (x2*P.u[dim] - z2*u < 0)
 			alt=-alt;
 
 		cloud->addPoint(CCVector3(lon*baseRadius,lat+center[dim],alt));
 
-		if (progressCb)
-		{
-			if (!nprogress->oneStep())
-				break;
-		}
+		if (nprogress && !nprogress->oneStep())
+			break;
 	}
 
-	if (progressCb)
+	if (nprogress)
 	{
 		delete nprogress;
+		nprogress = 0;
+	}
+	if (progressCb)
+	{
 		progressCb->stop();
 	}
 
@@ -235,21 +238,23 @@ SimpleCloud* PointProjectionTools::applyTransformation(GenericCloud* theCloud, T
 		}
 	}
 
-    if (progressCb)
-        progressCb->stop();
+	if (progressCb)
+		progressCb->stop();
 
-    return transformedCloud;
+	return transformedCloud;
 }
 
 GenericIndexedMesh* PointProjectionTools::computeTriangulation(	GenericIndexedCloudPersist* theCloud,
 																CC_TRIANGULATION_TYPES type/*=GENERIC*/,
-																PointCoordinateType maxEdgeLength/*=0*/)
+																PointCoordinateType maxEdgeLength/*=0*/,
+																char* errorStr/*=0*/)
 {
 	if (!theCloud)
+	{
+		if (errorStr)
+			strcpy(errorStr, "Invalid input cloud");
 		return 0;
-
-	//output mesh
-	GenericIndexedMesh* theMesh = 0;
+	}
 
 	switch(type)
 	{
@@ -263,6 +268,8 @@ GenericIndexedMesh* PointProjectionTools::computeTriangulation(	GenericIndexedCl
 			}
 			catch (.../*const std::bad_alloc&*/) //out of memory
 			{
+				if (errorStr)
+					strcpy(errorStr, "Not enough memory");
 				break;
 			}
 
@@ -276,8 +283,11 @@ GenericIndexedMesh* PointProjectionTools::computeTriangulation(	GenericIndexedCl
 			}
 
 			Delaunay2dMesh* dm = new Delaunay2dMesh();
-			if (!dm->build(the2DPoints,0))
+			char triLibErrorStr[1024];
+			if (!dm->buildMesh(the2DPoints,0,triLibErrorStr))
 			{
+				if (errorStr)
+					strcpy(errorStr, triLibErrorStr);
 				delete dm;
 				return 0;
 			}
@@ -286,30 +296,34 @@ GenericIndexedMesh* PointProjectionTools::computeTriangulation(	GenericIndexedCl
 			//remove triangles with too long edges
 			if (maxEdgeLength > 0)
 			{
-				dm->removeTrianglesLongerThan(maxEdgeLength);
+				dm->removeTrianglesWithEdgesLongerThan(maxEdgeLength);
 				if (dm->size() == 0)
 				{
 					//no more triangles?
+					if (errorStr)
+						strcpy(errorStr, "No triangle left after pruning");
 					delete dm;
-					dm = 0;
+					return 0;
 				}
 			}
 
-			theMesh = static_cast<GenericIndexedMesh*>(dm);
+			return static_cast<GenericIndexedMesh*>(dm);
 		}
 		break;
 	case GENERIC_BEST_LS_PLANE:
 		{
 			Neighbourhood Yk(theCloud);
-			theMesh = Yk.triangulateOnPlane(false,maxEdgeLength);
+			GenericIndexedMesh* mesh = Yk.triangulateOnPlane(false,maxEdgeLength,errorStr);
+			return mesh;
 		}
 		break;
-	case GENERIC_EMPTY:
-		theMesh = new SimpleMesh(theCloud);
+	default:
+		//shouldn't happen
+		assert(false);
 		break;
 	}
 
-	return theMesh;
+	return 0;
 }
 
 // 2D cross product of OA and OB vectors, i.e. z-component of their 3D cross product.

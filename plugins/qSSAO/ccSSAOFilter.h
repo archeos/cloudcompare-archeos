@@ -32,35 +32,6 @@
 //
 /*****************************************************************/
 
-///**************************/
-////
-////	HOW TO USE SSAO FILTER
-////
-//#include "filter_ssao.h"
-//ccSSAOFilter*	filter_ssao;
-//int			ssao_N;		// nb of neighbours
-//float		ssao_Kz;	// attenuation with distance
-//float		ssao_R;		// radius in image of neighbour sphere
-//float		ssao_F;		// amplification
-//void	initSSAOFilter()
-//{
-//	filter_ssao	=	new ccSSAOFilter(wf,hf);
-//	filter_ssao->sampleSphere();
-//	//
-//	ssao_N				=	32;
-//	ssao_Kz				=	500.;
-//	ssao_R				=	0.05;
-//	ssao_F				=	20.;
-//}
-//void computeSSAO()
-//{
-//	filter_ssao->setParameters(ssao_N,ssao_Kz,ssao_R,ssao_F);
-//	filter_ssao->shade(Fbo_d->getDepthTexture(),ssao_use_reflect*ssao_tex_reflect);
-//
-//	tex_ssao = filter_ssao->getTexture();
-//}
-///**************************/
-
 #ifndef	CC_FILTER_SSAO_H
 #define	CC_FILTER_SSAO_H
 
@@ -69,8 +40,6 @@
 class ccShader;
 class ccBilateralFilter;
 class ccFrameBufferObject;
-
-const unsigned SSAO_MAX_N = 256;
 
 class ccSSAOFilter : public ccGlFilter
 {
@@ -84,7 +53,7 @@ public:
 	//inherited from ccGlFilter
 	virtual ccGlFilter* clone() const;
 	virtual bool init(int width, int height, QString shadersPath, QString& error);
-	virtual void shade(GLuint texDepth, GLuint texColor, float zoom = 1.0f);
+	virtual void shade(GLuint texDepth, GLuint texColor, ViewportParameters& parameters);
 	virtual GLuint getTexture();
 
 	bool init(	int width,
@@ -100,27 +69,31 @@ public:
 protected:
 
 	void initReflectTexture();
-	GLuint texReflect;
-
-	int w;
-	int	h;
-
-	ccFrameBufferObject*	fbo;
-	ccShader*				shader;
-
-	int			N;		// nb of neighbours
-	float		Kz;		// attenuation with distance
-	float		R;		// radius in image of neighbour sphere
-	float		F;		// amplification
-
 	void sampleSphere();
-	float ssao_neighbours[3*SSAO_MAX_N];	//	full sphere sampling
 
-	ccBilateralFilter*	bilateralFilter;
-	bool				bilateralFilterEnabled;
-	unsigned			bilateralGHalfSize;
-	float				bilateralGSigma;
-	float				bilateralGSigmaZ;
+	GLuint m_texReflect;
+
+	int m_w;
+	int m_h;
+
+	ccFrameBufferObject* m_fbo;
+	ccShader* m_shader;
+
+	int   m_N;								// nb of neighbours
+	float m_Kz;								// attenuation with distance
+	float m_R;								// radius in image of neighbour sphere
+	float m_F;								// amplification
+
+	//! Maximum number of sampling directions
+	static const int MAX_N = 256;
+
+	float m_ssao_neighbours[3*MAX_N];	//	full sphere sampling
+
+	ccBilateralFilter* m_bilateralFilter;
+	bool               m_bilateralFilterEnabled;
+	unsigned           m_bilateralGHalfSize;
+	float              m_bilateralGSigma;
+	float              m_bilateralGSigmaZ;
 };
 
 #endif

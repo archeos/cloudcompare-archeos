@@ -44,7 +44,6 @@
 
 class ccHObject;
 class ccBBox;
-class ccCalibratedImage;
 class ccShader;
 class ccColorRampShader;
 class ccGlFilter;
@@ -91,6 +90,7 @@ public:
 						CUSTOM_LIGHT_STATE_MESSAGE,
 						MANUAL_TRANSFORMATION_MESSAGE,
 						MANUAL_SEGMENTATION_MESSAGE,
+						ROTAION_LOCK_MESSAGE,
 	};
 
 	//! Pivot symbol visibility
@@ -126,6 +126,7 @@ public:
 	virtual QFont getTextDisplayFont() const; //takes rendering zoom into account!
 	virtual const ccViewportParameters& getViewportParameters() const { return m_viewportParams; }
 	inline virtual void makeContextCurrent() { makeCurrent(); }
+	virtual void setupProjectiveViewport(const ccGLMatrixd& cameraMatrix, float fov_deg = 0.0f, float ar = 1.0f, bool viewerBasedPerspective = true, bool bubbleViewMode = false);
 
 	//! Displays a status message in the bottom-left corner
 	/** WARNING: currently, 'append' is not supported for SCREEN_CENTER_MESSAGE
@@ -138,8 +139,8 @@ public:
 	virtual void displayNewMessage(const QString& message,
 									MessagePosition pos,
 									bool append=false,
-									int displayMaxDelay_sec=2,
-									MessageType type=CUSTOM_MESSAGE);
+									int displayMaxDelay_sec = 2,
+									MessageType type = CUSTOM_MESSAGE);
 
 	//! Activates sun light
 	virtual void setSunLight(bool state);
@@ -205,6 +206,8 @@ public:
 	/** Persepctive mode can be:
 		- object-centered (moving the mouse make the object rotate)
 		- viewer-centered (moving the mouse make the camera move)
+		\warning Disables bubble-view mode automatically
+
 		\param state whether perspective mode is enabled or not
 		\param objectCenteredView whether view is object- or viewer-centered (forced to true in ortho. mode)
 	**/
@@ -223,6 +226,22 @@ public:
 	virtual bool objectPerspectiveEnabled() const;
 	//! Shortcut: returns whether viewer-based perspective mode is enabled
 	virtual bool viewerPerspectiveEnabled() const;
+
+	//! Sets bubble-view mode state
+	/** Bubble-view is a kind of viewer-based perspective mode where
+		the user can't displace the camera (apart from up-down or
+		left-right rotations). The f.o.v. is also maximized.
+
+		\warning Any call to a method that changes the perpsective will
+		automatically disable this mode.
+	**/
+	void setBubbleViewMode(bool state);
+	
+	//! Returns whether bubble-view mode is enabled or no
+	inline bool bubbleViewModeEnabled() const { return m_bubbleViewModeEnabled; }
+
+	//! Set bubble-view f.o.v. (in degrees)
+	void setBubbleViewFov(float fov_deg);
 
 	//! Center and zoom on a given bounding box
 	/** If no bounding box is defined, the current displayed 'scene graph'
@@ -297,8 +316,13 @@ public:
 	//! Returns context information
 	virtual void getContext(CC_DRAW_CONTEXT& context);
 
+	//! Minimum point size
+	static const unsigned MIN_POINT_SIZE = 1;
+	//! Maximum point size
+	static const unsigned MAX_POINT_SIZE = 10;
+
 	//! Sets point size
-	/** \param size point size (typically between 1 and 10)
+	/** \param size point size (between MIN_POINT_SIZE and MAX_POINT_SIZE)
 	**/
 	virtual void setPointSize(float size);
 
@@ -322,13 +346,22 @@ public:
 	//! Sets viewport parameters (all at once)
 	virtual void setViewportParameters(const ccViewportParameters& params);
 
-	//! Applies the same camera parameters as a given calibrated image
-	virtual void applyImageViewport(ccCalibratedImage* image);
-
-	//! Sets current camera f.o.v. (field of view)
+	//! Sets current camera f.o.v. (field of view) in degrees
 	/** FOV is only used in perspective mode.
 	**/
 	virtual void setFov(float fov);
+	//! Returns the current f.o.v. (field of view) in degrees
+	virtual float getFov() const;
+
+	//! Sets current camera aspect ratio (width/height)
+	/** AR is only used in perspective mode.
+	**/
+	virtual void setAspectRatio(float ar);
+
+	//! Sets current camera 'zNear' coefficient
+	/** zNear coef. is only used in perspective mode.
+	**/
+	virtual void setZNearCoef(double coef);
 
 	//! Invalidate current visualization state
 	/** Forces view matrix update and 3D/FBO display.
@@ -409,6 +442,12 @@ public:
 	//! Returns whether overlay entities (scale, tetrahedron, etc.) are displayed or not
 	bool overlayEntitiesAreDisplayed() const { return m_displayOverlayEntities; }
 
+	//! Locks the manual rotation around the vertical (screen) axis
+	void lockVerticalRotation(bool state) { m_verticalRotationLocked = state; }
+
+	//! Returns whether the manual rotation around the vertical (screen) axis is locked or not
+	bool isVerticalRotationLocked() const { return m_verticalRotationLocked; }
+
 public slots:
 
 	void zoomGlobal();
@@ -452,6 +491,9 @@ signals:
 
 	//! Signal emitted when the pixel size is changed
 	void pixelSizeChanged(float);
+
+	//! Signal emitted when the f.o.v. changes
+	void fovChanged(float);
 
 	//! Signal emitted when the pivot point is changed
 	void pivotPointChanged(const CCVector3d&);
@@ -504,6 +546,11 @@ signals:
 	void newLabel(ccHObject* obj);
 
 protected:
+
+	//! Processes the clickable items
+	/** \return true if an item has been clicked
+	**/
+	bool processClickableItems(int x, int y);
 
 	//! Sets current font size
 	/** Warning: only used internally.
@@ -597,6 +644,9 @@ protected:
 
 	//! Returns real camera center (i.e. with z centered on the visible objects bounding-box in ortho mode)
 	CCVector3d getRealCameraCenter() const;
+
+	//! Draws the 'hot zone' (+/- icons for point size), 'leave bubble-view' button, etc.
+	void drawClickableItems(int xStart, int& yStart);
 
 	/***************************************************
 					OpenGL Extensions
@@ -717,10 +767,24 @@ protected:
 	bool m_embeddedIconsEnabled;
 	//! Hot zone (= where embedded icons lie) is activated (= mouse over)
 	bool m_hotZoneActivated;
-	//! Hot zone "plus" button ROI
-	int m_hotZonePlusIconROI[4];
-	//! Hot zone "minus" button ROI
-	int m_hotZoneMinusIconROI[4];
+
+	//! Clickable item
+	struct ClickableItem
+	{
+		enum Role {	NO_ROLE,
+					INCREASE_POINT_SIZE,
+					DECREASE_POINT_SIZE,
+					LEAVE_BUBBLE_VIEW_MODE,
+		};
+
+		Role role;
+		QRect area;
+		
+		ClickableItem() : role(NO_ROLE) {}
+		ClickableItem(Role _role, QRect _area) : role(_role), area(_area) {}
+	};
+	//! Currently displayed clickable items
+	std::vector<ClickableItem> m_clickableItems;
 
 	//! Currently active shader
 	ccShader* m_activeShader;
@@ -776,6 +840,16 @@ protected:
 
 	//! Whether initialization should be silent or not (i.e. no message to console)
 	bool m_silentInitialization;
+
+	//! To lock the manual rotation around the (screen) vertical axis
+	bool m_verticalRotationLocked;
+
+	//! Bubble-view mode state
+	bool m_bubbleViewModeEnabled;
+	//! Bubble-view mode f.o.v. (degrees)
+	float m_bubbleViewFov_deg;
+	//! Pre-bubble-view camera parameters (backup)
+	ccViewportParameters m_preBubbleViewParameters;
 
 private:
 

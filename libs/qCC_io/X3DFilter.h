@@ -23,17 +23,24 @@
 #ifdef CC_X3D_SUPPORT
 
 //! X3D filter (based on XIOT)
-class X3DFilter : public FileIOFilter
+class QCC_IO_LIB_API X3DFilter : public FileIOFilter
 {
-
 public:
 
+	//static accessors
+	static inline QString GetFileFilter() { return "X3D mesh (*.x3d)"; }
+	static inline QString GetDefaultExtension() { return "x3d"; }
+
 	//inherited from FileIOFilter
-	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, bool alwaysDisplayLoadDialog = true, bool* coordinatesShiftEnabled = 0, CCVector3d* coordinatesShift = 0);
-	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	virtual bool importSupported() const { return true; }
+	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
+	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
+	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
+	virtual bool canLoadExtension(QString upperCaseExt) const;
+	virtual bool canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) const;
 
 };
 
 #endif //CC_X3D_SUPPORT
 
-#endif
+#endif //CC_X3D_FILTER_HEADER

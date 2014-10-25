@@ -80,4 +80,4 @@ protected:
 	QAction* m_action;
 };
 
-#endif
+#endif //Q_KINECT_PLUGIN_HEADER

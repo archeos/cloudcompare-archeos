@@ -18,13 +18,16 @@
 #ifndef CC_ASCII_SAVE_DIALOG_HEADER
 #define CC_ASCII_SAVE_DIALOG_HEADER
 
+//local
+#include "qCC_io.h"
+
 //Qt
 #include <QDialog>
 
 class Ui_AsciiSaveDialog;
 
 //! Dialog for configuration of ASCII files saving sequence
-class AsciiSaveDlg : public QDialog
+class QCC_IO_LIB_API AsciiSaveDlg : public QDialog
 {
 	Q_OBJECT
 
@@ -76,6 +79,11 @@ public:
 	void setAutoShow(bool state) { m_autoShow = state; }
 	//! Returns whether this dialog automatically appears or not
 	bool autoShow() const { return m_autoShow; }
+
+	//! Sets whether to save colors as float values (instead of unsigned bytes)
+	void setSaveFloatColors(bool state);
+	//! Returns whether to save colors as float values (instead of unsigned bytes)
+	bool saveFloatColors() const;
 
 protected slots:
 
