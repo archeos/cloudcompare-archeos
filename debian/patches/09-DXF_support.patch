@@ -1,16 +1,140 @@
 --- a/libs/qCC_io/DxfFilter.cpp
 +++ b/libs/qCC_io/DxfFilter.cpp
+@@ -164,7 +164,7 @@ public:
+ 		{
+ 			if (m_polyVertices->size() == m_polyVertices->capacity())
+ 				m_polyVertices->reserve(m_polyVertices->size()+1);
+-			
++
+ 			m_poly->addPointIndex(m_polyVertices->size());
+ 			m_polyVertices->addPoint(CCVector3(	static_cast<PointCoordinateType>(vertex.x),
+ 												static_cast<PointCoordinateType>(vertex.y),
+@@ -185,7 +185,7 @@ public:
+ 								static_cast<PointCoordinateType>(face.y[i]),
+ 								static_cast<PointCoordinateType>(face.z[i]) );
+ 		}
+-		
++
+ 		//create the 'faces' mesh if necessary
+ 		if (!m_faces)
+ 		{
+@@ -196,17 +196,17 @@ public:
+ 			m_faces->setVisible(true);
+ 			vertices->setEnabled(false);
+ 			vertices->setLocked(true);
+-			
++
+ 			m_root->addChild(m_faces);
+ 		}
+-		
++
+ 		ccPointCloud* vertices = dynamic_cast<ccPointCloud*>(m_faces->getAssociatedCloud());
+ 		if (!vertices)
+ 		{
+ 			assert(false);
+ 			return;
+ 		}
+-		
++
+ 		int vertIndexes[4] = {-1, -1, -1, -1};
+ 		unsigned addedVertCount = 4;
+ 		//check if the two last vertices are the same
+@@ -299,7 +299,7 @@ public:
+ 			bool firstTime = false;
+ 			if (!triNormsTable)
+ 			{
+-				triNormsTable = new NormsIndexesTableType(); 
++				triNormsTable = new NormsIndexesTableType();
+ 				m_faces->setTriNormsTable(triNormsTable);
+ 				m_faces->addChild(triNormsTable);
+ 				firstTime = true;
+@@ -312,7 +312,7 @@ public:
+ 				ccLog::Error("[DxfImporter] Not enough memory!");
+ 				return;
+ 			}
+-			
++
+ 			CCVector3 N = (P[1]-P[0]).cross(P[2]-P[0]);
+ 			N.normalize();
+ 			triNormsTable->addElement(ccNormalVectors::GetNormIndex(N.u));
 @@ -586,8 +586,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
- 	dw->tableEnd();
+ 		QStringList meshLayerNames;
+ 		{
+ 			//default layer
+-			dxf.writeLayer(*dw, 
+-				DL_LayerData("0", 0), 
++			dxf.writeLayer(*dw,
++				DL_LayerData("0", 0),
+ 				DL_Attributes(
+ 				std::string(""),		// leave empty
+ 				DL_Codes::black,		// default color
+@@ -603,15 +603,15 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 				QString layerName = QString("POLYLINE_%1").arg(i+1,3,10,QChar('0'));
  
- 	//Writing Various Other Tables
--	//dxf.writeStyle(*dw); //DXFLIB V2.5
--	dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
-+	dxf.writeStyle(*dw); //DXFLIB V2.5
-+	// dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
- 	dxf.writeView(*dw);
- 	dxf.writeUcs(*dw);
+ 				polyLayerNames << layerName;
+-				dxf.writeLayer(*dw, 
+-					DL_LayerData(layerName.toStdString(), 0), 
++				dxf.writeLayer(*dw,
++					DL_LayerData(layerName.toStdString(), 0),
+ 					DL_Attributes(
+ 					std::string(""),
+ 					DL_Codes::green,
+ 					static_cast<int>(lineWidth),
+ 					"CONTINUOUS"));
+ 			}
+-		
++
+ 			//mesh layers
+ 			for (unsigned j=0; j<meshCount; ++j)
+ 			{
+@@ -621,8 +621,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 				QString layerName = QString("MESH_%1").arg(j+1,3,10,QChar('0'));
  
+ 				meshLayerNames << layerName;
+-				dxf.writeLayer(*dw, 
+-					DL_LayerData(layerName.toStdString(), 0), 
++				dxf.writeLayer(*dw,
++					DL_LayerData(layerName.toStdString(), 0),
+ 					DL_Attributes(
+ 					std::string(""),
+ 					DL_Codes::magenta,
+@@ -633,8 +633,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 		dw->tableEnd();
+ 
+ 		//Writing Various Other Tables
+-		//dxf.writeStyle(*dw); //DXFLIB V2.5
+-		dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
++		dxf.writeStyle(*dw); //DXFLIB V2.5
++		//dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
+ 		dxf.writeView(*dw);
+ 		dxf.writeUcs(*dw);
+ 
+@@ -645,13 +645,13 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 		dw->tableEnd();
+ 
+ 		//Writing Dimension Styles
+-		dxf.writeDimStyle(	*dw, 
+-							/*arrowSize*/1, 
++		dxf.writeDimStyle(	*dw,
++							/*arrowSize*/1,
+ 							/*extensionLineExtension*/1,
+ 							/*extensionLineOffset*/1,
+ 							/*dimensionGap*/1,
+ 							/*dimensionTextSize*/1);
+-	
++
+ 		//Writing Block Records
+ 		dxf.writeBlockRecord(*dw);
+ 		dw->tableEnd();
+@@ -772,7 +772,7 @@ CC_FILE_ERROR DxfFilter::loadFile(QStrin
+ 		result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+ 	}
+ #else
+-	
++
+ 	ccLog::Error("[DXF] Not supported in this version!");
+ 
+ #endif
 --- a/plugins/qSRA/dxfProfilesExporter.cpp
 +++ b/plugins/qSRA/dxfProfilesExporter.cpp
 @@ -223,8 +223,8 @@ bool DxfProfilesExporter::SaveVerticalPr
