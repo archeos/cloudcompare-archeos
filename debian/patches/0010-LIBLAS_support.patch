@@ -1,3 +1,13 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Mon, 3 Nov 2014 00:36:31 +0100
+Subject: LIBLAS_support
+
+---
+ contrib/LiblasSupport.cmake | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/contrib/LiblasSupport.cmake b/contrib/LiblasSupport.cmake
+index aec413a..84b8b8d 100644
 --- a/contrib/LiblasSupport.cmake
 +++ b/contrib/LiblasSupport.cmake
 @@ -24,8 +24,8 @@ if( ${OPTION_USE_LIBLAS} )

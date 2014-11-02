@@ -1,3 +1,37 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Mon, 3 Nov 2014 00:36:31 +0100
+Subject: DXF_support
+
+---
+ contrib/DxfLibSupport.cmake          |  4 ++--
+ libs/qCC_io/DxfFilter.cpp            | 40 ++++++++++++++++++------------------
+ plugins/qSRA/dxfProfilesExporter.cpp |  8 ++++----
+ 3 files changed, 26 insertions(+), 26 deletions(-)
+
+diff --git a/contrib/DxfLibSupport.cmake b/contrib/DxfLibSupport.cmake
+index 1fa9e02..cddf112 100644
+--- a/contrib/DxfLibSupport.cmake
++++ b/contrib/DxfLibSupport.cmake
+@@ -9,7 +9,7 @@ if( ${OPTION_USE_DXF_LIB} )
+ 	if ( NOT DXF_LIB_SRC_DIR )
+ 		message( SEND_ERROR "No DXF lib source dir specified (DXF_LIB_SRC_DIR)" )
+ 	else()
+-		add_subdirectory(contrib/dxflib)
++        # add_subdirectory(contrib/dxflib)
+ 		include_directories( ${DXF_LIB_SRC_DIR} )
+ 	endif()
+ 
+@@ -20,7 +20,7 @@ function( target_link_DXFLIB ) # 2 arguments: ARGV0 = project name
+ 
+ if( ${OPTION_USE_DXF_LIB} )
+ 
+-	target_link_libraries( ${PROJECT_NAME} DXF_LIB )	
++	target_link_libraries( ${PROJECT_NAME} "-ldxflib" )	
+ 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_DXF_SUPPORT )
+ 
+ endif()
+diff --git a/libs/qCC_io/DxfFilter.cpp b/libs/qCC_io/DxfFilter.cpp
+index c2118b9..6a81158 100644
 --- a/libs/qCC_io/DxfFilter.cpp
 +++ b/libs/qCC_io/DxfFilter.cpp
 @@ -164,7 +164,7 @@ public:
@@ -57,7 +91,7 @@
  			CCVector3 N = (P[1]-P[0]).cross(P[2]-P[0]);
  			N.normalize();
  			triNormsTable->addElement(ccNormalVectors::GetNormIndex(N.u));
-@@ -586,8 +586,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+@@ -586,8 +586,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHObject* root, QString filename)
  		QStringList meshLayerNames;
  		{
  			//default layer
@@ -68,7 +102,7 @@
  				DL_Attributes(
  				std::string(""),		// leave empty
  				DL_Codes::black,		// default color
-@@ -603,15 +603,15 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+@@ -603,15 +603,15 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHObject* root, QString filename)
  				QString layerName = QString("POLYLINE_%1").arg(i+1,3,10,QChar('0'));
  
  				polyLayerNames << layerName;
@@ -87,7 +121,7 @@
  			//mesh layers
  			for (unsigned j=0; j<meshCount; ++j)
  			{
-@@ -621,8 +621,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+@@ -621,8 +621,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHObject* root, QString filename)
  				QString layerName = QString("MESH_%1").arg(j+1,3,10,QChar('0'));
  
  				meshLayerNames << layerName;
@@ -98,7 +132,7 @@
  					DL_Attributes(
  					std::string(""),
  					DL_Codes::magenta,
-@@ -633,8 +633,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+@@ -633,8 +633,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHObject* root, QString filename)
  		dw->tableEnd();
  
  		//Writing Various Other Tables
@@ -109,7 +143,7 @@
  		dxf.writeView(*dw);
  		dxf.writeUcs(*dw);
  
-@@ -645,13 +645,13 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+@@ -645,13 +645,13 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHObject* root, QString filename)
  		dw->tableEnd();
  
  		//Writing Dimension Styles
@@ -126,7 +160,7 @@
  		//Writing Block Records
  		dxf.writeBlockRecord(*dw);
  		dw->tableEnd();
-@@ -772,7 +772,7 @@ CC_FILE_ERROR DxfFilter::loadFile(QStrin
+@@ -772,7 +772,7 @@ CC_FILE_ERROR DxfFilter::loadFile(QString filename, ccHObject& container, LoadPa
  		result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
  	}
  #else
@@ -135,9 +169,11 @@
  	ccLog::Error("[DXF] Not supported in this version!");
  
  #endif
+diff --git a/plugins/qSRA/dxfProfilesExporter.cpp b/plugins/qSRA/dxfProfilesExporter.cpp
+index ba3c2e8..4e7884b 100644
 --- a/plugins/qSRA/dxfProfilesExporter.cpp
 +++ b/plugins/qSRA/dxfProfilesExporter.cpp
-@@ -223,8 +223,8 @@ bool DxfProfilesExporter::SaveVerticalPr
+@@ -223,8 +223,8 @@ bool DxfProfilesExporter::SaveVerticalProfiles(	const QSharedPointer<DistanceMap
  	dw->tableEnd();
  
  	//Writing Various Other Tables
@@ -148,7 +184,7 @@
  	dxf.writeView(*dw);
  	dxf.writeUcs(*dw);
  
-@@ -705,8 +705,8 @@ bool DxfProfilesExporter::SaveHorizontal
+@@ -705,8 +705,8 @@ bool DxfProfilesExporter::SaveHorizontalProfiles(	const QSharedPointer<DistanceM
  	dw->tableEnd();
  
  	//Writing Various Other Tables
@@ -159,23 +195,3 @@
  	dxf.writeView(*dw);
  	dxf.writeUcs(*dw);
  
---- a/contrib/DxfLibSupport.cmake
-+++ b/contrib/DxfLibSupport.cmake
-@@ -9,7 +9,7 @@ if( ${OPTION_USE_DXF_LIB} )
- 	if ( NOT DXF_LIB_SRC_DIR )
- 		message( SEND_ERROR "No DXF lib source dir specified (DXF_LIB_SRC_DIR)" )
- 	else()
--		add_subdirectory(contrib/dxflib)
-+        # add_subdirectory(contrib/dxflib)
- 		include_directories( ${DXF_LIB_SRC_DIR} )
- 	endif()
- 
-@@ -20,7 +20,7 @@ function( target_link_DXFLIB ) # 2 argum
- 
- if( ${OPTION_USE_DXF_LIB} )
- 
--	target_link_libraries( ${PROJECT_NAME} DXF_LIB )	
-+	target_link_libraries( ${PROJECT_NAME} "-ldxflib" )	
- 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_DXF_SUPPORT )
- 
- endif()
