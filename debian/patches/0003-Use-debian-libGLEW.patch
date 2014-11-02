@@ -1,6 +1,20 @@
 From: Romain Janvier <romain.janvier@hotmail.fr>
 Date: Mon, 14 Jan 2013 21:15:12 +0100
 Subject: Use debian libGLEW
+
+---
+ CMakeLists.txt                   | 2 +-
+ ccViewer/CMakeLists.txt          | 4 ++--
+ libs/CCFbo/CMakeLists.txt        | 4 ++--
+ libs/qCC_db/CMakeLists.txt       | 4 ++--
+ libs/qCC_glWindow/CMakeLists.txt | 4 ++--
+ libs/qCC_io/CMakeLists.txt       | 2 +-
+ plugins/CMakePluginTpl.cmake     | 4 ++--
+ qCC/CMakeLists.txt               | 2 +-
+ 8 files changed, 13 insertions(+), 13 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 4d2a67e..df0f337 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -68,7 +68,7 @@ include( CMakeExternalLibs.cmake )
@@ -12,6 +26,8 @@ Subject: Use debian libGLEW
  add_subdirectory( libs/CCFbo )
  add_subdirectory( libs/qCC_db ) # must always be included after CCFbo (dependency)
  add_subdirectory( libs/qCC_io ) # must always be included after qCC_db (dependency)
+diff --git a/ccViewer/CMakeLists.txt b/ccViewer/CMakeLists.txt
+index 1fb69ca..e51e5c2 100644
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
 @@ -9,7 +9,7 @@ if(POLICY CMP0020)
@@ -32,17 +48,8 @@ Subject: Use debian libGLEW
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
---- a/qCC/CMakeLists.txt
-+++ b/qCC/CMakeLists.txt
-@@ -78,7 +78,7 @@ else()
- 	add_executable( ${PROJECT_NAME} ${header_list} ${source_list} ${moc_list} ${generated_ui_list} ${generated_qrc_list} ${rc_list} ${resource_list} ${txt_list} )
- endif()
- 
--target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
-+target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
- target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
- target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
- target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
+diff --git a/libs/CCFbo/CMakeLists.txt b/libs/CCFbo/CMakeLists.txt
+index 8124701..647e5b8 100644
 --- a/libs/CCFbo/CMakeLists.txt
 +++ b/libs/CCFbo/CMakeLists.txt
 @@ -11,7 +11,7 @@ endif()
@@ -63,6 +70,8 @@ Subject: Use debian libGLEW
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
  if ( USE_QT5 )
+diff --git a/libs/qCC_db/CMakeLists.txt b/libs/qCC_db/CMakeLists.txt
+index bcccab8..70d388d 100644
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
 @@ -11,7 +11,7 @@ endif()
@@ -83,6 +92,8 @@ Subject: Use debian libGLEW
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
+diff --git a/libs/qCC_glWindow/CMakeLists.txt b/libs/qCC_glWindow/CMakeLists.txt
+index e4ec9b5..d31b6be 100644
 --- a/libs/qCC_glWindow/CMakeLists.txt
 +++ b/libs/qCC_glWindow/CMakeLists.txt
 @@ -11,7 +11,7 @@ endif()
@@ -94,7 +105,7 @@ Subject: Use debian libGLEW
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
-@@ -34,7 +34,7 @@ add_library( ${PROJECT_NAME} STATIC ${he
+@@ -34,7 +34,7 @@ add_library( ${PROJECT_NAME} STATIC ${header_list} ${source_list} ${moc_list} )
  
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
@@ -103,6 +114,8 @@ Subject: Use debian libGLEW
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
+diff --git a/libs/qCC_io/CMakeLists.txt b/libs/qCC_io/CMakeLists.txt
+index ae8a957..265f0ab 100644
 --- a/libs/qCC_io/CMakeLists.txt
 +++ b/libs/qCC_io/CMakeLists.txt
 @@ -11,7 +11,7 @@ endif()
@@ -114,6 +127,8 @@ Subject: Use debian libGLEW
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
+diff --git a/plugins/CMakePluginTpl.cmake b/plugins/CMakePluginTpl.cmake
+index d5114e6..79010e3 100644
 --- a/plugins/CMakePluginTpl.cmake
 +++ b/plugins/CMakePluginTpl.cmake
 @@ -3,7 +3,7 @@
@@ -127,6 +142,19 @@ Subject: Use debian libGLEW
  include_directories( ${QCC_IO_LIB_SOURCE_DIR} )
 @@ -63,7 +63,7 @@ else()
  	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE QT_NO_DEBUG)
+ endif()
+ 
+-target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
++target_link_libraries( ${PROJECT_NAME} "-lGLEW" )
+ target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
+ target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
+ target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
+diff --git a/qCC/CMakeLists.txt b/qCC/CMakeLists.txt
+index adc3e53..04f9e97 100644
+--- a/qCC/CMakeLists.txt
++++ b/qCC/CMakeLists.txt
+@@ -78,7 +78,7 @@ else()
+ 	add_executable( ${PROJECT_NAME} ${header_list} ${source_list} ${moc_list} ${generated_ui_list} ${generated_qrc_list} ${rc_list} ${resource_list} ${txt_list} )
  endif()
  
 -target_link_libraries( ${PROJECT_NAME} GLEW_LIB )
