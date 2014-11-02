@@ -1,6 +1,14 @@
 From: Romain Janvier <romain.janvier@hotmail.fr>
 Date: Fri, 15 Mar 2013 09:47:39 +0100
 Subject: Fix local decimal separator
+
+---
+ ccViewer/main.cpp | 1 +
+ qCC/main.cpp      | 3 ++-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/ccViewer/main.cpp b/ccViewer/main.cpp
+index e7f61b9..86e9596 100644
 --- a/ccViewer/main.cpp
 +++ b/ccViewer/main.cpp
 @@ -52,6 +52,7 @@ public:
@@ -11,6 +19,8 @@ Subject: Fix local decimal separator
  #ifdef Q_OS_MAC
  		mViewer = NULL;
  
+diff --git a/qCC/main.cpp b/qCC/main.cpp
+index ba1dab5..88a2aca 100644
 --- a/qCC/main.cpp
 +++ b/qCC/main.cpp
 @@ -56,6 +56,7 @@ public:

@@ -1,6 +1,15 @@
 From: Romain Janvier <romain.janvier@hotmail.fr>
 Date: Fri, 15 Mar 2013 09:55:09 +0100
 Subject: Use package directory for libs
+
+---
+ CC/CMakeLists.txt          | 2 +-
+ CMakeLists.txt             | 1 +
+ libs/qCC_db/CMakeLists.txt | 2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/CC/CMakeLists.txt b/CC/CMakeLists.txt
+index 2fbf6b4..d4cacee 100644
 --- a/CC/CMakeLists.txt
 +++ b/CC/CMakeLists.txt
 @@ -56,7 +56,7 @@ endif()
@@ -12,6 +21,20 @@ Subject: Use package directory for libs
  else()
  	foreach( dest ${INSTALL_DESTINATIONS} )
  		install_shared( CC_CORE_LIB ${dest} 1 )
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index df0f337..ca41f71 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -28,6 +28,7 @@ if ( ${CMAKE_CURRENT_BINARY_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR} )
+ 	endif()
+ endif()
+ 
++SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")
+ 
+ # Default debug suffix for libraries
+ if(MSVC)
+diff --git a/libs/qCC_db/CMakeLists.txt b/libs/qCC_db/CMakeLists.txt
+index 70d388d..53a6d57 100644
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
 @@ -52,7 +52,7 @@ endif()
@@ -23,13 +46,3 @@ Subject: Use package directory for libs
  else()
  foreach( dest ${INSTALL_DESTINATIONS} )
  	install_shared( ${PROJECT_NAME} ${dest} 1 )
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -28,6 +28,7 @@ if ( ${CMAKE_CURRENT_BINARY_DIR} STREQUA
- 	endif()
- endif()
- 
-+SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")
- 
- # Default debug suffix for libraries
- if(MSVC)
