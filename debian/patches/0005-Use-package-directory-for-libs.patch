@@ -6,7 +6,8 @@ Subject: Use package directory for libs
  CC/CMakeLists.txt          | 2 +-
  CMakeLists.txt             | 1 +
  libs/qCC_db/CMakeLists.txt | 2 +-
- 3 files changed, 3 insertions(+), 2 deletions(-)
+ libs/qCC_io/CMakeLists.txt | 2 +-
+ 4 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/CC/CMakeLists.txt b/CC/CMakeLists.txt
 index 2fbf6b4..d4cacee 100644
@@ -38,6 +39,19 @@ index 70d388d..53a6d57 100644
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
 @@ -52,7 +52,7 @@ endif()
+ 
+ # install (shared) lib to specified destinations
+ if( UNIX )
+-	install_shared( ${PROJECT_NAME} lib 0 ) #default destination: /usr/lib
++	install_shared( ${PROJECT_NAME} /usr/lib/cloudcompare 0 ) #default destination: /usr/lib
+ else()
+ foreach( dest ${INSTALL_DESTINATIONS} )
+ 	install_shared( ${PROJECT_NAME} ${dest} 1 )
+diff --git a/libs/qCC_io/CMakeLists.txt b/libs/qCC_io/CMakeLists.txt
+index 265f0ab..a1dd704 100644
+--- a/libs/qCC_io/CMakeLists.txt
++++ b/libs/qCC_io/CMakeLists.txt
+@@ -67,7 +67,7 @@ endif()
  
  # install (shared) lib to specified destinations
  if( UNIX )
