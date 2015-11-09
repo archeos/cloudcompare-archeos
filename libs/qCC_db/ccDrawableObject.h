@@ -18,12 +18,11 @@
 #ifndef CC_DRAWABLE_OBJECT_HEADER
 #define CC_DRAWABLE_OBJECT_HEADER
 
-#include <ccIncludeGL.h>
+#include "ccIncludeGL.h"
 
 //Local
 #include "qCC_db.h"
 #include "ccGLMatrix.h"
-#include "ccBBox.h"
 #include "ccMaterial.h"
 
 class ccGenericGLDisplay;
@@ -57,24 +56,41 @@ struct glDrawContext
 	float renderZoom;
 
 	//! Default material
-	ccMaterial defaultMat;
+	ccMaterial::Shared defaultMat;
 	//! Default color for mesh (front side)
-	float defaultMeshFrontDiff[4];
+	ccColor::Rgbaf defaultMeshFrontDiff;
 	//! Default color for mesh (back side)
-	float defaultMeshBackDiff[4];
+	ccColor::Rgbaf defaultMeshBackDiff;
 	//! Default point color
-	unsigned char pointsDefaultCol[3];
+	ccColor::Rgbub pointsDefaultCol;
 	//! Default text color
-	unsigned char textDefaultCol[3];
-	//! Default label color
-	unsigned char labelDefaultCol[3];
+	ccColor::Rgbub textDefaultCol;
+	//! Default label background color
+	ccColor::Rgbub labelDefaultBkgCol;
+	//! Default label marker color
+	ccColor::Rgbub labelDefaultMarkerCol;
 	//! Default bounding-box color
-	unsigned char bbDefaultCol[3];
+	ccColor::Rgbub bbDefaultCol;
 
-	//! Whether to decimate big clouds when rotating the camera
+	//! Whether to decimate big clouds when updating the 3D view
 	bool decimateCloudOnMove;
+	//! Minimum level for LOD display
+	unsigned char minLODLevel;
+	//! Minimum number of points for activating LOD display
+	unsigned minLODPointCount;
+	//! Current level for LOD display
+	unsigned char currentLODLevel;
+	//! Start index for current LOD level
+	unsigned currentLODStartIndex;
+	//! Wheter more points are available or not at the current level
+	bool moreLODPointsAvailable;
+	//! Wheter higher levels are available or not
+	bool higherLODLevelsAvailable;
+
 	//! Whether to decimate big meshes when rotating the camera
 	bool decimateMeshOnMove;
+	//! Minimum number of triangles for activating LOD display
+	unsigned minLODTriangleCount;
 
 	//! Currently displayed color scale (the corresponding scalar field in fact)
 	ccScalarField* sfColorScaleToDisplay;
@@ -86,16 +102,16 @@ struct glDrawContext
 	//! Use VBOs for faster display
 	bool useVBOs;
 
-	//! Picked points radius
-	float pickedPointsRadius;
-	//! Picked points shift for label display
-	float pickedPointsTextShift;
+	//! Label marker size (radius)
+	float labelMarkerSize;
+	//! Shift for 3D label marker display (around the marker, in pixels)
+	float labelMarkerTextShift_pix;
 
 	//! Numerical precision (for displaying text)
 	unsigned dispNumberPrecision;
 
-	//! Label background transparency
-	unsigned labelsTransparency;
+	//! Label background opacity
+	unsigned labelOpacity;
 
 	//! Blending strategy (source)
 	GLenum sourceBlend;
@@ -109,16 +125,31 @@ struct glDrawContext
 		, glH(0)
 		, _win(0)
 		, renderZoom(1.0f)
+		, defaultMat(new ccMaterial("default"))
+		, defaultMeshFrontDiff(ccColor::defaultMeshFrontDiff)
+		, defaultMeshBackDiff(ccColor::defaultMeshBackDiff)
+		, pointsDefaultCol(ccColor::defaultColor)
+		, textDefaultCol(ccColor::defaultColor)
+		, labelDefaultBkgCol(ccColor::defaultLabelBkgColor)
+		, labelDefaultMarkerCol(ccColor::defaultLabelMarkerColor)
+		, bbDefaultCol(ccColor::yellow)
 		, decimateCloudOnMove(true)
+		, minLODLevel(11)
+		, minLODPointCount(10000000)
+		, currentLODLevel(0)
+		, currentLODStartIndex(0)
+		, moreLODPointsAvailable(false)
+		, higherLODLevelsAvailable(false)
 		, decimateMeshOnMove(true)
+		, minLODTriangleCount(2500000)
 		, sfColorScaleToDisplay(0)
 		, colorRampShader(0)
 		, customRenderingShader(0)
 		, useVBOs(true)
-		, pickedPointsRadius(4)
-		, pickedPointsTextShift(0.0)
+		, labelMarkerSize(5)
+		, labelMarkerTextShift_pix(5)
 		, dispNumberPrecision(6)
-		, labelsTransparency(100)
+		, labelOpacity(100)
 		, sourceBlend(GL_SRC_ALPHA)
 		, destBlend(GL_ONE_MINUS_SRC_ALPHA)
 	{}
@@ -170,51 +201,24 @@ public:
 	virtual void draw(CC_DRAW_CONTEXT& context) = 0;
 
 	//! Returns whether entity is visible or not
-	virtual bool isVisible() const;
+	inline virtual bool isVisible() const { return m_visible; }
 	//! Sets entity visibility
-	virtual void setVisible(bool state);
+	inline virtual void setVisible(bool state) { m_visible = state; }
 	//! Toggles visibility
-	virtual void toggleVisibility();
+	inline virtual void toggleVisibility() { setVisible(!isVisible()); }
 
 	//! Returns whether visibilty is locked or not
-	virtual bool isVisiblityLocked() const;
+	inline virtual bool isVisiblityLocked() const { return m_lockedVisibility; }
 	//! Locks/unlocks visibilty
 	/** If visibility is locked, the user won't be able to modify it
 		(via the properties tree for instance).
 	**/
-	virtual void lockVisibility(bool state);
+	inline virtual void lockVisibility(bool state) { m_lockedVisibility = state; }
 
 	//! Returns whether entity is selected or not
-	virtual bool isSelected() const;
+	inline virtual bool isSelected() const { return m_selected; }
 	//! Selects/unselects entity
-	virtual void setSelected(bool state);
-
-	//! Returns bounding-box
-	/** If bbox is not relative, any active GL transformation
-		(see setGLTransformation) will be applied to it.
-		Moreover, one can compute a full bounding box, taking
-		into acount every children, or only the ones displayed
-		in a given GL window. Eventualy, one can also choose to
-		compute bbox only with geometrical entities, or also with
-		full GL features.
-		\param relative specifies whether bbox is relative or not
-		\param withGLfeatures include GL features (example: octree grid display) inside BB or not
-		\param window display to compute bbox only with entities displayed in a given GL window
-		\return bounding-box
-	**/
-	virtual ccBBox getBB(bool relative=true, bool withGLfeatures=false, const ccGenericGLDisplay* window = 0) = 0;
-
-	//! Returns best-fit bounding-box (if available)
-	/** WARNING: This method is not supported by all entities!
-		Should be re-implemented whenever possible
-		(returns the axis-aligned bounding-box by default).
-		\param[out] trans associated transformation (so that the bounding-box can be displayed in the right position!)
-		\return fit bounding-box
-	**/
-	virtual ccBBox getFitBB(ccGLMatrix& trans);
-
-	//! Draws absolute (axis aligned) bounding-box
-	virtual void drawBB(const colorType col[]);
+	inline virtual void setSelected(bool state) { m_selected = state; }
 
 	//! Returns main OpenGL paramters for this entity
 	/** These parameters are deduced from the visiblity states
@@ -224,42 +228,42 @@ public:
 	virtual void getDrawingParameters(glDrawParams& params) const;
 
 	//! Returns whether colors are enabled or not
-	virtual bool hasColors() const;
+	inline virtual bool hasColors() const  { return false; }
 	//! Returns whether colors are shown or not
-	virtual bool colorsShown() const;
+	inline virtual bool colorsShown() const { return m_colorsDisplayed; }
 	//! Sets colors visibility
-	virtual void showColors(bool state);
+	inline virtual void showColors(bool state) { m_colorsDisplayed = state; }
 	//! Toggles colors display state
-	virtual void toggleColors();
+	inline virtual void toggleColors() { showColors(!colorsShown()); }
 
 	//! Returns whether normals are enabled or not
-	virtual bool hasNormals() const;
+	inline virtual bool hasNormals() const  { return false; }
 	//! Returns whether normals are shown or not
-	virtual bool normalsShown() const;
+	inline virtual bool normalsShown() const { return m_normalsDisplayed; }
 	//! Sets normals visibility
-	virtual void showNormals(bool state);
+	inline virtual void showNormals(bool state) { m_normalsDisplayed = state; }
 	//! Toggles normals display state
-	virtual void toggleNormals();
+	inline virtual void toggleNormals() { showNormals(!normalsShown()); }
 
 	/*** scalar fields ***/
 
 	//! Returns whether an active scalar field is available or not
-	virtual bool hasDisplayedScalarField() const;
+	inline virtual bool hasDisplayedScalarField() const { return false; }
 
 	//! Returns whether one or more scalar fields are instantiated
 	/** WARNING: doesn't mean a scalar field is currently displayed
 		(see ccDrawableObject::hasDisplayedScalarField).
 	**/
-	virtual bool hasScalarFields() const;
+	inline virtual bool hasScalarFields() const  { return false; }
 
 	//! Sets active scalarfield visibility
-	virtual void showSF(bool state);
+	inline virtual void showSF(bool state) { m_sfDisplayed = state; }
 
 	//! Toggles SF display state
-	virtual void toggleSF();
+	inline virtual void toggleSF() { showSF(!sfShown()); }
 
 	//! Returns whether active scalar field is visible
-	virtual bool sfShown() const;
+	inline virtual bool sfShown() const { return m_sfDisplayed; }
 
 	/*** Mesh materials ***/
 
@@ -269,32 +273,32 @@ public:
 	/*** Name display in 3D ***/
 
 	//! Sets whether name should be displayed in 3D
-	virtual void showNameIn3D(bool state);
+	inline virtual void showNameIn3D(bool state) { m_showNameIn3D = state; }
 
 	//! Returns whether name is displayed in 3D or not
-	virtual bool nameShownIn3D() const;
+	inline virtual bool nameShownIn3D() const { return m_showNameIn3D; }
 
 	//! Toggles name in 3D display state
-	virtual void toggleShowName();
+	inline virtual void toggleShowName() { showNameIn3D(!nameShownIn3D()); }
 
 	/*** temporary color ***/
 
 	//! Returns whether colors are currently overriden by a temporary (unique) color
 	/** See ccDrawableObject::setTempColor.
 	**/
-	virtual bool isColorOverriden() const;
+	inline virtual bool isColorOverriden() const { return m_colorIsOverriden; }
 
 	//! Returns current temporary (unique) color
-	virtual const colorType* getTempColor() const;
+	inline virtual const ccColor::Rgb& getTempColor() const { return m_tempColor; }
 
 	//! Sets current temporary (unique)
 	/** \param col rgb color
 		\param autoActivate auto activates temporary color
 	**/
-	virtual void setTempColor(const colorType* col, bool autoActivate = true);
+	virtual void setTempColor(const ccColor::Rgb& col, bool autoActivate = true);
 
 	//! Set temporary color activation state
-	virtual void enableTempColor(bool state);
+	inline virtual void enableTempColor(bool state) { m_colorIsOverriden = state; }
 
 	/*** associated display management ***/
 
@@ -305,7 +309,7 @@ public:
 	virtual void setDisplay(ccGenericGLDisplay* win);
 
 	//! Returns associated GL display
-	virtual ccGenericGLDisplay* getDisplay() const;
+	inline virtual ccGenericGLDisplay* getDisplay() const { return m_currentDisplay; }
 
 	//! Redraws associated GL display
 	virtual void redrawDisplay();
@@ -325,14 +329,12 @@ public:
 	/*** Transformation matrix management (for display only) ***/
 
 	//! Associates entity with a GL transformation (rotation + translation)
-	/** WARNING: FOR DISPLAY PURPOSE ONLY (i.e. should only be temporary)
+	/** \warning FOR DISPLAY PURPOSE ONLY (i.e. should only be temporary)
 		If the associated GL transformation is enabled (see
 		ccDrawableObject::enableGLTransformation), it will
-		be applied before displaying this entity. It will also be
-		taken into account during computation of a non-relative
-		bounding-box (see ccDrawableObject::getBB). However it
-		will not be taken into account by any CCLib algorithm (distance
-		computation, etc.) for instance.
+		be applied before displaying this entity.
+		However it will not be taken into account by any CCLib algorithm
+		(distance computation, etc.) for instance.
 		Note: GL transformation is automatically enabled.
 	**/
 	virtual void setGLTransformation(const ccGLMatrix& trans);
@@ -340,15 +342,15 @@ public:
 	//! Enables/disables associated GL transformation
 	/** See ccDrawableObject::setGLTransformation.
 	**/
-	virtual void enableGLTransformation(bool state);
+	inline virtual void enableGLTransformation(bool state) { m_glTransEnabled = state; }
 
 	//! Returns whether a GL transformation is enabled or not
-	virtual bool isGLTransEnabled() const;
+	inline virtual bool isGLTransEnabled() const { return m_glTransEnabled; }
 
 	//! Retuns associated GL transformation
 	/** See ccDrawableObject::setGLTransformation.
 	**/
-	virtual const ccGLMatrix& getGLTransformation() const;
+	inline virtual const ccGLMatrix& getGLTransformation() const { return m_glTrans; }
 
 	//! Resets associated GL transformation
 	/** GL transformation is reset to identity.
@@ -394,7 +396,7 @@ protected:
 	bool m_sfDisplayed;
 
 	//! Temporary (unique) color
-	colorType m_tempColor[3];
+	ccColor::Rgb m_tempColor;
 	//! Temporary (unique) color activation state
 	bool m_colorIsOverriden;
 

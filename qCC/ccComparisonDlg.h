@@ -54,42 +54,62 @@ public:
 	//! Default destructor
 	~ccComparisonDlg();
 
-public slots:
+	//! Returns compared entity
+	ccHObject* getComparedEntity() const { return m_compEnt; }
+	//! Returns compared entity
+	ccHObject* getReferenceEntity() { return m_refEnt; }
 
-	bool compute();
+public slots:
+	bool computeDistances();
 	void applyAndExit();
 	void cancelAndExit();
 
 protected slots:
 	void showHisto();
-	void split3DCheckboxToggled(bool);
 	void locaModelChanged(int);
-	void updateOctreeLevel();
 	void maxDistUpdated();
-	void octreeLevelCheckBoxToggled(bool);
 
 protected:
 
 	bool isValid();
 	bool prepareEntitiesForComparison();
-	int computeApproxResults();
+	bool computeApproxDistances();
+	int getBestOctreeLevel();
 	int determineBestOctreeLevel(double);
 	void updateDisplay(bool showSF, bool hideRef);
-	void clean();
+	void releaseOctrees();
 
-	ccHObject *m_compEnt,*m_refEnt;
-	CCLib::DgmOctree *m_compOctree,*m_refOctree;
+	//! Compared entity
+	ccHObject* m_compEnt;
+	//! Compared entity equivalent cloud
 	ccPointCloud* m_compCloud;
+	//! Compared entity's octree
+	CCLib::DgmOctree* m_compOctree;
+	//! Whether the compared entity octree is partial or not
+	bool m_compOctreeIsPartial;
+	//! Initial compared entity visibility
+	bool m_compSFVisibility;
+
+	//! Reference entity
+	ccHObject* m_refEnt;
+	//! Reference entity equivalent cloud (if any)
 	ccGenericPointCloud* m_refCloud;
+	//! Reference entity equivalent mesh (if any)
 	ccGenericMesh* m_refMesh;
+	//! Reference entity's octree
+	CCLib::DgmOctree* m_refOctree;
+	//! Whether the reference entity octree is partial or not
+	bool m_refOctreeIsPartial;
+	//! Initial reference entity visibility
+	bool m_refVisibility;
+
+	//! Comparison type
 	CC_COMPARISON_TYPE m_compType;
 
 	//! last computed scalar field name
 	QString m_sfName;
 
-	//initial state
-	bool m_refVisibility;
-	bool m_compSFVisibility;
+	//! Initial SF name enabled on the compared entity
 	QString m_oldSfName;
 
 	//! Whether the current SF is a distance field or not
@@ -98,8 +118,8 @@ protected:
 	//! Whether a display is active (and should be refreshed) or not
 	bool m_noDisplay;
 
-	//! Best guessed level validity
-	bool m_needToRecomputeBestLevel;
+	//! Best octree level (or 0 if none has been guessed already)
+	int m_bestOctreeLevel;
 };
 
 #endif

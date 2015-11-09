@@ -23,6 +23,7 @@
 
 //qCC_db
 #include <ccLog.h>
+#include <ccObject.h> //for CC_QT5 def
 //qCC_gl
 #include <ccGLWindow.h>
 //CCLib
@@ -274,7 +275,7 @@ void Mouse3DInput::Apply(const std::vector<float>& motionData, ccGLWindow* win)
 	{
 		vec = motionData;
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return;

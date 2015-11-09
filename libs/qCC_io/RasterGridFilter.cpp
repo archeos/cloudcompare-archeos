@@ -113,19 +113,14 @@ CC_FILE_ERROR RasterGridFilter::loadFile(QString filename, ccHObject& container,
 				double z = 0.0 /*+ Pshift.z*/;
 				for (int j=0; j<rasterY; ++j)
 				{
-					double y = adfGeoTransform[3] + static_cast<double>(j) * adfGeoTransform[5] + Pshift.y;
-					CCVector3 P(	0,
-									static_cast<PointCoordinateType>(y),
-									static_cast<PointCoordinateType>(z));
 					for (int i=0; i<rasterX; ++i)
 					{
-						double x = adfGeoTransform[0] + static_cast<double>(i) * adfGeoTransform[1] + Pshift.x;
-
-						P.x = static_cast<PointCoordinateType>(x);
+						double x = adfGeoTransform[0] + static_cast<double>(i) * adfGeoTransform[1] + static_cast<double>(j) * adfGeoTransform[2] + Pshift.x;
+						double y = adfGeoTransform[3] + static_cast<double>(i) * adfGeoTransform[4] + static_cast<double>(j) * adfGeoTransform[5] + Pshift.y;
+						CCVector3 P(static_cast<PointCoordinateType>(x), static_cast<PointCoordinateType>(y), static_cast<PointCoordinateType>(z));
 						pc->addPoint(P);
 					}
 				}
-
 				QVariant xVar = QVariant::fromValue<int>(rasterX);
 				QVariant yVar = QVariant::fromValue<int>(rasterY);
 				pc->setMetaData("raster_width",xVar);
@@ -143,7 +138,6 @@ CC_FILE_ERROR RasterGridFilter::loadFile(QString filename, ccHObject& container,
 				GDALRasterBand* poBand = poDataset->GetRasterBand(i);
 
 				GDALColorInterp colorInterp = poBand->GetColorInterpretation();
-				GDALDataType bandType = poBand->GetRasterDataType();
 
 				int nBlockXSize, nBlockYSize;
 				poBand->GetBlockSize( &nBlockXSize, &nBlockYSize );
@@ -256,13 +250,13 @@ CC_FILE_ERROR RasterGridFilter::loadFile(QString filename, ccHObject& container,
 						else
 						{
 							//instantiate memory for RBG colors if necessary
-							if (!pc->hasColors() && !pc->setRGBColor(MAX_COLOR_COMP,MAX_COLOR_COMP,MAX_COLOR_COMP))
+							if (!pc->hasColors() && !pc->setRGBColor(ccColor::MAX,ccColor::MAX,ccColor::MAX))
 							{
 								ccLog::Warning(QString("Failed to instantiate memory for storing color band '%1'!").arg(GDALGetColorInterpretationName(colorInterp)));
 							}
 							else
 							{
-								assert(bandType <= GDT_Int32);
+								assert(poBand->GetRasterDataType() <= GDT_Int32);
 
 								int* colIndexes = (int*) CPLMalloc(sizeof(int)*nXSize);
 								//double* scanline = new double[nXSize];
@@ -282,7 +276,7 @@ CC_FILE_ERROR RasterGridFilter::loadFile(QString filename, ccHObject& container,
 										unsigned pointIndex = static_cast<unsigned>(k + j * rasterX);
 										if (pointIndex <= pc->size())
 										{
-											colorType* C = const_cast<colorType*>(pc->getPointColor(pointIndex));
+											ColorCompType* C = const_cast<ColorCompType*>(pc->getPointColor(pointIndex));
 
 											switch(colorInterp)
 											{
@@ -291,20 +285,20 @@ CC_FILE_ERROR RasterGridFilter::loadFile(QString filename, ccHObject& container,
 												{
 													GDALColorEntry col;
 													colTable->GetColorEntryAsRGB(colIndexes[k],&col);
-													C[0] = static_cast<colorType>(col.c1 & MAX_COLOR_COMP);
-													C[1] = static_cast<colorType>(col.c2 & MAX_COLOR_COMP);
-													C[2] = static_cast<colorType>(col.c3 & MAX_COLOR_COMP);
+													C[0] = static_cast<ColorCompType>(col.c1 & ccColor::MAX);
+													C[1] = static_cast<ColorCompType>(col.c2 & ccColor::MAX);
+													C[2] = static_cast<ColorCompType>(col.c3 & ccColor::MAX);
 												}
 												break;
 
 											case GCI_RedBand:
-												C[0] = static_cast<colorType>(colIndexes[k] & MAX_COLOR_COMP);
+												C[0] = static_cast<ColorCompType>(colIndexes[k] & ccColor::MAX);
 												break;
 											case GCI_GreenBand:
-												C[1] = static_cast<colorType>(colIndexes[k] & MAX_COLOR_COMP);
+												C[1] = static_cast<ColorCompType>(colIndexes[k] & ccColor::MAX);
 												break;
 											case GCI_BlueBand:
-												C[2] = static_cast<colorType>(colIndexes[k] & MAX_COLOR_COMP);
+												C[2] = static_cast<ColorCompType>(colIndexes[k] & ccColor::MAX);
 												break;
 
 											default:

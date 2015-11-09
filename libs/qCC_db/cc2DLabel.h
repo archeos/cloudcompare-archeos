@@ -41,26 +41,23 @@ public:
 	//inherited from ccObject
 	virtual QString getName() const;
 	//inherited from ccHObject
-	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::LABEL_2D; }
-	virtual bool isSerializable() const { return true; }
+	inline virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::LABEL_2D; }
+	inline virtual bool isSerializable() const { return true; }
 
 	//! Returns 'raw' name (no replacement of default keywords)
-	QString getRawName() const { return m_name; }
-
-	//! Adds a point to label
-	/** Adding a point to a label will automatcillay make it 'mute'.
-		1 point  = 'point' label (point position, normal, color, etc.)
-		2 points = 'vector' label (vertices position, distance)
-		3 points = "triangle/plane' label (vertices position, area, normal)
-		\return false if 'full'
-	**/
-	bool addPoint(ccGenericPointCloud* cloud, unsigned pointIndex);
+	inline QString getRawName() const { return m_name; }
 
 	//! Gets label content (as it will be displayed)
 	/** \param precision displayed numbers precision
 		\return label body (one string per line)
 	**/
 	QStringList getLabelContent(int precision);
+
+	//! Returns the (3D) label title
+	/** \param precision displayed numbers precision
+		\return label title
+	**/
+	QString getTitle(int precision) const;
 
 	//inherited from ccInteractor
 	virtual bool acceptClick(int x, int y, Qt::MouseButton button);
@@ -70,31 +67,40 @@ public:
 	void setPosition(float x, float y);
 
 	//! Returns relative position
-	const float* getPosition() const { return m_screenPos; }
+	inline const float* getPosition() const { return m_screenPos; }
 
 	//! Clears label
 	void clear(bool ignoreDependencies = false);
 
 	//! Returns current size
-	unsigned size() const { return (unsigned)m_points.size(); }
+	inline unsigned size() const { return static_cast<unsigned>(m_points.size()); }
+
+	//! Adds a point to label
+	/** Adding a point to a label will automatically make it 'mutate'.
+		1 point  = 'point' label (point position, normal, color, etc.)
+		2 points = 'vector' label (vertices position, distance)
+		3 points = "triangle/plane' label (vertices position, area, normal)
+		\return false if 'full'
+	**/
+	bool addPoint(ccGenericPointCloud* cloud, unsigned pointIndex);
 
 	//! Whether to collapse label or not
-	void setCollapsed(bool state) { m_showFullBody = !state; }
+	inline void setCollapsed(bool state) { m_showFullBody = !state; }
 
 	//! Returns Whether the label is collapsed or not
-	bool isCollapsed() const { return !m_showFullBody; }
+	inline bool isCollapsed() const { return !m_showFullBody; }
 
 	//! Whether to display the label in 3D (title only)
-	void setDisplayedIn3D(bool state) { m_dispIn3D = state; }
+	inline void setDisplayedIn3D(bool state) { m_dispIn3D = state; }
 
 	//! Returns whether the label is displayed in 3D (title only)
-	bool isDisplayedIn3D() const { return m_dispIn3D; }
+	inline bool isDisplayedIn3D() const { return m_dispIn3D; }
 
 	//! Whether to display the label in 2D
-	void setDisplayedIn2D(bool state) { m_dispIn2D = state; }
+	inline void setDisplayedIn2D(bool state) { m_dispIn2D = state; }
 
 	//! Returns whether the label is displayed in 2D
-	bool isDisplayedIn2D() const { return m_dispIn2D; }
+	inline bool isDisplayedIn2D() const { return m_dispIn2D; }
 
 	//! Picked point descriptor
 	/** Label 'points' can be shared between multiple entities
@@ -120,9 +126,103 @@ public:
 	};
 
 	//! Returns a given point
-	const PickedPoint& getPoint(unsigned index) const { return m_points[index]; }
+	inline const PickedPoint& getPoint(unsigned index) const { return m_points[index]; }
+
+	//! Sets marker (relative) scale
+	/** Default value: 1.0
+	**/
+	inline void setRelativeMarkerScale(float scale) { m_relMarkerScale = scale; }
 
 protected:
+
+	//! One-point label info
+	struct LabelInfo1
+	{
+		unsigned pointIndex;
+		ccGenericPointCloud* cloud;
+		bool hasNormal;
+		CCVector3 normal;
+		bool hasRGB;
+		Vector3Tpl<ColorCompType> rgb;
+		bool hasSF;
+		ScalarType sfValue;
+		double sfShiftedValue;
+		bool sfValueIsShifted;
+		QString sfName;
+		//! Default constructor
+		LabelInfo1()
+			: pointIndex(0)
+			, cloud(0)
+			, hasNormal(false)
+			, normal(0,0,0)
+			, hasRGB(false)
+			, rgb(0,0,0)
+			, hasSF(false)
+			, sfValue(0)
+			, sfShiftedValue(0)
+			, sfValueIsShifted(false)
+		{}
+	};
+	
+	//! Returns one-point label info
+	void getLabelInfo1(LabelInfo1& info) const;
+	
+	//! Returns the SF value as a string
+	/** Handles:
+		- NaN values
+		- shifted SF
+	**/
+	static QString GetSFValueAsString(const LabelInfo1& info, int precision);
+
+	//! Two-points label info
+	struct LabelInfo2
+	{
+		unsigned point1Index;
+		ccGenericPointCloud* cloud1;
+		unsigned point2Index;
+		ccGenericPointCloud* cloud2;
+		CCVector3 diff;
+		//! Default constructor
+		LabelInfo2()
+			: point1Index(0)
+			, cloud1(0)
+			, point2Index(0)
+			, cloud2(0)
+			, diff(0,0,0)
+		{}
+	};
+	//! Gets two-points label info
+	void getLabelInfo2(LabelInfo2& info) const;
+
+	//! Three-points label info
+	struct LabelInfo3
+	{
+		unsigned point1Index;
+		ccGenericPointCloud* cloud1;
+		unsigned point2Index;
+		ccGenericPointCloud* cloud2;
+		unsigned point3Index;
+		ccGenericPointCloud* cloud3;
+		CCVector3 normal;
+		PointCoordinateType area;
+		CCVector3d angles;
+		CCVector3d edges;
+		//! Default constructor
+		LabelInfo3()
+			: point1Index(0)
+			, cloud1(0)
+			, point2Index(0)
+			, cloud2(0)
+			, point3Index(0)
+			, cloud3(0)
+			, normal(0,0,0)
+			, area(0)
+			, angles(0,0,0)
+			, edges(0,0,0)
+		{}
+	};
+	//! Gets three-points label info
+	void getLabelInfo3(LabelInfo3& info) const;
 
 	//inherited from ccHObject
 	virtual bool toFile_MeOnly(QFile& out) const;
@@ -151,7 +251,7 @@ protected:
 		the distance to the upper border and ROI[3] is the
 		distance to the lower border (relatively to m_screenPos).
 	**/
-	int m_labelROI[4];
+	QRect m_labelROI;
 
 	//! close button ROI
 	//int m_closeButtonROI[4];
@@ -167,6 +267,9 @@ protected:
 
 	//! Whether to display the label in 2D
 	bool m_dispIn2D;
+
+	//! Relative marker scale
+	float m_relMarkerScale;
 };
 
 #endif //CC_2D_LABEL_HEADER

@@ -1,14 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 
-# Eliminate a warning when building in Windows that relates
-# to static linking of Qt executables to qtmain.lib.
-# This policy was introduced in CMake version 2.8.11.
-# CMake version 2.8.11.2 warns when the policy is not set
-# and uses OLD behavior.
-if(POLICY CMP0020)
-  cmake_policy(SET CMP0020 OLD)
-endif()
-
 option( INSTALL_QSRA_PLUGIN "Check to install qSRA (Surface of Revolution Analysis) plugin" OFF )
 
 if (INSTALL_QSRA_PLUGIN)
@@ -37,8 +28,7 @@ if (INSTALL_QSRA_PLUGIN)
 
 	#don't forget associated widgets(.ui)
 	set( CC_PLUGIN_CUSTOM_UI_LIST	${CloudCompare_SOURCE_DIR}/ui_templates/colorScaleEditorDlg.ui
-									${CloudCompare_SOURCE_DIR}/ui_templates/renderToFileDialog.ui
-									${CloudCompare_SOURCE_DIR}/ui_templates/displayOptionsDlg.ui )
+									${CloudCompare_SOURCE_DIR}/ui_templates/renderToFileDialog.ui )
 
 	include( ../CMakePluginTpl.cmake )
 	

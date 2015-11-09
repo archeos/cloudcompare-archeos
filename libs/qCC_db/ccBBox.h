@@ -20,7 +20,7 @@
 
 //CCLib
 #include <CCGeom.h>
-#include <Matrix.h>
+#include <SquareMatrix.h>
 
 //Local
 #include "qCC_db.h"
@@ -89,11 +89,13 @@ public:
 	PointCoordinateType getMinBoxDim() const;
 	//! Returns maximal box dimension
 	PointCoordinateType getMaxBoxDim() const;
+	//! Returns the bounding-box volume
+	double computeVolume() const;
 
 	//! Draws bounding box (OpenGL)
 	/** \param col (R,G,B) color
 	**/
-	void draw(const colorType col[]) const;
+	void draw(const ccColor::Rgb& col) const;
 
 	//! Sets bonding box validity
 	inline void setValidity(bool state) { m_valid = state; }

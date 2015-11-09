@@ -1,7 +1,6 @@
 # ------------------------------------------------------------------------------
 # Qt
 # ------------------------------------------------------------------------------
-
 option( USE_QT5 "Check to use Qt5 instead of Qt4" OFF )
 if ( USE_QT5 )
 
@@ -44,10 +43,13 @@ if ( USE_QT5 )
 	#set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt5Widgets_EXECUTABLE_COMPILE_FLAGS}")
 	#set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt5Core_EXECUTABLE_COMPILE_FLAGS}")
 	#set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt5Gui_EXECUTABLE_COMPILE_FLAGS}")
-	
+
+	set( QT_BINARY_DIR ${QT5_ROOT_PATH}/bin )
+
 else()
 
 	set( DESIRED_QT_VERSION 4 )
+	set (QT_BINARY_DIR "") #to force CMake to update QT_BINARY_DIR!
 	if ( MSVC )
 		#We need QtMain to use 'WIN32' mode (/subsystem:windows) with MSVC
 		find_package( Qt4 ${QT_VERSION} COMPONENTS QtMain QtCore QtGui QtOpenGL REQUIRED )
@@ -62,6 +64,8 @@ else()
 	
 	list( APPEND EXTERNAL_LIBS_INCLUDE_DIR ${QT_INCLUDE_DIR} )
 	list( APPEND EXTERNAL_LIBS_LIBRARIES ${QT_LIBRARIES} )
+	
+	#message(${QT_BINARY_DIR})
 
 endif()
 

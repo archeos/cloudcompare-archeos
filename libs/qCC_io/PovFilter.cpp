@@ -65,7 +65,7 @@ bool PovFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) con
 	return false;
 }
 
-CC_FILE_ERROR PovFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR PovFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity || filename.isEmpty())
 		return CC_FERR_BAD_ARGUMENT;
@@ -128,7 +128,11 @@ CC_FILE_ERROR PovFilter::saveToFile(ccHObject* entity, QString filename)
 		{
 			QString thisFilename = fullBaseName + QString("_%1.bin").arg(i);
 
-			CC_FILE_ERROR error = FileIOFilter::SaveToFile(clouds[i],thisFilename,BinFilter::GetFileFilter());
+			BinFilter::SaveParameters parameters;
+			{
+				parameters.alwaysDisplaySaveDialog = false;
+			}
+			CC_FILE_ERROR error = FileIOFilter::SaveToFile(clouds[i],thisFilename,parameters,BinFilter::GetFileFilter());
 			if (error != CC_FERR_NO_ERROR)
 			{
 				fclose(mainFile);
@@ -272,6 +276,7 @@ CC_FILE_ERROR PovFilter::loadFile(QString filename, ccHObject& container, LoadPa
 			if (!filter)
 			{
 				ccLog::Warning(QString("[POV] No I/O filter found for loading file '%1' (type = '%2')").arg(subFileName).arg(subFileType));
+				fclose(fp);
 				return CC_FERR_UNKNOWN_FILE;
 			}
 			ccHObject* entities = FileIOFilter::LoadFromFile(QString("%0/%1").arg(path).arg(subFileName),parameters,filter);
@@ -297,7 +302,7 @@ CC_FILE_ERROR PovFilter::loadFile(QString filename, ccHObject& container, LoadPa
 						float V[3];
 						sscanf(line+2,"%f %f %f\n",V,V+1,V+2);
 
-						uchar col = uchar(line[0])-88;
+						unsigned char col = static_cast<unsigned char>(line[0])-88;
 						float* mat = rot.data();
 						mat[col+0] = V[0];
 						mat[col+4] = V[1];

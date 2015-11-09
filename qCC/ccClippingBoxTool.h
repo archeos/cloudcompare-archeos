@@ -40,7 +40,7 @@ class ccClippingBoxTool : public ccOverlayDialog, public Ui::ClippingBoxDlg
 public:
 
 	//! Default constructor
-	ccClippingBoxTool(QWidget* parent);
+	explicit ccClippingBoxTool(QWidget* parent);
 	//! Default destructor
 	virtual ~ccClippingBoxTool();
 
@@ -53,7 +53,7 @@ public:
 	const ccClipBox* box() const { return m_clipBox; }
 
 	//! Sets the 'clipped' entity
-	/** \return success, if the entitiy is elligible for clipping
+	/** \return success, if the entitiy is eligible for clipping
 	**/
 	bool setAssociatedEntity(ccHObject* anObject);
 
@@ -68,8 +68,8 @@ protected slots:
 	void closeDialog();
 	void extractContour();
 	void removeLastContour();
-	void exportCloud();
-	void exportMultCloud();
+	void exportSlice();
+	void exportMultSlices();
 
 	void onBoxModified(const ccBBox* box);
 

@@ -23,9 +23,14 @@
 #include "ccSerializableObject.h"
 
 //Qt
+#include <qglobal.h>
 #include <QString>
 #include <QVariant>
 #include <QSharedPointer>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#define CC_QT5
+#endif
+
 
 //System
 #include <stdint.h>
@@ -93,7 +98,7 @@ public:
 	static const CC_CLASS_ENUM POINT_CLOUD			=	HIERARCHY_OBJECT	| CC_CLOUD_BIT;
 	static const CC_CLASS_ENUM MESH					=	HIERARCHY_OBJECT	| CC_MESH_BIT;
 	static const CC_CLASS_ENUM SUB_MESH				=	HIERARCHY_OBJECT	| CC_MESH_BIT				| CC_LEAF_BIT;
-	static const CC_CLASS_ENUM MESH_GROUP			=	MESH				| CC_GROUP_BIT;				//DEPRECATED; DEFINITION REMAINS FOR BACKWARD COMPATIBILITY ONLY!
+	static const CC_CLASS_ENUM MESH_GROUP			=	MESH				| CC_GROUP_BIT;								//DEPRECATED; DEFINITION REMAINS FOR BACKWARD COMPATIBILITY ONLY!
 	static const CC_CLASS_ENUM FACET				=	HIERARCHY_OBJECT	| CC_FACET_BIT;
 	static const CC_CLASS_ENUM POINT_OCTREE			=	HIERARCHY_OBJECT	| CC_OCTREE_BIT				| CC_LEAF_BIT;
 	static const CC_CLASS_ENUM POINT_KDTREE			=	HIERARCHY_OBJECT	| CC_KDTREE_BIT				| CC_LEAF_BIT;
@@ -103,12 +108,12 @@ public:
 	static const CC_CLASS_ENUM SENSOR				=	CC_HIERARCH_BIT		| CC_SENSOR_BIT;
 	static const CC_CLASS_ENUM GBL_SENSOR			=	SENSOR				| CC_GROUND_BASED_BIT;
 	static const CC_CLASS_ENUM CAMERA_SENSOR		=	SENSOR				| CC_CAMERA_BIT;
-	static const CC_CLASS_ENUM PRIMITIVE			=	MESH				| CC_PRIMITIVE_BIT;			//primitives are meshes!
+	static const CC_CLASS_ENUM PRIMITIVE			=	MESH				| CC_PRIMITIVE_BIT;							//primitives are meshes!
 	static const CC_CLASS_ENUM PLANE				=	PRIMITIVE			| CC_PLANE_BIT;
 	static const CC_CLASS_ENUM SPHERE				=	PRIMITIVE			| CC_SPHERE_BIT;
 	static const CC_CLASS_ENUM TORUS				=	PRIMITIVE			| CC_TORUS_BIT;
-	static const CC_CLASS_ENUM CYLINDER				=	PRIMITIVE			| CC_CYLINDER_BIT;
 	static const CC_CLASS_ENUM CONE					=	PRIMITIVE			| CC_CONE_BIT;
+	static const CC_CLASS_ENUM CYLINDER				=	PRIMITIVE			| CC_CYLINDER_BIT			| CC_CONE_BIT;	//cylinders are cones!
 	static const CC_CLASS_ENUM BOX					=	PRIMITIVE			| CC_BOX_BIT;
 	static const CC_CLASS_ENUM DISH					=	PRIMITIVE			| CC_DISH_BIT;
 	static const CC_CLASS_ENUM EXTRU				=	PRIMITIVE			| CC_EXTRU_BIT;
@@ -261,28 +266,34 @@ public:
 	static CC_CLASS_ENUM ReadClassIDFromFile(QFile& in, short dataVersion);
 
 	//! Returns a given associated meta data
-	/** \param key meta data unique identifier (case sensitive!)
+	/** \param key meta data unique identifier (case sensitive)
 		\return meta data (if any) or an invalid QVariant
 	**/
 	QVariant getMetaData(QString key) const;
 
-	//! Removes a given associated meta data
-	/** \param key meta data unique identifier (case sensitive!)
+	//! Removes a given associated meta-data
+	/** \param key meta-data unique identifier (case sensitive)
 		\return success
 	**/
 	bool removeMetaData(QString key);
 
-	//! Sets a meta data element
-	/** \param key meta data unique identifier (case sensitive!)
+	//! Sets a meta-data element
+	/** \param key meta-data unique identifier (case sensitive)
 		\param data data
 	**/
 	void setMetaData(QString key, QVariant data);
 
-	//! Says if a metadata with the given key exists or not
-	/** \param key is the key to look for
-		\return true, if exists
+	//! Sets several meta-data elements at a time
+	/** \param dataset meta-data set
+		\param overwrite whether existing meta-data elements should be replaced by the input ones (with the same key) or not
 	**/
-	bool hasMetaData(QString key);
+	void setMetaData(const QVariantMap& dataset, bool overwrite = false);
+
+	//! Returns whether a meta-data element with the given key exists or not
+	/** \param key meta-data unique identifier (case sensitive)
+		\return whether the element exists or not
+	**/
+	bool hasMetaData(QString key) const;
 
 	//! Returns meta-data map (const only)
 	const QVariantMap& metaData() const { return m_metaData; }

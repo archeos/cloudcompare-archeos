@@ -125,7 +125,7 @@ bool ccGlobalShiftManager::Handle(	const CCVector3d& P,
 		if (!coordinatesScale)
 			sasDlg.showScaleItems(false);
 
-		double scale = 1.0;
+		scale = 1.0;
 		CCVector3d shift(0,0,0);
 		if (useInputCoordinatesShiftIfPossible)
 		{
@@ -133,7 +133,8 @@ bool ccGlobalShiftManager::Handle(	const CCVector3d& P,
 			shift = coordinatesShift;
 			if (coordinatesScale)
 				scale = *coordinatesScale;
-			sasDlg.showWarning(true); //if we are here, it means that the provided shift isn't concordant
+			if (mode != ALWAYS_DISPLAY_DIALOG)
+				sasDlg.showWarning(true); //if we are here, it means that the provided shift isn't concordant
 		}
 		else
 		{
@@ -146,7 +147,7 @@ bool ccGlobalShiftManager::Handle(	const CCVector3d& P,
 
 		//add "suggested" entry
 		int index = sasDlg.addShiftInfo(ccShiftAndScaleCloudDlg::ShiftInfo("Suggested",shift,scale));
-		sasDlg.makeCurrent(index);
+		sasDlg.setCurrentProfile(index);
 		//add "last" entry (if available)
 		{
 			ccShiftAndScaleCloudDlg::ShiftInfo lastInfo;
@@ -167,13 +168,13 @@ bool ccGlobalShiftManager::Handle(	const CCVector3d& P,
 					if (	!NeedShift((CCVector3d(P) + info.shift) * info.scale )
 						&&  !NeedRescale(diagonal*info.scale) )
 					{
-						sasDlg.makeCurrent(static_cast<int>(i));
+						sasDlg.setCurrentProfile(static_cast<int>(i));
 						break;
 					}
 				}
 			}
 		}
-
+		sasDlg.showTitle(needShift || needRescale);
 		if (sasDlg.exec())
 		{
 			coordinatesShift = sasDlg.getShift();

@@ -18,10 +18,6 @@
 #ifndef Q_SRA_PLUGIN_HEADER
 #define Q_SRA_PLUGIN_HEADER
 
-//Qt
-#include <QObject>
-
-//qCC
 #include "../ccStdPluginInterface.h"
 
 class ccPointCloud;
@@ -39,7 +35,7 @@ class qSRA : public QObject, public ccStdPluginInterface
 public:
 
 	//! Default constructor
-	qSRA(QObject* parent = 0);
+	explicit qSRA(QObject* parent = 0);
 
 	//inherited from ccPluginInterface
 	virtual QString getName() const { return "Surface of Revolution Analysis"; }
@@ -53,21 +49,21 @@ public:
 protected slots:
 
 	//! Loads profile from a dedicated file
-	void loadProfile();
+	void loadProfile() const;
 
 	//! Computes cloud-to-profile radial distances
-	void computeCloud2ProfileRadialDist();
+	void computeCloud2ProfileRadialDist() const;
 
 	//! Projects the cloud distances into a 2D grid
-	void projectCloudDistsInGrid();
+	void projectCloudDistsInGrid() const;
 
 protected:
 
-	//! Currently selected entities
-	ccHObject::Container m_selectedEntities;
-
 	//! Projects the cloud distances into a 2D grid (needs the revolution profile)
-	void doProjectCloudDistsInGrid(ccPointCloud* cloud, ccPolyline* polyline);
+	void doProjectCloudDistsInGrid(ccPointCloud* cloud, ccPolyline* polyline) const;
+
+	//! Computes cloud-to-profile radial distances
+	bool doComputeRadialDists(ccPointCloud* cloud, ccPolyline* polyline) const;
 
 	//! Associated action
 	QAction* m_doLoadProfile;

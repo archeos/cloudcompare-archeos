@@ -34,7 +34,16 @@
 //Qt
 #include <QGLWidget>
 #include <QFont>
-
+#include <QMap>
+#include <QElapsedTimer>
+#include <QTimer>
+//#define THREADED_GL_WIDGET
+#ifdef THREADED_GL_WIDGET
+#include <QThread>
+#include <QMutex>
+#include <QWaitCondition>
+#include <QAtomicInt>
+#endif
 //system
 #include <set>
 #include <list>
@@ -65,7 +74,8 @@ public:
 						FAST_PICKING,
 						POINT_PICKING,
 						TRIANGLE_PICKING,
-						AUTO_POINT_PICKING,
+						POINT_OR_TRIANGLE_PICKING,
+						LABEL_PICKING,
 						DEFAULT_PICKING,
 	};
 
@@ -91,6 +101,7 @@ public:
 						MANUAL_TRANSFORMATION_MESSAGE,
 						MANUAL_SEGMENTATION_MESSAGE,
 						ROTAION_LOCK_MESSAGE,
+						FULL_SCREEN_MESSAGE,
 	};
 
 	//! Pivot symbol visibility
@@ -116,17 +127,19 @@ public:
 
 	//inherited from ccGenericGLDisplay
 	virtual void toBeRefreshed();
-	virtual void refresh();
+	virtual void refresh(bool only2D = false);
 	virtual void invalidateViewport();
-	virtual unsigned getTexture(const QImage& image);
 	virtual void releaseTexture(unsigned texID);
 	virtual void display3DLabel(const QString& str, const CCVector3& pos3D, const unsigned char* rgbColor = 0, const QFont& font = QFont());
 	virtual bool supportOpenGLVersion(unsigned openGLVersionFlag);
 	virtual void displayText(QString text, int x, int y, unsigned char align = ALIGN_DEFAULT, float bkgAlpha = 0, const unsigned char* rgbColor = 0, const QFont* font = 0);
 	virtual QFont getTextDisplayFont() const; //takes rendering zoom into account!
+	virtual QFont getLabelDisplayFont() const; //takes rendering zoom into account!
 	virtual const ccViewportParameters& getViewportParameters() const { return m_viewportParams; }
-	inline virtual void makeContextCurrent() { makeCurrent(); }
 	virtual void setupProjectiveViewport(const ccGLMatrixd& cameraMatrix, float fov_deg = 0.0f, float ar = 1.0f, bool viewerBasedPerspective = true, bool bubbleViewMode = false);
+	virtual unsigned getTextureID(const QImage& image);
+	virtual unsigned getTextureID( ccMaterial::CShared mtl);
+	virtual QWidget* asWidget() { return this; }
 
 	//! Displays a status message in the bottom-left corner
 	/** WARNING: currently, 'append' is not supported for SCREEN_CENTER_MESSAGE
@@ -250,7 +263,7 @@ public:
 	virtual void updateConstellationCenterAndZoom(const ccBBox* aBox = 0);
 
 	//! Returns the visible objects bounding-box
-	ccBBox getVisibleObjectsBB() const;
+	void getVisibleObjectsBB(ccBBox& box) const;
 
 	//! Rotates the base view matrix
 	/** Warning: 'base view' marix is either:
@@ -333,15 +346,17 @@ public:
 
 	//! Returns current font size
 	virtual int getFontPointSize() const;
+	//! Returns current font size for labels
+	virtual int getLabelFontPointSize() const;
 
-	//! Returns window own DB (2D objects only)
+	//! Returns window own DB
 	virtual ccHObject* getOwnDB();
-	//! Adds an entity to window own DB (2D objects only)
+	//! Adds an entity to window own DB
 	/** By default no dependency link is established between the entity and the window (DB).
 	**/
-	virtual void addToOwnDB(ccHObject* obj2D, bool noDependency = true);
-	//! Removes an entity from window own DB (2D objects only)
-	virtual void removeFromOwnDB(ccHObject* obj2D);
+	virtual void addToOwnDB(ccHObject* obj, bool noDependency = true);
+	//! Removes an entity from window own DB
+	virtual void removeFromOwnDB(ccHObject* obj);
 
 	//! Sets viewport parameters (all at once)
 	virtual void setViewportParameters(const ccViewportParameters& params);
@@ -368,8 +383,14 @@ public:
 	**/
 	virtual void invalidateVisualization();
 
+	//! Renders screen to an image
+	virtual QImage renderToImage(	float zoomFactor = 1.0,
+									bool dontScaleFeatures = false,
+									bool renderOverlayItems = false,
+									bool silent = false);
+
 	//! Renders screen to a file
-	virtual bool renderToFile(	const char* filename,
+	virtual bool renderToFile(	QString filename,
 								float zoomFactor = 1.0,
 								bool dontScaleFeatures = false,
 								bool renderOverlayItems = false);
@@ -448,16 +469,105 @@ public:
 	//! Returns whether the manual rotation around the vertical (screen) axis is locked or not
 	bool isVerticalRotationLocked() const { return m_verticalRotationLocked; }
 
+	//! Backprojects a 2D points on a 3D triangle
+	/** \warning Uses the current display parameters!
+		\param P2D point on the screen
+		\param A3D first vertex of the 3D triangle
+		\param B3D second vertex of the 3D triangle
+		\param C3D third vertex of the 3D triangle
+		\return backprojected point
+	**/
+	CCVector3 backprojectPointOnTriangle(	const CCVector2i& P2D,
+											const CCVector3& A3D,
+											const CCVector3& B3D,
+											const CCVector3& C3D );
+
+	//! Returns unique ID
+	inline int getUniqueID() const { return m_uniqueID; }
+
+	//! Returns whether LOD is enabled on this display or not
+	inline bool isLODEnabled() const { return m_LODEnabled; }
+
+	//! Enables or disables LOD on this display
+	/** \return success
+	**/
+	bool setLODEnabled(bool state, bool autoDisable = false);
+
+	//! Toggles (exclusive) full-screen mode
+	void toggleExclusiveFullScreen(bool state);
+
+	//! Returns whether the window is in exclusive full screen mode or not
+	bool exclusiveFullScreen() const;
+
+public: //debug traces on screen
+
+	//! Shows debug info on screen
+	inline void enableDebugTrace(bool state) { m_showDebugTraces = state; }
+
+	//! Toggles debug info on screen
+	inline void toggleDebugTrace() { m_showDebugTraces = !m_showDebugTraces; }
+
+public: //stereo mode
+
+	//! Seterovision parameters
+	struct StereoParams
+	{
+		StereoParams();
+
+		//! Glass/HMD type
+		enum GlassType {	RED_BLUE = 1,
+							RED_CYAN = 2,
+							NVIDIA_VISION = 3
+		};
+
+		//! Whether stereo-mode is 'analgyph' or real stereo mode
+		inline bool isAnaglyph() const { return glassType == RED_BLUE || glassType == RED_CYAN; }
+		
+		bool autoFocal;
+		double focalDist;
+		double eyeSepFactor;
+		GlassType glassType;
+	};
+
+	//! Enables stereo display mode
+	bool enableStereoMode(const StereoParams& params);
+
+	//! Disables stereo display mode
+	void disableStereoMode();
+
+	//! Returns whether the stereo display mode is enabled or not
+	inline bool stereoModeIsEnabled() const { return m_stereoModeEnabled; }
+	
+	//! Returns the current stereo mode parameters
+	inline const StereoParams& getStereoParams() const { return m_stereoParams; }
+
 public slots:
 
+	//! Applies a 1:1 global zoom
 	void zoomGlobal();
-	void testFrameRate();
 
 	//inherited from ccGenericGLDisplay
-	virtual void redraw();
+	virtual void redraw(bool only2D = false, bool resetLOD = true);
 
 	//called when recieving mouse wheel is rotated
 	void onWheelEvent(float wheelDelta_deg);
+
+	//! Tests frame rate
+	void startFrameRateTest();
+
+protected slots:
+
+	//! Renders the next L.O.D. level
+	void renderNextLODLevel();
+
+	//! Stops frame rate test
+	void stopFrameRateTest();
+
+	//! Reacts to the itemPickedFast signal
+	void onItemPickedFast(int entityID, int subEntityID, int x, int y);
+
+	//! Checks for scheduled redraw
+	void checkScheduledRedraw();
 
 signals:
 
@@ -466,13 +576,24 @@ signals:
 	//! Signal emitted when multiple entities are selected in the 3D view
 	void entitiesSelectionChanged(std::set<int> entIDs);
 
-	//! Signal emitted in point picking mode to declare picking of a given point
-	/** \param cloudUniqueID cloud unique ID
-		\param pointIndex point index in cloud
+	//! Signal emitted when a point (or a triangle) is picked
+	/** \param entityID entity unique ID
+		\param subEntityID point or triangle index in entity
 		\param x mouse cursor x position
 		\param y mouse cursor y position
 	**/
-	void pointPicked(int cloudUniqueID, unsigned pointIndex, int x, int y);
+	void itemPicked(int entityID, unsigned subEntityID, int x, int y);
+
+	//! Signal emitted when an item is picked (FAST_PICKING mode only)
+	/** \param entityID entity unique ID
+		\param subEntityID point or triangle index in entity
+		\param x mouse cursor x position
+		\param y mouse cursor y position
+	**/
+	void itemPickedFast(int entityID, int subEntityID, int x, int y);
+
+	//! Signal emitted when fast picking is finished (FAST_PICKING mode only)
+	void fastPickingFinished();
 
 	/*** Camera link mode (interactive modifications of the view/camera are echoed to other windows) ***/
 
@@ -540,12 +661,87 @@ signals:
 	void drawing3D();
 
 	//! Signal emitted when files are dropped on the window
-	void filesDropped(const QStringList& filenames);
+	void filesDropped(QStringList);
 
 	//! Signal emitted when a new label is created
 	void newLabel(ccHObject* obj);
 
-protected:
+	//! Signal emitted when the exclusive fullscreen is toggled
+	void exclusiveFullScreenToggled(bool);
+
+protected: //rendering
+
+	//! LOD state
+	struct LODState
+	{
+		LODState()
+			: inProgress(false)
+			, level(0)
+			, startIndex(0)
+			, progressIndicator(0)
+		{}
+
+		//! LOD display in progress
+		bool inProgress;
+		//! Currently rendered LOD level
+		unsigned char level;
+		//! Currently rendered LOD start index
+		unsigned startIndex;
+		//! Currently LOD progress indicator
+		unsigned progressIndicator;
+	};
+
+	//! Rendering params
+	struct RenderingParams
+	{
+		RenderingParams()
+			: passIndex(0)
+			, passCount(1)
+			, drawBackground(true)
+			, clearDepthLayer(true)
+			, clearColorLayer(true)
+			, useFBO(false)
+			, draw3DPass(true)
+			, draw3DCross(false)
+			, drawForeground(true)
+		{}
+
+		unsigned char passIndex;
+		unsigned char passCount;
+
+		//2D background
+		bool drawBackground;
+		bool clearDepthLayer;
+		bool clearColorLayer;
+
+		//3D central layer
+		bool draw3DPass;
+		bool useFBO;
+		bool draw3DCross;
+		//! Next LOD state
+		LODState nextLODState;
+
+		//2D foreground
+		bool drawForeground;
+	};
+
+	//! Full rendering pass (drawBackground + draw3D + drawForeground)
+	void fullRenderingPass(CC_DRAW_CONTEXT& context, RenderingParams& params);
+
+	//! Draws the background layer
+	/** Background + 2D background objects
+	**/
+	void drawBackground(CC_DRAW_CONTEXT& context, RenderingParams& params);
+
+	//! Draws the main 3D layer
+	void draw3D(CC_DRAW_CONTEXT& context, RenderingParams& params);
+
+	//! Draws the foreground layer
+	/** 2D foreground objects / text
+	**/
+	void drawForeground(CC_DRAW_CONTEXT& context, RenderingParams& params);
+
+protected: //other methods
 
 	//! Processes the clickable items
 	/** \return true if an item has been clicked
@@ -569,19 +765,56 @@ protected:
 	void initializeGL();
 	void resizeGL(int w, int h);
 	void paintGL();
+	bool event(QEvent* evt);
 
-	//! main OpenGL loop
-	void draw3D(CC_DRAW_CONTEXT& context, bool doDrawCross, ccFrameBufferObject* fbo = 0);
+#ifdef THREADED_GL_WIDGET
+	void initialize();
+	void resizeGL2();
+	void paint();
+	void resizeEvent(QResizeEvent* evt);
+	void glInit() { /*stop QGLWidget standard behavior*/ }
+	void glDraw() { /*stop QGLWidget standard behavior*/ }
+
+	//! Rendering thread
+	class RenderingThread : public QThread
+	{
+	public:
+
+		explicit RenderingThread(ccGLWindow* win);
+		~RenderingThread() { stop(); }
+		
+		void stop();
+		void redraw();
+
+	protected:
+
+		virtual void run();
+
+		ccGLWindow* m_window;
+		QWaitCondition m_waitCondition;
+		QAtomicInt m_abort;
+		QAtomicInt m_pendingRedraw;
+	};
+
+	friend RenderingThread;
+
+	RenderingThread* m_renderingThread;
+	QMutex m_mutex;
+	QGLFormat m_format;
+	const QGLWidget* m_shareWidget; 
+	QAtomicInt m_resized;
+#endif
 
 	//Graphical features controls
 	void drawCross();
 	void drawTrihedron();
-	void drawGradientBackground();
-	void drawScale(const colorType color[] = ccColor::white);
+	void drawScale(const ccColor::Rgbub& color);
 
 	//Projections controls
-	void recalcModelViewMatrix();
-	void recalcProjectionMatrix();
+	ccGLMatrixd computeModelViewMatrix(const CCVector3d& cameraCenter) const;
+	ccGLMatrixd computeProjectionMatrix(const CCVector3d& cameraCenter, double& zNear, double& zFar, bool withGLfeatures, double* eyeOffset = 0) const;
+	void updateModelViewMatrix();
+	void updateProjectionMatrix();
 	void setStandardOrthoCenter();
 	void setStandardOrthoCorner();
 
@@ -595,23 +828,50 @@ protected:
 	//! Draws pivot point symbol in 3D
 	void drawPivot();
 
-	//! Stops frame rate test
-	void stopFrameRateTest();
-
 	//inherited from QWidget (drag & drop support)
 	virtual void dragEnterEvent(QDragEnterEvent* event);
 	virtual void dropEvent(QDropEvent* event);
 
-	//! Starts OpenGL picking process
-	/** \param mode picking mode
-		\param centerX picking area center X position
-		\param centerY picking area center y position
-		\param width picking area width
-		\param height picking area height
-		\param[out] subID [optional] poiter to store sub item ID (if any - <1 otherwise)
-		\return item ID (if any) or <1 otherwise
+	//! Picking parameters
+	struct PickingParameters
+	{
+		//! Default constructor
+		PickingParameters(	PICKING_MODE _mode = NO_PICKING,
+							int _centerX = 0,
+							int _centerY = 0,
+							int _pickWidth = 5,
+							int _pickHeight = 5)
+			: mode(_mode)
+			, centerX(_centerX)
+			, centerY(_centerY)
+			, pickWidth(_pickWidth)
+			, pickHeight(_pickHeight)
+			, flags(0)
+		{}
+
+		PICKING_MODE mode;
+		int centerX;
+		int centerY;
+		int pickWidth;
+		int pickHeight;
+		unsigned short flags;
+	};
+
+	//! Starts picking process
+	/** OpenGL is used by default (unless ccGui::ParamStruct::useOpenGLPointPicking
+		is false in which case a CPU based approach will be used for point picking).
+		\param params picking parameters
 	**/
-	int startPicking(PICKING_MODE mode, int centerX, int centerY, int width = 5, int height = 5, int* subID = 0);
+	void startPicking(PickingParameters& params);
+
+	//! Performs the picking with OpenGL
+	void startOpenGLPicking(const PickingParameters& params);
+
+	//! Starts OpenGL picking process
+	void startCPUBasedPointPicking(const PickingParameters& params);
+
+	//! Processes the picking process result and sends the corresponding signal
+	void processPickingResult(const PickingParameters& params, int selectedID, int subSelectedID, const std::set<int>* selectedIDs = 0);
 	
 	//! Updates currently active items list (m_activeItems)
 	/** The items must be currently displayed in this context
@@ -648,15 +908,33 @@ protected:
 	//! Draws the 'hot zone' (+/- icons for point size), 'leave bubble-view' button, etc.
 	void drawClickableItems(int xStart, int& yStart);
 
-	/***************************************************
-					OpenGL Extensions
-	***************************************************/
+	//! Disables current LOD rendering cycle
+	void stopLODCycle();
+
+	// Releases all textures, GL lists, etc.
+	void uninitializeGL();
+
+	//! Schedules a full redraw
+	/** Any previously scheduled redraw will be cancelled.
+		\warning The redraw will be cancelled if redraw/updateGL is called before.
+		\param maxDelay_ms the maximum delay for the call to redraw (in ms)
+	**/
+	void scheduleFullRedraw(unsigned maxDelay_ms);
+
+	//! Cancels any scheduled redraw
+	/** See ccGLWindow::scheduleFullRedraw.
+	**/
+	void cancelScheduledRedraw();
+
+protected: //OpenGL Extensions
 
 	//! Loads OpenGL extensions
 	/** Wrapper around ccFBOUtils::InitGLEW.
 		\return success
 	**/
 	static bool InitGLEW();
+
+protected: //members
 
 	//! GL names picking buffer
 	GLuint m_pickingBuffer[CC_PICKING_BUFFER_SIZE];
@@ -684,11 +962,11 @@ protected:
 	CCVector3d m_currentMouseOrientation;
 
 	//! Complete visualization matrix (GL style - double version)
-	double m_viewMatd[OPENGL_MATRIX_SIZE];
+	ccGLMatrixd m_viewMatd;
 	//! Whether the model veiw matrix is valid (or need to be recomputed)
 	bool m_validModelviewMatrix;
 	//! Projection matrix (GL style - double version)
-	double m_projMatd[OPENGL_MATRIX_SIZE];
+	ccGLMatrixd m_projMatd;
 	//! Whether the projection matrix is valid (or need to be recomputed)
 	bool m_validProjectionMatrix;
 
@@ -697,12 +975,16 @@ protected:
 	//! GL context height
 	int m_glHeight;
 
-	//! L.O.D. (level of detail) display mode
-	bool m_lodActivated;
+	//! Whether L.O.D. (level of detail) is enabled or not
+	bool m_LODEnabled;
+	//! Whether L.O.D. should be automatically disabled at the end of the rendering cycle
+	bool m_LODAutoDisable;
 	//! Whether the display should be refreshed on next call to 'refresh'
 	bool m_shouldBeRefreshed;
-	//! Whether the mouse cursor has moved after being pressed or not
-	bool m_cursorMoved;
+	//! Whether the mouse (cursor) has moved after being pressed or not
+	bool m_mouseMoved;
+	//! Whether the mouse is currently pressed or not
+	bool m_mouseButtonPressed;
 	//! Whether this 3D window can be closed by the user or not
 	bool m_unclosable;
 	//! Current intercation mode (with mouse)
@@ -775,6 +1057,7 @@ protected:
 					INCREASE_POINT_SIZE,
 					DECREASE_POINT_SIZE,
 					LEAVE_BUBBLE_VIEW_MODE,
+					LEAVE_FULLSCREEN_MODE,
 		};
 
 		Role role;
@@ -793,6 +1076,8 @@ protected:
 
 	//! Currently active FBO (frame buffer object)
 	ccFrameBufferObject* m_fbo;
+	//! Second currently active FBO (frame buffer object) - used for stereo rendering
+	ccFrameBufferObject* m_fbo2;
 	//! Whether to always use FBO or only for GL filters
 	bool m_alwaysUseFBO;
 	//! Whether FBO should be updated (or simply displayed as a texture = faster!)
@@ -850,6 +1135,42 @@ protected:
 	float m_bubbleViewFov_deg;
 	//! Pre-bubble-view camera parameters (backup)
 	ccViewportParameters m_preBubbleViewParameters;
+
+	//! Map of materials (unique id.) and texture identifier
+	QMap< QString, unsigned > m_materialTextures;
+
+	//! Current LOD state
+	LODState m_currentLODState;
+
+	//! LOD refresh signal sent
+	bool m_LODPendingRefresh;
+	//! LOD refresh signal should be ignored
+	bool m_LODPendingIgnore;
+
+	//! Internal timer
+	QElapsedTimer m_timer;
+
+	//! Touch event in progress
+	bool m_touchInProgress;
+	//! Touch gesture initial distance
+	qreal m_touchBaseDist;
+
+	//! Scheduler timer
+	QTimer m_scheduleTimer;
+	//! Scheduled full redraw (no LOD)
+	qint64 m_scheduledFullRedrawTime;
+
+	//! Seterovision mode parameters
+	StereoParams m_stereoParams;
+
+	//! Whether seterovision mode is enabled or not
+	bool m_stereoModeEnabled;
+
+	//! Former parent object (for exclusive full-screen display)
+	QWidget* m_formerParent;
+
+	//! Debug traces visibility
+	bool m_showDebugTraces;
 
 private:
 

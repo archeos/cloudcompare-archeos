@@ -25,9 +25,9 @@
 
 //qCC_db
 #include <ccGLMatrix.h>
+#include <ccHObject.h>
 
 class ccGLWindow;
-class ccHObject;
 
 //! Dialog + mechanism for graphical transformation of entities
 /** Mouse driven rotation and translation of selected entities at screen.
@@ -39,7 +39,7 @@ class ccGraphicalTransformationTool : public ccOverlayDialog, public Ui::Graphic
 public:
 
 	//! Default constructor
-	ccGraphicalTransformationTool(QWidget* parent);
+	explicit ccGraphicalTransformationTool(QWidget* parent);
 	//! Default destructor
 	virtual ~ccGraphicalTransformationTool();
 
@@ -50,12 +50,18 @@ public:
 
 	//! Adds an entity to the 'selected' entities set
 	/** Only the 'selected' entities are moved.
-		\return success, if the entitiy is elligible for graphical transformation
+		\return success, if the entitiy is eligible for graphical transformation
 	**/
 	bool addEntity(ccHObject* anObject);
 
-	//! Returns the number of vald entities (see addEntity)
-	unsigned getNumberOfValidEntities();
+	//! Returns the number of valid entities (see addEntity)
+	unsigned getNumberOfValidEntities() const;
+
+	//! Returns the 'to be transformed' entities set (see addEntity)
+	const ccHObject& getValidEntities() const { return m_toTransform; }
+
+	//! Sets the rotation center
+	void setRotationCenter(CCVector3d& center);
 
 protected slots:
 
@@ -89,7 +95,7 @@ protected:
 	void updateAllGLTransformations();
 
 	//! List of entities to be transformed
-	ccHObject* m_toTransform;
+	ccHObject m_toTransform;
 
 	//! Current rotation
 	ccGLMatrixd m_rotation;

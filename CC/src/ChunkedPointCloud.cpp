@@ -52,27 +52,24 @@ void ChunkedPointCloud::clear()
 	invalidateBoundingBox();
 }
 
-void ChunkedPointCloud::forEach(genericPointAction& anAction)
+void ChunkedPointCloud::forEach(genericPointAction& action)
 {
-	unsigned n = size();
-
-	//if a SF is already activated
+	//there's no point of calling forEach if there's no activated scalar field!
 	ScalarField* currentOutScalarFieldArray = getCurrentOutScalarField();
-	if (currentOutScalarFieldArray)
+	if (!currentOutScalarFieldArray)
 	{
-		for (unsigned i=0; i<n; ++i)
-			anAction(*(CCVector3*)m_points->getValue(i),(*currentOutScalarFieldArray)[i]);
+		assert(false);
+		return;
 	}
-	/*else //otherwise we use a fake SF (DGM FIXME: is it really interesting?!) --> NO ;)
+
+	unsigned n = size();
+	for (unsigned i=0; i<n; ++i)
 	{
-		ScalarType dummyDist = 0;
-		for (unsigned i=0; i<n; ++i)
-			anAction(*(CCVector3*)m_points->getValue(i),dummyDist);
+		action(*getPoint(i),(*currentOutScalarFieldArray)[i]);
 	}
-	//*/
 }
 
-void ChunkedPointCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
+void ChunkedPointCloud::getBoundingBox(CCVector3& bbMin, CCVector3& bbMax)
 {
 	if (!m_validBB)
 	{
@@ -80,8 +77,8 @@ void ChunkedPointCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordin
 		m_validBB = true;
 	}
 
-	memcpy(bbMin, m_points->getMin(), 3*sizeof(PointCoordinateType));
-	memcpy(bbMax, m_points->getMax(), 3*sizeof(PointCoordinateType));
+	bbMin = CCVector3(m_points->getMin());
+	bbMax = CCVector3(m_points->getMax());
 }
 
 void ChunkedPointCloud::invalidateBoundingBox()
@@ -99,27 +96,27 @@ const CCVector3* ChunkedPointCloud::getNextPoint()
 	return (m_currentPointIndex < m_points->currentSize() ? point(m_currentPointIndex++) : 0);
 }
 
-bool ChunkedPointCloud::resize(unsigned newNumberOfPoints)
+bool ChunkedPointCloud::resize(unsigned newCount)
 {
-	unsigned oldNumberOfPoints = m_points->currentSize();
+	unsigned oldCount = m_points->currentSize();
 
 	//we try to enlarge the 3D points array
-	if (!m_points->resize(newNumberOfPoints))
+	if (!m_points->resize(newCount))
 		return false;
 
 	//then the scalar fields
 	for (size_t i=0; i<m_scalarFields.size(); ++i)
 	{
-		if (!m_scalarFields[i]->resize(newNumberOfPoints))
+		if (!m_scalarFields[i]->resize(newCount))
 		{
 			//if something fails, we restore the previous size for already processed SFs!
 			for (size_t j=0; j<i; ++j)
 			{
-				m_scalarFields[j]->resize(oldNumberOfPoints);
+				m_scalarFields[j]->resize(oldCount);
 				m_scalarFields[j]->computeMinAndMax();
 			}
-			//we can assume that newNumberOfPoints > oldNumberOfPoints, so it should always be ok
-			m_points->resize(oldNumberOfPoints);
+			//we can assume that newCount > oldNumberOfPoints, so it should always be ok
+			m_points->resize(oldCount);
 			return false;
 		}
 		m_scalarFields[i]->computeMinAndMax();
@@ -128,21 +125,21 @@ bool ChunkedPointCloud::resize(unsigned newNumberOfPoints)
 	return true;
 }
 
-bool ChunkedPointCloud::reserve(unsigned newNumberOfPoints)
+bool ChunkedPointCloud::reserve(unsigned newCapacity)
 {
 	//we try to enlarge the 3D points array
-	if (!m_points->reserve(newNumberOfPoints))
+	if (!m_points->reserve(newCapacity))
 		return false;
 
 	//then the scalar fields
 	for (size_t i=0; i<m_scalarFields.size(); ++i)
 	{
-		if (!m_scalarFields[i]->reserve(newNumberOfPoints))
+		if (!m_scalarFields[i]->reserve(newCapacity))
 			return false;
 	}
 
 	//double check
-	return m_points->capacity() >= newNumberOfPoints;
+	return m_points->capacity() >= newCapacity;
 }
 
 void ChunkedPointCloud::addPoint(const CCVector3 &P)
@@ -178,7 +175,10 @@ void ChunkedPointCloud::applyTransformation(PointProjectionTools::Transformation
 	if (trans.R.isValid())
 	{
 		for (unsigned i=0; i<count; ++i)
-			trans.R.apply(point(i)->u);
+		{
+			CCVector3* P = point(i);
+			(*P) = trans.R * (*P);
+		}
 		m_validBB = false;
 	}
 
@@ -287,7 +287,7 @@ int ChunkedPointCloud::addScalarField(const char* uniqueName)
 		//we don't want 'm_scalarFields' to grow by 50% each time! (default behavior of std::vector::push_back)
 		m_scalarFields.resize(m_scalarFields.size()+1);
 	}
-	catch (std::bad_alloc) //out of memory
+	catch (const std::bad_alloc&) //out of memory
 	{
 		sf->release();
 		return -1;

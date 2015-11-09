@@ -22,6 +22,7 @@
 #include "qCC_db.h"
 #include "ccSerializableObject.h"
 #include "ccGLMatrix.h"
+#include "ccMaterial.h"
 
 //Qt
 #include <QImage>
@@ -30,6 +31,8 @@
 
 //CCLib
 #include <CCGeom.h>
+
+class QWidget;
 
 //! Standard parameters for GL displays/viewports
 class QCC_DB_LIB_API ccViewportParameters : public ccSerializableObject
@@ -102,7 +105,7 @@ class ccGenericGLDisplay
 public:
 
 	//! Redraws display immediately
-	virtual void redraw() = 0;
+	virtual void redraw(bool only2D = false, bool resetLOD = true) = 0;
 
 	//! Flags display as 'to be refreshed'
 	/** See ccGenericGLDisplay::refresh.
@@ -112,24 +115,33 @@ public:
 	//! Redraws display only if flagged as 'to be refreshed'
 	/** See ccGenericGLDisplay::toBeRefreshed. Flag is turned
 		to false after a call to this method.
+		\param only2D whether to redraw everything (false) or only the 2D layer (true)
 	**/
-	virtual void refresh() = 0;
+	virtual void refresh(bool only2D = false) = 0;
 
 	//! Invalidates current viewport setup
 	/** On next redraw, viewport information will be recomputed.
 	**/
 	virtual void invalidateViewport() = 0;
 
-	//! Get texture ID from image
-	virtual unsigned getTexture(const QImage& image) = 0;
+	//! Returns the texture ID corresponding to an image
+	virtual unsigned getTextureID(const QImage& image) = 0;
+	
+	//! Returns the texture ID corresponding to a material
+	virtual unsigned getTextureID( ccMaterial::CShared mtl) = 0;
 
 	//! Release texture from context
 	virtual void releaseTexture(unsigned texID) = 0;
 
-	//! Returns font
+	//! Returns defaul text display font
 	/** Warning: already takes rendering zoom into account!
 	**/
 	virtual QFont getTextDisplayFont() const = 0;
+
+	//! Returns defaul label display font
+	/** Warning: already takes rendering zoom into account!
+	**/
+	virtual QFont getLabelDisplayFont() const = 0;
 
 	//! Text alignment
 	enum TextAlign { ALIGN_HLEFT	= 1,
@@ -188,9 +200,6 @@ public:
 	//! Returns viewport parameters (zoom, etc.)
 	virtual const ccViewportParameters& getViewportParameters() const = 0;
 
-	//! Makes the associated OpenGL context active
-	virtual void makeContextCurrent() = 0;
-
 	//! Setups a (projective) camera
 	/** \param cameraMatrix orientation/position matrix of the camera
 		\param fov_deg vertical field of view (in degrees). Optional (ignored if 0).
@@ -203,6 +212,9 @@ public:
 											float ar = 1.0f,
 											bool viewerBasedPerspective = true,
 											bool bubbleViewMode = false) = 0;
+
+	//! Returns this window as a proper Qt widget
+	virtual QWidget* asWidget() { return 0; }
 
 };
 

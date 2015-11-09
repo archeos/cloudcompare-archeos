@@ -26,9 +26,6 @@
 
 //Qt
 #include <QDialog>
-#include <QColor>
-#include <QAbstractButton>
-#include <QPalette>
 
 //system
 #include <assert.h>
@@ -43,56 +40,48 @@ class ccDisplayOptionsDlg : public QDialog, public Ui::DisplayOptionsDlg
 public:
 
 	//! Default constructor
-	ccDisplayOptionsDlg(QWidget* parent);
-
-	//! Sets a button background color
-	/** Support Windows XP style particularity.
-	**/
-	inline static void SetButtonColor(QAbstractButton* button, const QColor &col)
-	{
-		if (button)
-			button->setStyleSheet(QString("* { background-color: rgb(%1,%2,%3) }").arg(col.red()).arg(col.green()).arg(col.blue()));
-	}
-
-	//! Sets a button text color
-	/** Support Windows XP style particularity.
-	**/
-	static void SetButtonTextColor(QAbstractButton* button, const QColor &col);
+	explicit ccDisplayOptionsDlg(QWidget* parent);
 
 signals:
 	void aspectHasChanged();
 
-	protected slots:
-		void changeLightDiffuseColor();
-		void changeLightAmbientColor();
-		void changeLightSpecularColor();
-		void changeMeshFrontDiffuseColor();
-		void changeMeshBackDiffuseColor();
-		void changeMeshSpecularColor();
-		void changePointsColor();
-		void changeBBColor();
-		void changeTextColor();
-		void changeBackgroundColor();
-		void changeHistBackgroundColor();
-		void changeLabelColor();
-		void changeBackgroundGradient();
-		void changeMeshDecimation();
-		void changeCloudDecimation();
-		void changeVBOUsage();
-		void changeCrossDisplayed();
-		void changeColorScaleShowHistogram();
-		void changeColorScaleUseShader();
-		void changeColorScaleRampWidth(int);
+protected slots:
+	void changeLightDiffuseColor();
+	void changeLightAmbientColor();
+	void changeLightSpecularColor();
+	void changeMeshFrontDiffuseColor();
+	void changeMeshBackDiffuseColor();
+	void changeMeshSpecularColor();
+	void changePointsColor();
+	void changeBBColor();
+	void changeTextColor();
+	void changeBackgroundColor();
+	void changeLabelBackgroundColor();
+	void changeLabelMarkerColor();
+	void changeBackgroundGradient();
+	void changeMeshDecimation();
+	void changeMaxMeshSize(double);
+	void changeCloudDecimation();
+	void changeMaxCloudSize(double);
+	void changeVBOUsage();
+	void changeCrossDisplayed();
+	void changeOpenGLPicking();
+	void changeColorScaleShowHistogram();
+	void changeColorScaleUseShader();
+	void changeColorScaleRampWidth(int);
 
-		void changeDefaultFontSize(int);
-		void changeNumberPrecision(int);
-		void changeLabelsTransparency(int);
-		void changeLabelsMarkerSize(int);
+	void changeDefaultFontSize(int);
+	void changeLabelFontSize(int);
+	void changeNumberPrecision(int);
+	void changeLabelOpacity(int);
+	void changeLabelMarkerSize(int);
 
-		void doAccept();
-		void doReject();
-		void apply();
-		void reset();
+	void changeZoomSpeed(double);
+
+	void doAccept();
+	void doReject();
+	void apply();
+	void reset();
 
 protected:
 
@@ -108,8 +97,8 @@ protected:
 	QColor pointsDefaultCol;
 	QColor textDefaultCol;
 	QColor backgroundCol;
-	QColor histBackgroundCol;
-	QColor labelCol;
+	QColor labelBackgroundCol;
+	QColor labelMarkerCol;
 	QColor bbDefaultCol;
 
 	//! Current parameters

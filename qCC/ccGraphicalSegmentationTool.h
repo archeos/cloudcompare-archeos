@@ -42,7 +42,7 @@ class ccGraphicalSegmentationTool : public ccOverlayDialog, public Ui::Graphical
 public:
 
 	//! Default constructor
-	ccGraphicalSegmentationTool(QWidget* parent);
+	explicit ccGraphicalSegmentationTool(QWidget* parent);
 	//! Destructor
 	virtual ~ccGraphicalSegmentationTool();
 
@@ -89,11 +89,16 @@ protected slots:
 	void pauseSegmentationMode(bool);
 	void doSetPolylineSelection();
 	void doSetRectangularSelection();
+	void doActionUseExistingPolyline();
+	void doExportSegmentationPolyline();
 
 	//! To capture overridden shortcuts (pause button, etc.)
 	void onShortcutTriggered(int);
 
 protected:
+
+	//! Whether to allow or not to exort the current segmentation polyline
+	void allowPolylineExport(bool state);
 
 	//! To be segmented entities
 	std::set<ccHObject*> m_toSegment;
@@ -129,4 +134,4 @@ protected:
 	bool m_deleteHiddenParts;
 };
 
-#endif
+#endif //CC_GRAPHICAL_SEGMENTATION_TOOLS_HEADER

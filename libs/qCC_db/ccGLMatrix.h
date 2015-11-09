@@ -23,7 +23,7 @@
 #include "ccGLMatrixTpl.h"
 
 //CCLib
-#include <Matrix.h>
+#include <SquareMatrix.h>
 
 //! Float version of ccGLMatrixTpl
 class QCC_DB_LIB_API ccGLMatrix : public ccGLMatrixTpl<float>
@@ -35,11 +35,6 @@ public:
 	**/
 	ccGLMatrix() : ccGLMatrixTpl<float>() {}
 
-	//! Copy constructor from a ccGLMatrix
-	/** \param mat matrix
-	**/
-	ccGLMatrix(const ccGLMatrix& mat) : ccGLMatrixTpl<float>(mat) {}
-
 	//! Copy constructor from a ccGLMatrixTpl
 	/** \param mat matrix
 	**/
@@ -48,13 +43,13 @@ public:
 	//! Constructor from a float GL matrix array
 	/** \param mat16f a 16 elements array (column major order)
 	**/
-	ccGLMatrix(const float* mat16f) : ccGLMatrixTpl<float>(mat16f) {}
+	explicit ccGLMatrix(const float* mat16f) : ccGLMatrixTpl<float>(mat16f) {}
 
 	//! Constructor from a double GL matrix array
 	/** \warning Will implicitly cast the elements to float!
 		\param mat16d a 16 elements array (column major order)
 	**/
-	ccGLMatrix(const double* mat16d) : ccGLMatrixTpl<float>(mat16d) {}
+	explicit ccGLMatrix(const double* mat16d) : ccGLMatrixTpl<float>(mat16d) {}
 
 	//! Constructor from 4 columns (X,Y,Z,Tr)
 	/** \param X 3 first elements of the 1st column (last one is 0)
@@ -76,11 +71,6 @@ public:
 	**/
 	ccGLMatrixd() : ccGLMatrixTpl<double>() {}
 
-	//! Copy constructor from a ccGLMatrixd
-	/** \param mat matrix
-	**/
-	ccGLMatrixd(const ccGLMatrixd& mat) : ccGLMatrixTpl<double>(mat) {}
-
 	//! Copy constructor from a ccGLMatrixTpl
 	/** \param mat matrix
 	**/
@@ -89,12 +79,12 @@ public:
 	//! Constructor from a float GL matrix array
 	/** \param mat16f a 16 elements array (column major order)
 	**/
-	ccGLMatrixd(const float* mat16f) : ccGLMatrixTpl<double>(mat16f) {}
+	explicit ccGLMatrixd(const float* mat16f) : ccGLMatrixTpl<double>(mat16f) {}
 
 	//! Constructor from a double GL matrix array
 	/** \param mat16d a 16 elements array (column major order)
 	**/
-	ccGLMatrixd(const double* mat16d) : ccGLMatrixTpl<double>(mat16d) {}
+	explicit ccGLMatrixd(const double* mat16d) : ccGLMatrixTpl<double>(mat16d) {}
 
 	//! Constructor from 4 columns (X,Y,Z,Tr)
 	/** \param X 3 first elements of the 1st column (last one is 0)
@@ -109,7 +99,7 @@ public:
 /*** Helpers ***/
 
 //! Constructor from a 3x3 rotation matrix R and a vector Tr
-template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const CCLib::MatrixTpl<Tin>& R, const Vector3Tpl<Tin>& Tr)
+template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const CCLib::SquareMatrixTpl<Tin>& R, const Vector3Tpl<Tin>& Tr)
 {
 	ccGLMatrixTpl<Tout> outputMat;
 	//outputMat.toIdentity(); //already done in the constructor
@@ -135,7 +125,7 @@ template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const
 }
 
 //! Constructor from a 3x3 rotation matrix R, a vector Tr, a scale S
-template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const CCLib::MatrixTpl<Tin>& R, const Vector3Tpl<Tin>& Tr, Tin S)
+template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const CCLib::SquareMatrixTpl<Tin>& R, const Vector3Tpl<Tin>& Tr, Tin S)
 {
 	ccGLMatrixTpl<Tout> outputMat;
 	//outputMat.toIdentity(); //already done in the constructor
@@ -161,7 +151,7 @@ template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const
 }
 
 //! Constructor from a rotation center G, a 3x3 rotation matrix R and a vector Tr
-template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const CCLib::MatrixTpl<Tin>& R, const Vector3Tpl<Tin>& Tr, const Vector3Tpl<Tin>& rotCenter)
+template <typename Tin, typename Tout> ccGLMatrixTpl<Tout> FromCCLibMatrix(const CCLib::SquareMatrixTpl<Tin>& R, const Vector3Tpl<Tin>& Tr, const Vector3Tpl<Tin>& rotCenter)
 {
 	ccGLMatrixTpl<Tout> outputMat = FromCCLibMatrix<Tin,Tout>(R,Tr);
 

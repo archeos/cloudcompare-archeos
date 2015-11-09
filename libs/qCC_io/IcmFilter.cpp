@@ -100,6 +100,7 @@ CC_FILE_ERROR IcmFilter::loadFile(QString filename, ccHObject& container, LoadPa
 	if (!filter)
 	{
 		ccLog::Warning(QString("[ICM] No I/O filter found for loading file '%1' (type = '%2')").arg(cloudFileName).arg(subFileType));
+		fclose(fp);
 		return CC_FERR_UNKNOWN_FILE;
 	}
 
@@ -130,7 +131,7 @@ CC_FILE_ERROR IcmFilter::loadFile(QString filename, ccHObject& container, LoadPa
 		char imagesDescriptorFileName[MAX_ASCII_FILE_LINE_LENGTH];
 		sscanf(line,"IMAGES_DESCRIPTOR=%s",imagesDescriptorFileName);
 		
-		int n = LoadCalibratedImages(entities,path,imagesDescriptorFileName,entities->getBB());
+		int n = LoadCalibratedImages(entities,path,imagesDescriptorFileName,entities->getBB_recursive());
 		ccLog::Print("[ICM] %i image(s) loaded ...",n);
 	}
 

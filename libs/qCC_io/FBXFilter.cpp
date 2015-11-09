@@ -81,6 +81,7 @@ static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene, QString filenam
 		{
 			const CCVector3* P = cloud->getPoint(i);
 			lControlPoints[i] = FbxVector4(P->x,P->y,P->z);
+			//lControlPoints[i] = FbxVector4(P->x,P->z,-P->y); //DGM: see loadFile (Y and Z are inverted)
 		}
 	}
 
@@ -172,8 +173,8 @@ static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene, QString filenam
 			hasTextures = false;
 			for (size_t i=0; i<matCount; ++i)
 			{
-				const ccMaterial& mat = matSet->at(i);
-				if (mat.hasTexture())
+				ccMaterial::CShared mat = matSet->at(i);
+				if (mat->hasTexture())
 				{
 					hasTextures = true;
 					break;
@@ -233,19 +234,23 @@ static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene, QString filenam
 
 		for (size_t i=0; i<matCount; ++i)
 		{
-			const ccMaterial& mat = matSet->at(i);
-			FbxSurfacePhong *lMaterial = FbxSurfacePhong::Create(pScene, qPrintable(mat.name));
+			ccMaterial::CShared mat = matSet->at(i);
+			FbxSurfacePhong *lMaterial = FbxSurfacePhong::Create(pScene, qPrintable(mat->getName()));
 
-			lMaterial->Emissive.Set(FbxDouble3(mat.emission[0],mat.emission[1],mat.emission[2]));
-			lMaterial->Ambient.Set(FbxDouble3(mat.ambient[0],mat.ambient[1],mat.ambient[2]));
-			lMaterial->Diffuse.Set(FbxDouble3(mat.diffuseFront[0],mat.diffuseFront[1],mat.diffuseFront[2]));
-			lMaterial->Specular.Set(FbxDouble3(mat.specular[0],mat.specular[1],mat.specular[2]));
-			lMaterial->Shininess = mat.shininessFront;
+			const ccColor::Rgbaf& emission = mat->getEmission();
+			const ccColor::Rgbaf& ambient = mat->getAmbient();
+			const ccColor::Rgbaf& diffuse = mat->getDiffuseFront();
+			const ccColor::Rgbaf& specular = mat->getSpecular();
+			lMaterial->Emissive.Set(FbxDouble3(emission.r,emission.g,emission.b));
+			lMaterial->Ambient .Set(FbxDouble3( ambient.r, ambient.g, ambient.b));
+			lMaterial->Diffuse .Set(FbxDouble3( diffuse.r, diffuse.g, diffuse.b));
+			lMaterial->Specular.Set(FbxDouble3(specular.r,specular.g,specular.b));
+			lMaterial->Shininess = mat->getShininessFront();
 			lMaterial->ShadingModel.Set("Phong");
 
-			if (hasTextures && mat.hasTexture())
+			if (hasTextures && mat->hasTexture())
 			{
-				QString texFilename = mat.getAbsoluteFilename();
+				QString texFilename = mat->getTextureFilename();
 				
 				//texture has not already been processed
 				if (!texFilenames.contains(texFilename))
@@ -273,7 +278,7 @@ static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene, QString filenam
 						baseTexName += QString(".png");
 
 					QString absoluteFilename = texDir.absolutePath() + QString("/") + baseTexName;
-					ccLog::PrintDebug(QString("[FBX] Material '%1' texture: %2").arg(mat.name).arg(absoluteFilename));
+					ccLog::PrintDebug(QString("[FBX] Material '%1' texture: %2").arg(mat->getName()).arg(absoluteFilename));
 
 					texFilenames[texFilename] = absoluteFilename;
 				}
@@ -330,10 +335,10 @@ static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene, QString filenam
 		lGeometryElementVertexColor->GetDirectArray().SetCount(vertCount);
 		for (unsigned i=0; i<vertCount; ++i)
 		{
-			const colorType* C = cloud->getPointColor(i);
-			FbxColor col(	static_cast<double>(C[0])/MAX_COLOR_COMP,
-							static_cast<double>(C[1])/MAX_COLOR_COMP,
-							static_cast<double>(C[2])/MAX_COLOR_COMP );
+			const ColorCompType* C = cloud->getPointColor(i);
+			FbxColor col(	static_cast<double>(C[0])/ccColor::MAX,
+							static_cast<double>(C[1])/ccColor::MAX,
+							static_cast<double>(C[2])/ccColor::MAX );
 			lGeometryElementVertexColor->GetDirectArray().SetAt(i,col);
 		}
 
@@ -360,7 +365,7 @@ static FbxNode* ToFbxMesh(ccGenericMesh* mesh, FbxScene* pScene, QString filenam
 	{
 		for (unsigned j=0; j<faceCount; ++j)
 		{
-			const CCLib::TriangleSummitsIndexes* tsi = mesh->getTriangleIndexes(j);
+			const CCLib::VerticesIndexes* tsi = mesh->getTriangleVertIndexes(j);
 
 			int matIndex = hasMaterial ? asCCMesh->getTriangleMtlIndex(j) : -1;
 			lMesh->BeginPolygon(matIndex);
@@ -446,7 +451,7 @@ QString SanitizeFBXFormatString(QString format)
 	return format;
 }
 
-CC_FILE_ERROR FBXFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR FBXFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity)
 		return CC_FERR_BAD_ARGUMENT;
@@ -742,9 +747,9 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 								for (int i=0; i<vertCount; ++i)
 								{
 									FbxColor c = vertColor->GetDirectArray().GetAt(i);
-									vertices->addRGBColor(	static_cast<colorType>(c.mRed	* MAX_COLOR_COMP),
-															static_cast<colorType>(c.mGreen	* MAX_COLOR_COMP),
-															static_cast<colorType>(c.mBlue	* MAX_COLOR_COMP) );
+									vertices->addRGBColor(	static_cast<ColorCompType>(c.mRed	* ccColor::MAX),
+															static_cast<ColorCompType>(c.mGreen	* ccColor::MAX),
+															static_cast<ColorCompType>(c.mBlue	* ccColor::MAX) );
 								}
 							}
 							break;
@@ -754,9 +759,9 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 								{
 									int id = vertColor->GetIndexArray().GetAt(i);
 									FbxColor c = vertColor->GetDirectArray().GetAt(id);
-									vertices->addRGBColor(	static_cast<colorType>(c.mRed	* MAX_COLOR_COMP),
-															static_cast<colorType>(c.mGreen	* MAX_COLOR_COMP),
-															static_cast<colorType>(c.mBlue	* MAX_COLOR_COMP) );
+									vertices->addRGBColor(	static_cast<ColorCompType>(c.mRed	* ccColor::MAX),
+															static_cast<ColorCompType>(c.mGreen	* ccColor::MAX),
+															static_cast<ColorCompType>(c.mBlue	* ccColor::MAX) );
 								}
 							}
 							break;
@@ -864,7 +869,6 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 		else
 		{
 			mesh->setTriNormsTable(normsTable);
-			mesh->addChild(normsTable);
 			vertices->showNormals(true);
 			mesh->showNormals(true);
 		}
@@ -883,24 +887,37 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 			bool isPhong = lBaseMaterial->GetClassId().Is(FbxSurfacePhong::ClassId);
 			if (isLambert || isPhong)
 			{
-				ccMaterial mat(lBaseMaterial->GetName());
+				ccMaterial::Shared mat(new ccMaterial(lBaseMaterial->GetName()));
 
 				FbxSurfaceLambert* lLambertMat = static_cast<FbxSurfaceLambert*>(lBaseMaterial);
 			
+				ccColor::Rgbaf ambient(0,0,0,1);
+				ccColor::Rgbaf diffuse(0,0,0,1);
+				ccColor::Rgbaf emission(0,0,0,1);
+				ccColor::Rgbaf specular(0,0,0,1);
+
+				FbxSurfacePhong* lPhongMat = isPhong ? static_cast<FbxSurfacePhong*>(lBaseMaterial) : 0;
+
 				for (int k=0; k<3; ++k)
 				{
-					mat.ambient[k]		= static_cast<float>(lLambertMat->Ambient.Get()[k]);
-					mat.diffuseBack[k]	= static_cast<float>(lLambertMat->Diffuse.Get()[k]);
-					mat.diffuseFront[k]	= mat.diffuseBack[k];
-					mat.emission[k]		= static_cast<float>(lLambertMat->Emissive.Get()[k]);
+					ambient.rgba[k]  = static_cast<float>(lLambertMat->Ambient.Get()[k]);
+					diffuse.rgba[k]  = static_cast<float>(lLambertMat->Diffuse.Get()[k]);
+					emission.rgba[k] = static_cast<float>(lLambertMat->Emissive.Get()[k]);
 
-					if (isPhong)
+					if (lPhongMat)
 					{
-						FbxSurfacePhong* lPhongMat = static_cast<FbxSurfacePhong*>(lBaseMaterial);
-						mat.specular[k]		= static_cast<float>(lPhongMat->Specular.Get()[k]);
-						mat.shininessBack	= static_cast<float>(lPhongMat->Shininess);
-						mat.shininessFront	= mat.shininessBack;
+						specular.rgba[k] = static_cast<float>(lPhongMat->Specular.Get()[k]);
 					}
+				}
+
+				mat->setAmbient(ambient);
+				mat->setDiffuse(diffuse);
+				mat->setEmission(emission);
+				if (isPhong)
+				{
+					mat->setSpecular(specular);
+					assert(lPhongMat);
+					mat->setShininess(static_cast<float>(lPhongMat->Shininess));
 				}
 
 				//import associated texture (if any)
@@ -952,7 +969,7 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 									ccLog::PrintDebug(QString("[FBX] Texture absolue filename: %1").arg(texAbsoluteFilename));
 									if (texAbsoluteFilename != 0 && texAbsoluteFilename[0] != 0)
 									{
-										if (!mat.setTexture(texAbsoluteFilename))
+										if (!mat->loadAndSetTexture(texAbsoluteFilename))
 										{
 											ccLog::Warning(QString("[FBX] Failed to load texture file: %1").arg(texAbsoluteFilename));
 										}
@@ -1008,7 +1025,6 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 						vertTexUVTable->addElement(uvf);
 					}
 
-					int indexCount = leUV->GetIndexArray().GetCount();
 					if (refMode == FbxGeometryElement::eIndexToDirect)
 					{
 						hasTexUVIndexes = true;
@@ -1134,7 +1150,6 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 		if (vertTexUVTable)
 		{
 			mesh->setTexCoordinatesTable(vertTexUVTable);
-			mesh->addChild(vertTexUVTable);
 		}
 
 		if (mesh->size() == 0)
@@ -1152,8 +1167,7 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 		CCVector3d Pshift(0,0,0);
 		for (int i=0; i<vertCount; ++i, ++fbxVertices)
 		{
-			const double* P = fbxVertices->Buffer();
-			assert(P[3] == 0);
+			CCVector3d P(fbxVertices->Buffer());
 
 			//coordinate shift management
 			if (i == 0)
@@ -1165,10 +1179,7 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 				}
 			}
 
-			CCVector3 PV(	static_cast<PointCoordinateType>(P[0] + Pshift.x),
-							static_cast<PointCoordinateType>(P[1] + Pshift.y),
-							static_cast<PointCoordinateType>(P[2] + Pshift.z) );
-
+			CCVector3 PV = CCVector3::fromArray((P + Pshift).u);
 			vertices->addPoint(PV);
 		}
 	}
@@ -1227,7 +1238,6 @@ static ccMesh* FromFbxMesh(FbxMesh* fbxMesh, FileIOFilter::LoadParameters& param
 		if (mesh->hasPerTriangleMtlIndexes())
 		{
 			mesh->setMaterialSet(materials);
-			//mesh->addChild(materials);
 			mesh->showMaterials(true);
 		}
 		else
@@ -1314,14 +1324,21 @@ CC_FILE_ERROR FBXFilter::loadFile(QString filename, ccHObject& container, LoadPa
 									FbxAMatrix& transform = lNode->EvaluateGlobalTransform();
 									ccGLMatrix mat;
 									float* data = mat.data();
-									for (int c=0; c<4; ++c)
+									for (int c=0; c<4; ++c, data++)
 									{
 										FbxVector4 C = transform.GetColumn(c);
-										*data++ = static_cast<float>(C[0]);
-										*data++ = static_cast<float>(C[1]);
-										*data++ = static_cast<float>(C[2]);
-										*data++ = static_cast<float>(C[3]);
+										data[0]  = static_cast<float>(C[0]);
+										data[4]  = static_cast<float>(C[1]);
+										data[8]  = static_cast<float>(C[2]);
+										data[12] = static_cast<float>(C[3]);
 									}
+									//ccGLMatrix invYZ;
+									//invYZ.toZero();
+									//invYZ.data()[0]  =  1.0;
+									//invYZ.data()[6]  =  1.0;
+									//invYZ.data()[9]  = -1.0;
+									//invYZ.data()[15] =  1.0;
+									//mat = invYZ * mat;
 									mesh->applyGLTransformation_recursive(&mat);
 
 									if (mesh->getName().isEmpty())

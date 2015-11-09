@@ -71,6 +71,9 @@ public: //general
 	//! Lens distortion parameters (interface)
 	struct LensDistortionParameters
 	{
+		//! Virtual destructor
+		virtual ~LensDistortionParameters() {}
+
 		//! Returns distortion model type
 		virtual DistortionModel getModel() const = 0;
 
@@ -157,9 +160,8 @@ public: //general
 	//inherited from ccHObject
 	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::CAMERA_SENSOR; }
 	virtual bool isSerializable() const { return true; }
-	virtual ccBBox getMyOwnBB();
-	virtual ccBBox getDisplayBB();
-	virtual ccBBox getFitBB(ccGLMatrix& trans);
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
+	virtual ccBBox getOwnFitBB(ccGLMatrix& trans);
 
 	//inherited from ccSensor
 	virtual bool applyViewport(ccGenericGLDisplay* win = 0);
@@ -182,7 +184,7 @@ public: //getters and setters
 	void setIntrinsicParameters(const IntrinsicParameters& params);
 
 	//! Returns uncertainty parameters
-	LensDistortionParameters::Shared getDistortionParameters() const { return m_distortionParams; }
+	const LensDistortionParameters::Shared& getDistortionParameters() const { return m_distortionParams; }
 	//! Sets uncertainty parameters 
 	void setDistortionParameters(LensDistortionParameters::Shared params) { m_distortionParams = params; }
 
@@ -515,7 +517,7 @@ public:
 	bool build(CCLib::DgmOctree* octree);
 
 	//! Returns the cell visibility
-	OctreeCellVisibility positionFromFrustum(CCLib::DgmOctree::OctreeCellCodeType truncatedCode, uchar level) const
+	OctreeCellVisibility positionFromFrustum(CCLib::DgmOctree::OctreeCellCodeType truncatedCode, unsigned char level) const
 	{
 		assert(m_associatedOctree);
 

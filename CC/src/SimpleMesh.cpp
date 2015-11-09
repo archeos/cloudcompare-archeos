@@ -52,17 +52,17 @@ unsigned SimpleMesh::size() const
     return m_triIndexes->currentSize();
 };
 
-void SimpleMesh::forEach(genericTriangleAction& anAction)
+void SimpleMesh::forEach(genericTriangleAction& action)
 {
 	SimpleTriangle tri;
-	unsigned i,count=m_triIndexes->currentSize();
-	for (i=0;i<count;++i)
+	unsigned count = m_triIndexes->currentSize();
+	for (unsigned i=0; i<count; ++i)
 	{
 		const unsigned *ti = m_triIndexes->getValue(i);
 		theVertices->getPoint(ti[0],tri.A);
 		theVertices->getPoint(ti[1],tri.B);
 		theVertices->getPoint(ti[2],tri.C);
-		anAction(tri);
+		action(tri);
 	}
 }
 
@@ -88,7 +88,7 @@ GenericTriangle* SimpleMesh::_getTriangle(unsigned triangleIndex)
 	return &dummyTriangle; //temporary!
 }
 
-void SimpleMesh::getTriangleSummits(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C)
+void SimpleMesh::getTriangleVertices(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C)
 {
 	assert(triangleIndex<m_triIndexes->currentSize());
 
@@ -124,7 +124,7 @@ void SimpleMesh::updateBBWithPoint(const CCVector3* P)
     }
 }
 
-void SimpleMesh::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
+void SimpleMesh::getBoundingBox(CCVector3& bbMin, CCVector3& bbMax)
 {
     /* TODO: how can we know if the vertices cloud changes?!
     if (!bbIsValid)
@@ -179,12 +179,12 @@ bool SimpleMesh::resize(unsigned n)
 	return m_triIndexes->resize(n);
 }
 
-TriangleSummitsIndexes* SimpleMesh::getTriangleIndexes(unsigned triangleIndex)
+VerticesIndexes* SimpleMesh::getTriangleVertIndexes(unsigned triangleIndex)
 {
-	return (TriangleSummitsIndexes*)m_triIndexes->getValue(triangleIndex);
+	return reinterpret_cast<VerticesIndexes*>(m_triIndexes->getValue(triangleIndex));
 }
 
-TriangleSummitsIndexes* SimpleMesh::getNextTriangleIndexes()
+VerticesIndexes* SimpleMesh::getNextTriangleVertIndexes()
 {
-	return getTriangleIndexes(globalIterator++);
+	return getTriangleVertIndexes(globalIterator++);
 }
