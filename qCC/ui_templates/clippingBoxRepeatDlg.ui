@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>314</width>
-    <height>271</height>
+    <height>340</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -102,12 +102,42 @@ color: white;</string>
        </layout>
       </item>
       <item>
+       <widget class="QCheckBox" name="multiPassCheckBox">
+        <property name="toolTip">
+         <string>Multi-pass process where longer edges may be temporarilly created to obtain a better fit... or a worst one ;)</string>
+        </property>
+        <property name="text">
+         <string>multi-pass</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QCheckBox" name="projectOnBestFitCheckBox">
         <property name="toolTip">
          <string>Before extracting the contour, points can be projected along the repeat dimension (if only one is defined) or on the best fit plane</string>
         </property>
         <property name="text">
-         <string>Project slice(s) points on their best fit plane</string>
+         <string>project slice(s) points on their best fit plane</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="splitContourCheckBox">
+        <property name="toolTip">
+         <string>split the generated contour(s) in smaller parts to avoid creating edges longer than the specified max edge length.</string>
+        </property>
+        <property name="text">
+         <string>split contour(s) on longer edges</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="debugModeCheckBox">
+        <property name="toolTip">
+         <string>Display a dialog with step-by-step execution of the algorithm (debug mode - very slow)</string>
+        </property>
+        <property name="text">
+         <string>visual debug mode</string>
         </property>
        </widget>
       </item>

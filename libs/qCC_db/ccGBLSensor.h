@@ -28,6 +28,9 @@
 #include <GenericCloud.h>
 #include <CCGeom.h>
 
+//System
+#include <vector>
+
 class ccPointCloud;
 
 //! Ground-based Laser sensor
@@ -50,7 +53,7 @@ public:
 	//! Default constructor
 	/** \param rotOrder inner rotations order
 	**/
-	ccGBLSensor(ROTATION_ORDER rotOrder = YAW_THEN_PITCH);
+	explicit ccGBLSensor(ROTATION_ORDER rotOrder = YAW_THEN_PITCH);
 
 	//! Copy constructor
 	/** \warning The depth buffer is not copied!
@@ -64,9 +67,8 @@ public:
 	//inherited from ccHObject
 	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::GBL_SENSOR; }
 	virtual bool isSerializable() const { return true; }
-	virtual ccBBox getMyOwnBB();
-	virtual ccBBox getDisplayBB();
-	virtual ccBBox getFitBB(ccGLMatrix& trans);
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
+	virtual ccBBox getOwnFitBB(ccGLMatrix& trans);
 
 	//inherited from ccSensor
 	virtual bool applyViewport(ccGenericGLDisplay* win = 0);
@@ -81,12 +83,17 @@ public:
 		\param P the point to test
 		\return the point's visibility (POINT_VISIBLE, POINT_HIDDEN, POINT_OUT_OF_RANGE or POINT_OUT_OF_FOV)
 	**/
-	virtual uchar checkVisibility(const CCVector3& P) const;
+	virtual unsigned char checkVisibility(const CCVector3& P) const;
 
 	//! Computes angular parameters automatically (all but the angular steps!)
 	/** WARNING: this method uses the cloud global iterator.
 	**/
 	bool computeAutoParameters(CCLib::GenericCloud* theCloud);
+
+	//! Returns the error string corresponding to an error code
+	/** Errors codes are returned by ccGBLSensor::computeDepthBuffer or DepthBuffer::fillHoles for instance.
+	**/
+	static QString GetErrorString(int errorCode);
 
 public: //setters and getters
 
@@ -189,7 +196,7 @@ public: //projection tools
 								double posIndex = 0 ) const;
 
 	//! 2D grid of colors
-	typedef GenericChunkedArray<3,colorType> ColorGrid;
+	typedef GenericChunkedArray<3,ColorCompType> ColorGrid;
 
 	//! Projects a set of point cloud colors in the sensor frame defined by this instance
 	/** WARNING: this method uses the cloud global iterator
@@ -210,7 +217,7 @@ public: //depth buffer management
 	struct DepthBuffer
 	{
 		//! Z-Buffer grid
-		PointCoordinateType* zBuff;
+		std::vector<PointCoordinateType> zBuff;
 		//! Pitch step (may differ from the sensor's)
 		PointCoordinateType deltaPhi;
 		//! Yaw step (may differ from the sensor's)

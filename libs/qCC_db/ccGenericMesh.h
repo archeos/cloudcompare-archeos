@@ -59,7 +59,7 @@ public:
 	virtual void refreshBB() = 0;
 
 	//! Returns max capacity
-	virtual unsigned maxSize() const = 0;
+	virtual unsigned capacity() const = 0;
 
 	//! Returns whether the mesh has materials/textures
 	virtual bool hasMaterials() const = 0;
@@ -84,9 +84,9 @@ public:
 
 	//! Returns the triplet of tex coords indexes for a given triangle
 	/** \param triangleIndex triangle index
-		\param i1 first summit tex coords index
-		\param i2 second summit tex coords index
-		\param i3 third summit tex coords index
+		\param i1 first vertex tex coords index
+		\param i2 second vertex tex coords index
+		\param i3 third vertex tex coords index
 	**/
 	virtual void getTriangleTexCoordinatesIndexes(unsigned triangleIndex, int& i1, int& i2, int& i3) const = 0;
 
@@ -95,9 +95,9 @@ public:
 
 	//! Returns a triplet of normal indexes for a given triangle (if any)
 	/** \param[in] triangleIndex triangle index
-		\param[out] i1 first summit normal index (or -1 if none)
-		\param[out] i2 second summit normal index (or -1 if none)
-		\param[out] i3 third summit normal index (or -1 if none)
+		\param[out] i1 first vertex normal index (or -1 if none)
+		\param[out] i2 second vertex normal index (or -1 if none)
+		\param[out] i3 third vertex normal index (or -1 if none)
 	**/
 	virtual void getTriangleNormalIndexes(unsigned triangleIndex, int& i1, int& i2, int& i3) const = 0;
 
@@ -109,6 +109,9 @@ public:
 	//! Returns per-triangle normals shared array
 	virtual NormsIndexesTableType* getTriNormsTable() const = 0;
 	
+	//! Returns the (barycentric) interpolation weights for a given triangle
+	virtual void computeInterpolationWeights(unsigned triIndex, const CCVector3& P, CCVector3d& weights) const;
+
 	//! Interpolates normal(s) inside a given triangle
 	/** \param triIndex triangle index
 		\param P point where to interpolate (should be inside the triangle!)
@@ -120,28 +123,28 @@ public:
 	//! Interpolates RGB colors inside a given triangle
 	/** \param triIndex triangle index
 		\param P point where to interpolate (should be inside the triangle!)
-		\param[out] rgb interpolated color
+		\param[out] C interpolated color
 		\return success
 	**/
-	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, colorType rgb[]) = 0;
+	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, ccColor::Rgb& C) = 0;
 
 	//! Returns RGB color fom a given triangle material/texture
 	/** \param triIndex triangle index
 		\param P point where to grab color (should be inside the triangle!)
-		\param[out] rgb texel color
+		\param[out] C texel color
 		\param interpolateColorIfNoTexture whether to return the color interpolated from the RGB field if no texture/material is associated to the given triangles
 		\return success
 	**/
-	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture) = 0;
+	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, ccColor::Rgb& C, bool interpolateColorIfNoTexture) = 0;
 
 	//! Returns RGB color of a vertex fom a given triangle material/texture
 	/** \param triIndex triangle index
 		\param vertIndex vertex index inside triangle (i.e. 0, 1 or 2!)
-		\param[out] rgb texel color
+		\param[out] C texel color
 		\param returnColorIfNoTexture whether to return the color from the vertex RGB field if no texture/material is associated to the given triangle
 		\return success
 	**/
-	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, colorType rgb[], bool returnColorIfNoTexture) = 0;
+	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, ccColor::Rgb& C, bool returnColorIfNoTexture) = 0;
 
 	//! Returns whether the mesh is displayed as wired or with plain facets
 	virtual bool isShownAsWire() const { return m_showWired; }
@@ -175,19 +178,21 @@ public:
 								bool withTexture,
 								CCLib::GenericProgressCallback* pDlg = 0);
 
+	//! Imports the parameters from another mesh
+	/** Only the specific parameters are imported.
+	**/
+	void importParametersFrom(const ccGenericMesh* mesh);
+
 protected:
 
 	//inherited from ccHObject
 	virtual bool toFile_MeOnly(QFile& out) const;
 	virtual bool fromFile_MeOnly(QFile& in, short dataVersion, int flags);
 
-	//! Max number of displayed triangles (per entity) in "low detail" display
-	static unsigned GET_MAX_LOD_FACES_NUMBER();
-
 	//Static arrays for OpenGL drawing
 	static PointCoordinateType* GetVertexBuffer();
 	static PointCoordinateType* GetNormalsBuffer();
-	static colorType* GetColorsBuffer();
+	static ColorCompType* GetColorsBuffer();
 
 	//! Returns a pre-initialized array of vertex indexes for wired display
 	/** Array size is MAX_NUMBER_OF_ELEMENTS_PER_CHUNK*6 by default

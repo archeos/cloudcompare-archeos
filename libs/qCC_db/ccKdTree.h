@@ -40,7 +40,7 @@ public:
 	//! Default constructor
 	/** \param aCloud a point cloud
 	**/
-	ccKdTree(ccGenericPointCloud* aCloud);
+	explicit ccKdTree(ccGenericPointCloud* aCloud);
 
 	//! Multiplies the bounding-box of the tree
 	/** If the cloud coordinates are simply multiplied by the same factor,
@@ -61,8 +61,7 @@ public:
 	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::POINT_KDTREE; }
 
 	//Inherited from ccHObject
-	virtual ccBBox getMyOwnBB();
-	virtual ccBBox getDisplayBB();
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
 
 	//! Flag points with cell index (as a scalar field)
 	bool convertCellIndexToSF();

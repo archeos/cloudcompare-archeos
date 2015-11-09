@@ -149,7 +149,7 @@ int X3DXIOTNodeHandler::startCoordinate(const X3DAttributes &attr)
 	if (m_currentLeaf->isKindOf(CC_TYPES::MESH))
 	{
 		ccMesh* mesh = ccHObjectCaster::ToMesh(m_currentLeaf);
-		if (mesh && mesh->getAssociatedCloud()==0)
+		if (mesh && mesh->getAssociatedCloud() == 0) //FIXME DGM: weird
 		{
 			cloud->setVisible(false);
 		}
@@ -269,15 +269,15 @@ int X3DXIOTNodeHandler::startIndexedFaceSet(const X3DAttributes &attr)
 			}
 		}
 
-		if (mesh->size() < mesh->maxSize())
+		//unhandled type of mesh
+		if (mesh->size() == 0)
 		{
-			//unhandled type of mesh
-			if (mesh->size()==0)
-			{
-				delete mesh;
-				return SKIP_CHILDREN;
-			}
-			mesh->resize(mesh->size());
+			delete mesh;
+			return SKIP_CHILDREN;
+		}
+		else
+		{
+			mesh->shrinkToFit();
 		}
 	}
 

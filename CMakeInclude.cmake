@@ -36,7 +36,6 @@ if( WIN32 )
 		if ( NOT USE_QT5 )
 			set( QT_RELEASE_DLLS_BASE_NAME QtCore${QT_VERSION_MAJOR} QtGui${QT_VERSION_MAJOR} QtOpenGL${QT_VERSION_MAJOR} )
 		else()
-			set( QT_BINARY_DIR ${QT5_ROOT_PATH}/bin )
 			#standard DLLs
 			set( QT_RELEASE_DLLS_BASE_NAME Qt5Core Qt5Gui Qt5OpenGL Qt5Widgets Qt5Concurrent Qt5PrintSupport )
 			#ICU DLLs
@@ -45,8 +44,10 @@ if( WIN32 )
 
 		#specific case for the MinGW version of Qts
 		if( MINGW )
-			list( APPEND QT_RELEASE_DLLS_BASE_NAME libgcc )
-			list( APPEND QT_RELEASE_DLLS_BASE_NAME mingwm )
+			# OLD: list( APPEND QT_RELEASE_DLLS_BASE_NAME libgcc )
+			# OLD: list( APPEND QT_RELEASE_DLLS_BASE_NAME mingwm )
+			file ( GLOB QT_RELEASE_DLLS ${QT_BINARY_DIR}/libgcc*.dll )
+			file ( GLOB QT_RELEASE_DLLS ${QT_BINARY_DIR}/libstdc++*.dll )
 		endif()
 
 		#generate full path of release Dlls
@@ -76,7 +77,6 @@ if( WIN32 )
 			if ( NOT USE_QT5 )
 				set( QT_DEBUG_DLLS_BASE_NAME QtCored${QT_VERSION_MAJOR} QtGuid${QT_VERSION_MAJOR} QtOpenGLd${QT_VERSION_MAJOR} )
 			else()
-				#set( QT_BINARY_DIR ${QT5_ROOT_PATH}/bin )
 				#standard DLLs
 				set( QT_DEBUG_DLLS_BASE_NAME Qt5Cored Qt5Guid Qt5OpenGLd Qt5Widgetsd Qt5Concurrentd Qt5PrintSupportd )
 				#ICU DLLs
@@ -140,17 +140,8 @@ if( WIN32 )		# 1 argument: ARGV0 = base destination
 			install( FILES ${QT_PLUGINS_DIR}/imageformats/${imagePlugin}d${QT_VER_NUM}.dll CONFIGURATIONS Debug DESTINATION ${ARGV0}_debug/imageformats )
 		endif()
 	endforeach()
-elseif( APPLE )	# 2 arguments: ARGV0 = bundle's plugin dir (destination) / ARGV1 = list of plugins to pass to fixup_bundle
-	if ( USE_QT5 )
-		message( SEND_ERROR "CMake's FindQt5 script doesn't help us anymore for this!!!" )
-	endif()
-	# install imageformat plugins
-	foreach( imagePlugin ${QT_IMAGEFORMATS_PLUGINS} )
-		set( PLUGIN_NAME lib${imagePlugin}${CMAKE_SHARED_LIBRARY_SUFFIX} )
-		install( FILES ${QT_PLUGINS_DIR}/imageformats/${PLUGIN_NAME} DESTINATION ${ARGV0}/imageformats COMPONENT Runtime )
-		list( APPEND QT_PLUGINS ${ARGV0}/imageformats/${PLUGIN_NAME} )
-	endforeach()
-	set( ${ARGV1} ${QT_PLUGINS} PARENT_SCOPE )
+elseif( APPLE )
+    message( SEND_ERROR "install_Qt_ImageFormats should not be called on Mac OS X.  This is handled by macdeployqt." )
 endif()
 endfunction()
 
@@ -189,28 +180,25 @@ endfunction()
 
 # Default preprocessors
 function( set_default_cc_preproc ) # 1 argument: ARGV0 = target
-set( CC_DEFAULT_PREPROCESSORS NOMINMAX _CRT_SECURE_NO_WARNINGS ) #all configurations
-set( CC_DEFAULT_PREPROCESSORS_RELEASE NDEBUG ) #release specific
-set( CC_DEFAULT_PREPROCESSORS_DEBUG _DEBUG ) #debug specific
+    set( CC_DEFAULT_PREPROCESSORS NOMINMAX _CRT_SECURE_NO_WARNINGS ) #all configurations
+    set( CC_DEFAULT_PREPROCESSORS_RELEASE NDEBUG ) #release specific
+    set( CC_DEFAULT_PREPROCESSORS_DEBUG _DEBUG ) #debug specific
 
-if (MSVC)
-	#disable SECURE_SCL (see http://channel9.msdn.com/shows/Going+Deep/STL-Iterator-Debugging-and-Secure-SCL/)
-	list( APPEND CC_DEFAULT_PREPROCESSORS_RELEASE _SECURE_SCL=0 )
+    if(MSVC)
+            #disable SECURE_SCL (see http://channel9.msdn.com/shows/Going+Deep/STL-Iterator-Debugging-and-Secure-SCL/)
+            list( APPEND CC_DEFAULT_PREPROCESSORS_RELEASE _SECURE_SCL=0 )
 
-	#use VLD for mem leak checking
-	OPTION( OPTION_USE_VISUAL_LEAK_DETECTOR "Check to activate compilation (in debug) with Visual Leak Detector" OFF )
-    if( ${OPTION_USE_VISUAL_LEAK_DETECTOR} )
-		list( APPEND CC_DEFAULT_PREPROCESSORS_DEBUG USE_VLD )
+            #use VLD for mem leak checking
+            OPTION( OPTION_USE_VISUAL_LEAK_DETECTOR "Check to activate compilation (in debug) with Visual Leak Detector" OFF )
+        if( ${OPTION_USE_VISUAL_LEAK_DETECTOR} )
+                    list( APPEND CC_DEFAULT_PREPROCESSORS_DEBUG USE_VLD )
+        endif()
     endif()
-endif()
 
-set_property( TARGET ${ARGV0} APPEND PROPERTY COMPILE_DEFINITIONS ${CC_DEFAULT_PREPROCESSORS} )
-if( NOT CMAKE_CONFIGURATION_TYPES )
-	set_property( TARGET ${ARGV0} APPEND PROPERTY COMPILE_DEFINITIONS ${CC_DEFAULT_PREPROCESSORS_RELEASE} )
-else()
+        set_property( TARGET ${ARGV0} APPEND PROPERTY COMPILE_DEFINITIONS ${CC_DEFAULT_PREPROCESSORS} )
 	set_property( TARGET ${ARGV0} APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE ${CC_DEFAULT_PREPROCESSORS_RELEASE} )
 	set_property( TARGET ${ARGV0} APPEND PROPERTY COMPILE_DEFINITIONS_DEBUG ${CC_DEFAULT_PREPROCESSORS_DEBUG} )
-endif()
+
 endfunction()
 
 if( APPLE )
@@ -223,13 +211,10 @@ if( APPLE )
 
       if( ${OPTION_USE_XIOT} )
          list( APPEND SUPPORT_LIB_NAMES libxiot )
-         list( APPEND SUPPORT_LIB_NAMES libxerces-c )
-         list( APPEND SUPPORT_LIB_NAMES libopenFI )
       endif()
       
       if( ${OPTION_USE_LIBLAS} )
          list( APPEND SUPPORT_LIB_NAMES liblas )
-         list( APPEND SUPPORT_LIB_NAMES liblaszip )
       endif()
 
       foreach( supportLib ${SUPPORT_LIB_NAMES} )

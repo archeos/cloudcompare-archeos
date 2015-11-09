@@ -85,7 +85,6 @@ protected:
 #endif
 };
 
-
 int main(int argc, char **argv)
 {
 	//QT initialiation
@@ -93,6 +92,15 @@ int main(int argc, char **argv)
 
 	//Force 'english' local so as to get a consistent behavior everywhere
 	QLocale::setDefault(QLocale::English);
+
+#ifdef Q_OS_LINUX
+    // we reset the numeric locale. As suggested in documetation
+    // see http://qt-project.org/doc/qt-5/qcoreapplication.html#locale-settings
+    // Basically - from doc: - "On Unix/Linux Qt is configured to use the system locale settings by default.
+    // This can cause a conflict when using POSIX functions, for instance,
+    // when converting between data types such as floats and strings"
+    setlocale(LC_NUMERIC,"C");
+#endif
 
 #ifdef USE_VLD
 	VLDEnable();
@@ -103,7 +111,7 @@ int main(int argc, char **argv)
 	QTime splashStartTime;
 
 	//Command line mode?
-	bool commandLine = (argc>1 && argv[1][0]=='-');
+	bool commandLine = (argc > 1 && argv[1][0] == '-');
 	if (!commandLine)
 	{
 		//OpenGL?
@@ -188,6 +196,7 @@ int main(int argc, char **argv)
 
 	//release global structures
 	MainWindow::DestroyInstance();
+	FileIOFilter::UnregisterAll();
 
 #ifdef CC_TRACK_ALIVE_SHARED_OBJECTS
 	//for debug purposes

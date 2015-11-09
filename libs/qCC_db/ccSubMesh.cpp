@@ -76,7 +76,7 @@ void ccSubMesh::onUpdateOf(ccHObject* obj)
 		m_bBox.setValidity(false);
 }
 
-void ccSubMesh::forEach(genericTriangleAction& anAction)
+void ccSubMesh::forEach(genericTriangleAction& action)
 {
 	if (!m_associatedMesh)
 		return;
@@ -85,7 +85,7 @@ void ccSubMesh::forEach(genericTriangleAction& anAction)
 	for (unsigned i=0; i<m_triIndexes->currentSize(); ++i)
 	{
 		CCLib::GenericTriangle* tri = m_associatedMesh->_getTriangle(m_triIndexes->getCurrentValue());
-		anAction(*tri);
+		action(*tri);
 		m_triIndexes->forwardIterator();
 	}
 }
@@ -100,9 +100,9 @@ CCLib::GenericTriangle* ccSubMesh::_getNextTriangle() //temporary object
 	return m_associatedMesh && m_globalIterator < size() ? m_associatedMesh->_getTriangle(m_triIndexes->getValue(m_globalIterator++)) : 0;
 }
 
-CCLib::TriangleSummitsIndexes* ccSubMesh::getNextTriangleIndexes()
+CCLib::VerticesIndexes* ccSubMesh::getNextTriangleVertIndexes()
 {
-	return m_associatedMesh && m_globalIterator < size() ? m_associatedMesh->getTriangleIndexes(m_triIndexes->getValue(m_globalIterator++)) : 0;
+	return m_associatedMesh && m_globalIterator < size() ? m_associatedMesh->getTriangleVertIndexes(m_triIndexes->getValue(m_globalIterator++)) : 0;
 }
 
 bool ccSubMesh::interpolateNormals(unsigned triIndex, const CCVector3& P, CCVector3& N)
@@ -115,7 +115,7 @@ bool ccSubMesh::interpolateNormals(unsigned triIndex, const CCVector3& P, CCVect
 	return false;
 }
 
-bool ccSubMesh::interpolateColors(unsigned triIndex, const CCVector3& P, colorType rgb[])
+bool ccSubMesh::interpolateColors(unsigned triIndex, const CCVector3& P, ccColor::Rgb& rgb)
 {
 	if (m_associatedMesh && triIndex < size())
 		return m_associatedMesh->interpolateColors(getTriGlobalIndex(triIndex),P,rgb);
@@ -125,7 +125,7 @@ bool ccSubMesh::interpolateColors(unsigned triIndex, const CCVector3& P, colorTy
 	return false;
 }
 
-bool ccSubMesh::getColorFromMaterial(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture)
+bool ccSubMesh::getColorFromMaterial(unsigned triIndex, const CCVector3& P, ccColor::Rgb& rgb, bool interpolateColorIfNoTexture)
 {
 	if (m_associatedMesh && triIndex < size())
 		return m_associatedMesh->getColorFromMaterial(getTriGlobalIndex(triIndex),P,rgb,interpolateColorIfNoTexture);
@@ -135,7 +135,7 @@ bool ccSubMesh::getColorFromMaterial(unsigned triIndex, const CCVector3& P, colo
 	return false;
 }
 
-bool ccSubMesh::getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, colorType rgb[], bool returnColorIfNoTexture)
+bool ccSubMesh::getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, ccColor::Rgb& rgb, bool returnColorIfNoTexture)
 {
 	if (m_associatedMesh && triIndex < size())
 		return m_associatedMesh->getVertexColorFromMaterial(getTriGlobalIndex(triIndex),vertIndex,rgb,returnColorIfNoTexture);
@@ -155,11 +155,11 @@ CCLib::GenericTriangle* ccSubMesh::_getTriangle(unsigned triIndex) //temporary o
 	return 0;
 }
 
-void ccSubMesh::getTriangleSummits(unsigned triIndex, CCVector3& A, CCVector3& B, CCVector3& C)
+void ccSubMesh::getTriangleVertices(unsigned triIndex, CCVector3& A, CCVector3& B, CCVector3& C)
 {
 	if (m_associatedMesh && triIndex < size())
 	{
-		m_associatedMesh->getTriangleSummits(getTriGlobalIndex(triIndex),A,B,C);
+		m_associatedMesh->getTriangleVertices(getTriGlobalIndex(triIndex),A,B,C);
 	}
 	else
 	{
@@ -168,22 +168,14 @@ void ccSubMesh::getTriangleSummits(unsigned triIndex, CCVector3& A, CCVector3& B
 	}
 }
 
-CCLib::TriangleSummitsIndexes* ccSubMesh::getTriangleIndexes(unsigned triIndex)
+CCLib::VerticesIndexes* ccSubMesh::getTriangleVertIndexes(unsigned triIndex)
 {
 	if (m_associatedMesh && triIndex < size())
-		return m_associatedMesh->getTriangleIndexes(getTriGlobalIndex(triIndex));
+		return m_associatedMesh->getTriangleVertIndexes(getTriGlobalIndex(triIndex));
 
 	//shouldn't happen
 	assert(false);
 	return 0;
-}
-
-void ccSubMesh::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
-{
-	getMyOwnBB(); //forces BB refresh if necessary
-
-	memcpy(bbMin, m_bBox.minCorner().u, 3*sizeof(PointCoordinateType));
-	memcpy(bbMax, m_bBox.maxCorner().u, 3*sizeof(PointCoordinateType));
 }
 
 ccSubMesh* ccSubMesh::createNewSubMeshFromSelection(bool removeSelectedFaces, IndexMap* indexMap/*=0*/)
@@ -209,7 +201,7 @@ ccSubMesh* ccSubMesh::createNewSubMeshFromSelection(bool removeSelectedFaces, In
 		for (unsigned i=0; i<triNum; ++i)
 		{
 			const unsigned& globalIndex = m_triIndexes->getValue(i);
-			const CCLib::TriangleSummitsIndexes* tsi = m_associatedMesh->getTriangleIndexes(globalIndex);
+			const CCLib::VerticesIndexes* tsi = m_associatedMesh->getTriangleVertIndexes(globalIndex);
 			//triangle is visible?
 			if (   verticesVisibility->getValue(tsi->i1) == POINT_VISIBLE
 				&& verticesVisibility->getValue(tsi->i2) == POINT_VISIBLE
@@ -248,7 +240,7 @@ ccSubMesh* ccSubMesh::createNewSubMeshFromSelection(bool removeSelectedFaces, In
 		for (unsigned i=0; i<triNum; ++i)
 		{
 			unsigned globalIndex = m_triIndexes->getValue(i);
-			const CCLib::TriangleSummitsIndexes* tsi = m_associatedMesh->getTriangleIndexes(globalIndex);
+			const CCLib::VerticesIndexes* tsi = m_associatedMesh->getTriangleVertIndexes(globalIndex);
 
 			if (indexMap) //translate global index?
 				globalIndex = indexMap->getValue(globalIndex);
@@ -443,7 +435,7 @@ bool ccSubMesh::resize(unsigned n)
 	return m_triIndexes->resize(n);
 }
 
-unsigned ccSubMesh::maxSize() const
+unsigned ccSubMesh::capacity() const
 {
 	return m_triIndexes->capacity();
 }
@@ -463,14 +455,27 @@ void ccSubMesh::refreshBB()
 	notifyGeometryUpdate();
 }
 
-ccBBox ccSubMesh::getMyOwnBB()
+ccBBox ccSubMesh::getOwnBB(bool withGLFeatures/*=false*/)
 {
+	//force BB refresh if necessary
 	if (!m_bBox.isValid() && size() != 0)
 	{
 		refreshBB();
 	}
 
 	return m_bBox;
+}
+
+void ccSubMesh::getBoundingBox(CCVector3& bbMin, CCVector3& bbMax)
+{
+	//force BB refresh if necessary
+	if (!m_bBox.isValid() && size() != 0)
+	{
+		refreshBB();
+	}
+
+	bbMin = m_bBox.minCorner();
+	bbMax = m_bBox.maxCorner();
 }
 
 bool ccSubMesh::toFile_MeOnly(QFile& out) const

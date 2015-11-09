@@ -20,7 +20,10 @@
 
 //Local
 #include "MathTools.h"
-#include "Matrix.h"
+#include "SquareMatrix.h"
+
+//System
+#include <string.h>
 
 namespace CCLib
 {
@@ -40,14 +43,19 @@ public:
 	//! Default constructor
 	ConjugateGradient()
 		: cg_A(N)
-	{}
+	{
+		memset(cg_Gn, 0, sizeof(Scalar)*N);
+		memset(cg_Hn, 0, sizeof(Scalar)*N);
+		memset(cg_u,  0, sizeof(Scalar)*N);
+		memset(cg_b,  0, sizeof(Scalar)*N);
+	}
 
 	//! Default destructor
 	virtual ~ConjugateGradient()
 	{}
 
 	//! Returns A matrix
-	inline CCLib::MatrixTpl<Scalar>& A() { return cg_A; }
+	inline CCLib::SquareMatrixTpl<Scalar>& A() { return cg_A; }
 
 	//! Returns b vector
 	inline Scalar* b() { return cg_b; }
@@ -129,7 +137,7 @@ protected:
 	//! 'A' matrix
 	/** Equation solved: "A.X=b"
 	**/
-	CCLib::MatrixTpl<Scalar> cg_A;
+	CCLib::SquareMatrixTpl<Scalar> cg_A;
 };
 
 }

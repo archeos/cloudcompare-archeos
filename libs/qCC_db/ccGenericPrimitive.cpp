@@ -21,7 +21,7 @@
 #include "ccGenericPrimitive.h"
 #include "ccPointCloud.h"
 
-ccGenericPrimitive::ccGenericPrimitive(QString name/*=QString()*/, const ccGLMatrix* transMat /*= 0*/)
+ccGenericPrimitive::ccGenericPrimitive(QString name/*=QString()*/, const ccGLMatrix* transMat/*=0*/)
 	: ccMesh(new ccPointCloud("vertices"))
 	, m_drawPrecision(0)
 {
@@ -32,12 +32,14 @@ ccGenericPrimitive::ccGenericPrimitive(QString name/*=QString()*/, const ccGLMat
 	assert(vert);
 	addChild(vert);
 	vert->setEnabled(false);
+	//we don't want the user to transform the vertices for instance (as they are only temporary)
+	vert->setLocked(true);
 
 	if (transMat)
 		m_transformation = *transMat;
 }
 
-void ccGenericPrimitive::setColor(const colorType* col)
+void ccGenericPrimitive::setColor(const ccColor::Rgb& col)
 {
 	if (m_associatedCloud)
 		static_cast<ccPointCloud*>(m_associatedCloud)->setRGBColor(col);
@@ -96,8 +98,6 @@ const ccGenericPrimitive& ccGenericPrimitive::operator += (const ccGenericPrimit
 			{
 				setTriNormsTable(normsTable);
 				assert(m_triNormals);
-				//primitives must have their normal table as child!
-				addChild(m_triNormals);
 			}
 
 			for (unsigned i=0; i<primTriNormCount; ++i)
@@ -107,7 +107,7 @@ const ccGenericPrimitive& ccGenericPrimitive::operator += (const ccGenericPrimit
 		//copy faces
 		for (i=0;i<prim.size();++i)
 		{
-			const CCLib::TriangleSummitsIndexes* tsi = prim.getTriangleIndexes(i);
+			const CCLib::VerticesIndexes* tsi = prim.getTriangleVertIndexes(i);
 			addTriangle(vertCount+tsi->i1,vertCount+tsi->i2,vertCount+tsi->i3);
 			if (primHasFaceNorms)
 			{
@@ -195,6 +195,11 @@ void ccGenericPrimitive::applyGLTransformation(const ccGLMatrix& trans)
 	m_transformation = trans * m_transformation;
 }
 
+const ccGLMatrix& ccGenericPrimitive::getGLTransformationHistory() const
+{
+	return m_transformation;
+}
+
 void ccGenericPrimitive::applyTransformationToVertices()
 {
 	//we apply associated transformation but as a call 
@@ -277,8 +282,6 @@ bool ccGenericPrimitive::init(unsigned vertCount, bool vertNormals, unsigned fac
 		{
 			setTriNormsTable(normsTable);
 			assert(m_triNormals);
-			//primitives must have their normal table as child!
-			addChild(m_triNormals);
 		}
 	}
 
@@ -303,6 +306,7 @@ ccGenericPrimitive* ccGenericPrimitive::finishCloneJob(ccGenericPrimitive* primi
 		//primitive->setName(getName()+QString(".clone"));
 		primitive->setVisible(isVisible());
 		primitive->setEnabled(isEnabled());
+		primitive->importParametersFrom(this);
 	}
 	else
 	{

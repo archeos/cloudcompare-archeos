@@ -22,6 +22,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <stdio.h>
+#include <assert.h>
 
 //////////// STRING HANDLING ////////////////////
 inline void upperStr(char *s) {while(*s) {if(((*s)>='a')&&((*s)<='z')) (*s)+='A'-'a'; s++;}}
@@ -31,7 +32,13 @@ inline void upperStr(char *s) {while(*s) {if(((*s)>='a')&&((*s)<='z')) (*s)+='A'
 ////////////////////////////
 
 PdmsLexer::PdmsLexer()
+	: loadedObject(0)
+	, currentToken(PDMS_INVALID_TOKEN)
+	, stop(false)
+	, metaGroupMask(0)
 {
+	tokenBuffer[0] = 0;
+	nextBuffer[0] = 0;
 }
 
 bool PdmsLexer::initializeSession()
@@ -117,18 +124,16 @@ bool PdmsLexer::initializeSession()
 void PdmsLexer::closeSession(bool destroyLoadedObject)
 {
 	dictionnary.clear();
-	if(destroyLoadedObject)
+	if (destroyLoadedObject && loadedObject)
 	{
-		if(loadedObject)
-			delete loadedObject;
-		loadedObject = NULL;
+		PdmsObjects::Stack::Detroy(loadedObject);
 	}
 }
 
 bool PdmsLexer::gotoNextToken()
 {
-	const int enter_meta_group_mask=1;
-	const int leave_meta_group_mask=100;
+	const int enter_meta_group_mask = 1;
+	const int leave_meta_group_mask = 100;
 
 	//Special case: in meta group, the lexer splits Meta Group comments into appropriated tokens
 	if(metaGroupMask)
@@ -136,11 +141,11 @@ bool PdmsLexer::gotoNextToken()
 		metaGroupMask++;
 		switch(metaGroupMask)
 		{
-		case enter_meta_group_mask+1: currentToken=PDMS_CREATE; return true;
-		case enter_meta_group_mask+2: currentToken=PDMS_GROUP; return true;
-		case enter_meta_group_mask+3: currentToken=PDMS_NAME_STR; return true;
-		case leave_meta_group_mask+1: currentToken=PDMS_END; return true;
-		case leave_meta_group_mask+2: currentToken=PDMS_GROUP; return true;
+		case enter_meta_group_mask+1: currentToken = PDMS_CREATE; return true;
+		case enter_meta_group_mask+2: currentToken = PDMS_GROUP; return true;
+		case enter_meta_group_mask+3: currentToken = PDMS_NAME_STR; return true;
+		case leave_meta_group_mask+1: currentToken = PDMS_END; return true;
+		case leave_meta_group_mask+2: currentToken = PDMS_GROUP; return true;
 		default: metaGroupMask=0; break;
 		}
 	}
@@ -159,12 +164,12 @@ bool PdmsLexer::gotoNextToken()
 			case PDMS_COMMENT_LINE:
 			case PDMS_COMMENT_BLOCK:
 				skipComment();
-				if(currentToken==PDMS_ENTER_METAGROUP)
+				if(currentToken == PDMS_ENTER_METAGROUP)
 				{
 					metaGroupMask = enter_meta_group_mask;
 					break;
 				}
-				if(currentToken==PDMS_LEAVE_METAGROUP)
+				if(currentToken == PDMS_LEAVE_METAGROUP)
 				{
 					metaGroupMask = leave_meta_group_mask;
 					break;
@@ -217,14 +222,14 @@ PointCoordinateType PdmsLexer::valueFromBuffer()
 	size_t length = 0;
 	while (index > 0) //go back until we meet a number symbol
 	{
-		if((tokenBuffer[index-1]>='0' && tokenBuffer[index-1]<='9') || tokenBuffer[index-1]=='.')
+		if ((tokenBuffer[index-1]>='0' && tokenBuffer[index-1]<='9') || tokenBuffer[index-1]=='.')
 			break;
 		index--;
 		length++;
 	}
 
 	//Read units
-	if(length>0)
+	if (length > 0)
 	{
 		strcpy(nextBuffer, &(tokenBuffer[index]));
 		memset(&(tokenBuffer[index]), 0, length);
@@ -232,8 +237,8 @@ PointCoordinateType PdmsLexer::valueFromBuffer()
 
 	//Replace comma
 	length = strlen(tokenBuffer);
-	for(index=0; index<length; index++)
-		if(tokenBuffer[index]==',')
+	for (index=0; index<length; index++)
+		if (tokenBuffer[index]==',')
 			tokenBuffer[index]='.';
 
 	//convert value
@@ -310,22 +315,19 @@ void PdmsFileSession::parseCurrentToken()
 
 bool PdmsFileSession::moveForward()
 {
-	int car;
-	unsigned n;
-	bool tokenFilled;
-	n=0;
-
-	if(PdmsLexer::moveForward()) return true;
+	if (PdmsLexer::moveForward())
+		return true;
 
 	m_eol = false;
-	tokenFilled = false;
-	while(!tokenFilled)
+	bool tokenFilled = false;
+	unsigned n = 0;
+	while (!tokenFilled)
 	{
-		car = getc(m_file);
+		int car = getc(m_file);
 		switch(car)
 		{
 		case '\n':
-			if(n>0)
+			if(n > 0)
 			{
 				tokenFilled = true;
 				m_eol = true;
@@ -334,7 +336,7 @@ bool PdmsFileSession::moveForward()
 			break;
 		case ' ':
 		case '\t':
-			if(n>0)
+			if(n > 0)
 				tokenFilled = true;
 			break;
 		case EOF:
@@ -355,23 +357,19 @@ bool PdmsFileSession::moveForward()
 	tokenBuffer[n] = '\0';
 	if(tokenBuffer[0] != '/')
 		upperStr(tokenBuffer);
-	return (n>0);
+	return (n > 0);
 }
 
 void PdmsFileSession::skipComment()
 {
-	int car, commentBlockLevel;
-	bool commentSymb;
-	char *ptr1, *ptr2;
-	int n;
-
 	switch(currentToken)
 	{
 	case PDMS_COMMENT_LINE:
 		//skip line only if the end of line has not been read in current buffer
 		if(!m_eol)
 		{
-			n = 0;
+			int n = 0;
+			int car = 0;
 			do{
 				car = getc(m_file);
 				if(car=='\t') car=' ';
@@ -385,11 +383,13 @@ void PdmsFileSession::skipComment()
 		m_eol = false;
 		break;
 	case PDMS_COMMENT_BLOCK:
+		{
 		//comment block opening symbol has been met. Search for comment block ending symbol
 		//don't forget that some other comments could be embeded in this comment
-		commentSymb = false;
-		commentBlockLevel = 1;
-		n = 0;
+		bool commentSymb = false;
+		int commentBlockLevel = 1;
+		int n = 0;
+		int car = 0;
 		do{
 			car = getc(m_file);
 			if(car=='\n') m_currentLine++;
@@ -406,6 +406,7 @@ void PdmsFileSession::skipComment()
 		} while(car!=EOF && commentBlockLevel>0);
 		tokenBuffer[n-1] = '\0';
 		m_eol = false;
+		}
 		break;
 	default:
 		break;
@@ -417,11 +418,11 @@ void PdmsFileSession::skipComment()
 		currentToken = PDMS_ENTER_METAGROUP;
 		//The meta group name starts after the "entering in group:" statement, after the last slash
 		//But we still store the whole path
-		ptr2 = &(tokenBuffer[18]);
+		char* ptr2 = &(tokenBuffer[18]);
 		while((*ptr2)==' ') {ptr2++;}
 		//Copy the meta group name at the begining of tokenbuffer
 		tokenBuffer[0] = '/';
-		ptr1 = &(tokenBuffer[1]);
+		char* ptr1 = &(tokenBuffer[1]);
 		while((*ptr2) && (*ptr2)!=' ')
 		{
 			*ptr1 = *ptr2;
@@ -440,11 +441,10 @@ void PdmsFileSession::skipComment()
 
 void PdmsFileSession::skipHandleCommand()
 {
-	int opened=0, state=0, car;
-	unsigned i;
+	int opened=0, state=0;
 
 	//Search for "HANDLE(...)" and remove this string from tokenBuffer
-	for(i=0; i<strlen(tokenBuffer); i++)
+	for(unsigned i=0; i<strlen(tokenBuffer); i++)
 	{
 		if(tokenBuffer[i]=='(') {opened++; state++;}
 		else if(tokenBuffer[i]==')') state--;
@@ -454,7 +454,7 @@ void PdmsFileSession::skipHandleCommand()
 	//"HANDLE(...) does not lie in tokenBuffer, then search it in the file
 	while(!(opened>0 && state==0))
 	{
-		car = getc(m_file);
+		int car = getc(m_file);
 		if(car=='(') {opened++; state++;}
 		else if(car==')') state--;
 	}
@@ -482,13 +482,19 @@ PdmsParser::PdmsParser()
 
 PdmsParser::~PdmsParser()
 {
-	if(currentCommand)
+	if (currentCommand)
+	{
 		delete currentCommand;
-	if(currentItem)
+		currentCommand = 0;
+	}
+	
+	if (currentItem)
 	{
 		currentItem = currentItem->getRoot();
-		delete currentItem;
+		PdmsObjects::Stack::Detroy(currentItem);
 	}
+
+	PdmsObjects::Stack::Clear();
 }
 
 void PdmsParser::linkWithSession(PdmsLexer *s)
@@ -502,73 +508,96 @@ void PdmsParser::linkWithSession(PdmsLexer *s)
 
 bool PdmsParser::processCurrentToken()
 {
-	Token currentToken;
-	PdmsObjects::GenericItem *item;
-
-	if(!session)
+	if (!session)
+	{
+		assert(false);
 		return false;
-	currentToken = session->getCurrentToken();
+	}
+
+	Token currentToken = session->getCurrentToken();
 	switch(currentToken)
 	{
 	case PDMS_UNUSED:
 		break;
+	
 	case PDMS_UNKNOWN:
 		session->printWarning("Unknown token");
 		return false;
+	
 	case PDMS_EOS:
 		break;
+	
 	case PDMS_NUM_VALUE:
-		//There should be a activ command, and it should handle the value
-		if(!(currentCommand && currentCommand->handle(session->valueFromBuffer())))
+		//There should be a active command, and it should handle the value
+		if (!currentCommand || !currentCommand->handle(session->valueFromBuffer()))
 		{
 			session->printWarning("Unexpected numerical value");
 			return false;
 		}
 		break;
+	
 	case PDMS_NAME_STR:
-		//There should be a activ command, and it should handle the char string
-		if(!(currentCommand && currentCommand->handle(session->nameFromBuffer())))
+		//There should be a active command, and it should handle the char string
+		if (!currentCommand || !currentCommand->handle(session->nameFromBuffer()))
 		{
 			session->printWarning("Last token cannot be associated with a name");
 			return false;
 		}
 		break;
+	
 	default:
-		//If there is an activ command
-		if(currentCommand)
+		//If there is an active command
+		if (currentCommand)
 		{
-			//If the activ command can handle the new token, it's ok
-			if(currentCommand->handle(currentToken)) return true;
-			//Else, the token must be a new command. We execute the activ command and delete it
-			item = currentItem;
-			if(!currentCommand->execute(&item))
+			//If the active command can handle the new token, it's ok
+			if (currentCommand->handle(currentToken))
+				return true;
+			
+			//Else, the token must be a new command. We execute the active command and delete it
+			PdmsObjects::GenericItem* item = currentItem;
+			bool success = currentCommand->execute(item);
+			delete currentCommand;
+			currentCommand = NULL;
+			if (!success)
 			{
+				assert(false);
 				session->printWarning("Unable to resolve previous command (this token may be unexpected in current command)");
-				delete currentCommand;
 				return false;
 			}
-			delete currentCommand;
-			currentCommand=NULL;
 			//The command execution could have changed the current item
-			if(item) currentItem = item;
-			else if(!root && currentItem) {root=currentItem->getRoot(); currentItem=NULL;}
-			else if(currentItem)
+			if (item)
 			{
-				session->printWarning("Trying to create a second root for elements hierarchy");
-				return false;
+				currentItem = item;
+			}
+			else if (currentItem)
+			{
+				if (!root)
+				{
+					root = currentItem->getRoot();
+					currentItem = NULL;
+				}
+				else
+				{
+					assert(false);
+					session->printWarning("Trying to create a second root for elements hierarchy");
+					return false;
+				}
 			}
 		}
-		if(currentToken == PDMS_RETURN)
+		if (currentToken == PDMS_RETURN)
 		{
 			session->finish();
-			return true;
 		}
-		//Here, we must create a new command from the token speciffied by the lexer
-		currentCommand=PdmsCommands::Command::Create(currentToken);
-		if(!currentCommand)
+		else
 		{
-			session->printWarning("Unknown command");
-			return false;
+			//Here, we must create a new command from the token speciffied by the lexer
+			currentCommand = PdmsCommands::Command::Create(currentToken);
+			if (!currentCommand)
+			{
+				session->printWarning("Unknown command");
+				assert(false);
+				return false;
+			}
 		}
 		break;
 	}
@@ -577,37 +606,31 @@ bool PdmsParser::processCurrentToken()
 
 bool PdmsParser::parseSessionContent()
 {
-	if(!session)
-		return false;
+	PdmsObjects::Stack::Init();
 
-	if(!PdmsCommands::ElementCreation::Initialize())
-		return false;
-	if(!session->initializeSession())
+	if (!session  || !session->initializeSession())
 	{
-		PdmsCommands::ElementCreation::Finalize();
 		return false;
 	}
 
-	while(session->gotoNextToken())
+	while (session->gotoNextToken())
 	{
-		if(!processCurrentToken())
+		if (!processCurrentToken())
 		{
 			session->closeSession(true);
-			PdmsCommands::ElementCreation::Finalize();
 			return false;
 		}
 	}
 	//If the hierarchy root has not yet been computed, do it now.
-	if(!root)
+	if (!root)
 		root = currentItem->getRoot();
 	//else check that the current item doesn't belong to a new root
-	else if(currentItem->getRoot()!=root)
+	else if (currentItem->getRoot() != root)
 		session->printWarning("there could be several hierarchy root specified in this file");
-	if(root)
+	if (root)
 		root->convertCoordinateSystem();
 	session->setLoadedObject(root);
 	session->closeSession(false);
-	PdmsCommands::ElementCreation::Finalize();
 	return true;
 }
 

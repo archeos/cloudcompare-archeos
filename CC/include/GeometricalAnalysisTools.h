@@ -23,7 +23,7 @@
 #include "CCToolbox.h"
 #include "Neighbourhood.h"
 #include "DgmOctree.h"
-#include "Matrix.h"
+#include "SquareMatrix.h"
 
 namespace CCLib
 {
@@ -110,6 +110,14 @@ public:
 	**/
 	static CCVector3 computeGravityCenter(GenericCloud* theCloud);
 
+	//! Computes the weighted gravity center of a point cloud
+	/** \warning this method uses the cloud global iterator
+		\param theCloud cloud
+		\param weights per point weights (only absolute values are considered)
+		\return gravity center
+	**/
+	static CCVector3 computeWeightedGravityCenter(GenericCloud* theCloud, ScalarField* weights);
+
 	//! Computes the cross covariance matrix between two clouds (same size)
 	/** Used in the ICP algorithm between the cloud to register and the "Closest Points Set"
 		determined from the reference cloud.
@@ -133,16 +141,14 @@ public:
 		\param Q the "Closest Point Set"
 		\param pGravityCenter the gravity center of P
 		\param qGravityCenter the gravity center of Q
-		\param weightsP weights for the points of P (optional)
-		\param weightsQ weights for the points of Q (optional)
+		\param coupleWeights weights for each (Pi,Qi) couple (optional)
 		\return weighted cross covariance matrix
 	**/
 	static SquareMatrixd computeWeightedCrossCovarianceMatrix(	GenericCloud* P,
 																GenericCloud* Q,
 																const CCVector3& pGravityCenter,
 																const CCVector3& qGravityCenter,
-																ScalarField* weightsP = 0,
-																ScalarField* weightsQ = 0);
+																ScalarField* coupleWeights = 0);
 
 	//! Computes the covariance matrix of a clouds
 	/** \warning this method uses the cloud global iterator
@@ -166,6 +172,43 @@ public:
 									double minDistanceBetweenPoints = 1.0e-12,
 									GenericProgressCallback* progressCb = 0,
 									DgmOctree* inputOctree = 0);
+
+	//! Tries to detect a sphere in a point cloud
+	/** Inspired from "Parameter Estimation Techniques: A Tutorial with Application
+		to Conic Fitting" by Zhengyou Zhang (Inria Technical Report n°2676).
+		More specifically the section 9.5 about Least Median of Squares.
+		\param[in]  cloud input cloud
+		\param[in]  outliersRatio proportion of outliers (between 0 and 1)
+		\param[out] center center of the detected sphere
+		\param[out] radius radius of the detected sphere
+		\param[out] rms residuals RMS for the detected sphere
+		\param[in] progressCb for progress notification (optional)
+		\param[in] confidence probability that the detected sphere is the right one (strictly below 1)
+		\result success
+	**/
+	static bool detectSphereRobust(	GenericIndexedCloudPersist* cloud,
+									double outliersRatio,
+									CCVector3& center,
+									PointCoordinateType& radius,
+									double& rms,
+									GenericProgressCallback* progressCb = 0,
+									double confidence = 0.99);
+
+	//! Computes the center and radius of a sphere passing through 4 points
+	/** \param[in] A first point
+		\param[in] B second point
+		\param[in] C third point
+		\param[in] D fourth point
+		\param[out] center center of the sphere
+		\param[out] radius radius of the sphere
+		\return success
+	**/
+	static bool computeSphereFrom4(	const CCVector3& A,
+									const CCVector3& B,
+									const CCVector3& C,
+									const CCVector3& D,
+									CCVector3& center,
+									PointCoordinateType& radius );
 
 protected:
 
@@ -213,6 +256,13 @@ protected:
 	static bool flagDuplicatePointsInACellAtLevel(	const DgmOctree::octreeCell& cell,
 													void** additionalParameters,
 													NormalizedProgress* nProgress = 0);
+
+	//! Refines the estimation of a sphere by (iterative) least-squares
+	static bool refineSphereLS(	GenericIndexedCloudPersist* cloud,
+								CCVector3& center,
+								PointCoordinateType& radius,
+								double minReltaiveCenterShift = 1.0e-3);
+
 };
 
 }

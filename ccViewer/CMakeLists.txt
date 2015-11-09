@@ -1,14 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 
-# Eliminate a warning when building in Windows that relates
-# to static linking of Qt executables to qtmain.lib.
-# This policy was introduced in CMake version 2.8.11.
-# CMake version 2.8.11.2 warns when the policy is not set
-# and uses OLD behavior.
-if(POLICY CMP0020)
-  cmake_policy(SET CMP0020 OLD)
-endif()
-
 include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
 include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
 include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
@@ -27,12 +18,12 @@ include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
 project( ccViewer )
 
 set( VERSION_MAJOR 1 )
-set( VERSION_MINOR 32 )
+set( VERSION_MINOR 35 )
 set( VERSION_PATCH 0 )
 
-set( QCC_HEADERS ../qCC/ccOverlayDialog.h ../qCC/ccCameraParamEditDlg.h ../qCC/ccDisplayOptionsDlg.h ../qCC/ccMouse3DContextMenu.h )
-set( QCC_SOURCES ../qCC/ccOverlayDialog.cpp ../qCC/ccCameraParamEditDlg.cpp ../qCC/ccDisplayOptionsDlg.cpp ../qCC/ccMouse3DContextMenu.cpp )
-set( QCC_DIALOGS ../qCC/ui_templates/cameraParamDlg.ui ../qCC/ui_templates/displayOptionsDlg.ui )
+set( QCC_HEADERS ../qCC/ccOverlayDialog.h ../qCC/ccCameraParamEditDlg.h ../qCC/ccDisplayOptionsDlg.h ../qCC/ccMouse3DContextMenu.h ../qCC/ccStereoModeDlg.h )
+set( QCC_SOURCES ../qCC/ccOverlayDialog.cpp ../qCC/ccCameraParamEditDlg.cpp ../qCC/ccDisplayOptionsDlg.cpp ../qCC/ccMouse3DContextMenu.cpp ../qCC/ccStereoModeDlg.cpp )
+set( QCC_DIALOGS ../qCC/ui_templates/cameraParamDlg.ui ../qCC/ui_templates/displayOptionsDlg.ui ../qCC/ui_templates/stereoModeDlg.ui )
 
 file( GLOB header_list *.h ${QCC_HEADERS} )
 file( GLOB source_list *.cpp ${QCC_SOURCES} )
@@ -105,7 +96,9 @@ set_default_cc_preproc( ${PROJECT_NAME} )
 set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_VIEWER USE_GLEW GLEW_STATIC )
 if (WIN32)
 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_USE_AS_DLL QCC_DB_USE_AS_DLL QCC_IO_USE_AS_DLL )
-	SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO")
+	if (MSVC)
+		SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO")
+	endif()
 endif()
 
 # App icon with Code::Blocks/MinGW

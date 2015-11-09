@@ -42,7 +42,7 @@ ccIndexedTransformationBuffer::ccIndexedTransformationBuffer(const ccIndexedTran
 	{
 		this->std::vector< ccIndexedTransformation >::operator = (buffer);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		ccLog::Warning("[ccIndexedTransformationBuffer] Failed to copy original content (not enough memory)");
 	}
@@ -133,7 +133,7 @@ void ccIndexedTransformationBuffer::invalidateBoundingBox()
 	m_bBox.setValidity(false);
 }
 
-ccBBox ccIndexedTransformationBuffer::getMyOwnBB()
+ccBBox ccIndexedTransformationBuffer::getOwnBB(bool withGLFeatures/*=false*/)
 {
 	if (!m_bBox.isValid() || m_bBoxValidSize != size())
 	{
@@ -143,17 +143,16 @@ ccBBox ccIndexedTransformationBuffer::getMyOwnBB()
 		m_bBoxValidSize = size();
 	}
 
-	return m_bBox;
-}
-
-ccBBox ccIndexedTransformationBuffer::getDisplayBB()
-{
-	ccBBox box = getMyOwnBB();
-	if (m_showTrihedrons && box.isValid())
+	if (   !withGLFeatures
+		|| !m_showTrihedrons
+		|| !m_bBox.isValid() )
 	{
-		box.minCorner() -= CCVector3(m_trihedronsScale,m_trihedronsScale,m_trihedronsScale);
-		box.maxCorner() += CCVector3(m_trihedronsScale,m_trihedronsScale,m_trihedronsScale);
+		return m_bBox;
 	}
+
+	ccBBox box = m_bBox;
+	box.minCorner() -= CCVector3(m_trihedronsScale,m_trihedronsScale,m_trihedronsScale);
+	box.maxCorner() += CCVector3(m_trihedronsScale,m_trihedronsScale,m_trihedronsScale);
 
 	return box;
 }
@@ -253,7 +252,7 @@ bool ccIndexedTransformationBuffer::fromFile_MeOnly(QFile& in, short dataVersion
 	{
 		resize(count);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return MemoryError();
@@ -293,7 +292,7 @@ void ccIndexedTransformationBuffer::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 	//show path
 	{
-		glColor3ubv(ccColor::green);
+		ccGL::Color3v(ccColor::green.rgba);
 		glBegin(count > 1 && m_showAsPolyline ? GL_LINE_STRIP : GL_POINTS); //show path as a polyline or points?
 		for (ccIndexedTransformationBuffer::const_iterator it=begin(); it!=end(); ++it)
 			glVertex3fv(it->getTranslation());

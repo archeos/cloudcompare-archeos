@@ -32,7 +32,7 @@ class ccOverlayDialog : public QDialog
 public:
 
 	//! Default constructor
-	ccOverlayDialog(QWidget* parent = 0);
+	explicit ccOverlayDialog(QWidget* parent = 0);
 
 	//! Destructor
 	virtual ~ccOverlayDialog();
@@ -61,6 +61,9 @@ public:
 	/** When an overridden key is pressed, the shortcutTriggered(int) signal is emitted.
 	**/
 	void addOverridenShortcut(Qt::Key key);
+
+	//! Returns whether the tool is currently started or not
+	bool started() const { return m_processing; }
 
 signals:
 

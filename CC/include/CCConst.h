@@ -25,12 +25,6 @@
 #include <limits>
 #include <math.h>
 
-//Qt
-#include <qglobal.h>
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
-	#define CC_QT5
-#endif
-
 //! Pi
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -76,10 +70,10 @@ const ScalarType NAN_VALUE = std::numeric_limits<ScalarType>::quiet_NaN();
 // Point visibility states
 // By default visibility is expressed relatively to the sensor point of view.
 // Warning: 'visible' value must always be the lowest!
-const uchar POINT_VISIBLE						=	 0;				/**< Point visibility state: visible **/
-const uchar POINT_HIDDEN						=	 1;				/**< Point visibility state: hidden (e.g. behind other points) **/
-const uchar POINT_OUT_OF_RANGE					=	 2;				/**< Point visibility state: out of range **/
-const uchar POINT_OUT_OF_FOV					=	 4;				/**< Point visibility state: out of field of view **/
+const unsigned char POINT_VISIBLE				=	 0;				/**< Point visibility state: visible **/
+const unsigned char POINT_HIDDEN				=	 1;				/**< Point visibility state: hidden (e.g. behind other points) **/
+const unsigned char POINT_OUT_OF_RANGE			=	 2;				/**< Point visibility state: out of range **/
+const unsigned char POINT_OUT_OF_FOV			=	 4;				/**< Point visibility state: out of field of view **/
 
 //! Chamfer distances types
 enum CC_CHAMFER_DISTANCE_TYPE { CHAMFER_111		=	0,				/**< Chamfer distance <1-1-1> **/
@@ -89,8 +83,8 @@ enum CC_CHAMFER_DISTANCE_TYPE { CHAMFER_111		=	0,				/**< Chamfer distance <1-1-
 //! Types of local models (no model, least square best fitting plan, Delaunay 2D1/2 triangulation, height function)
 enum CC_LOCAL_MODEL_TYPES {NO_MODEL				=	0,				/**< No local model **/
 							LS					=	1,				/**< Least Square best fitting plane **/
-							TRI					=	2,				/**< Delaunay triangulation (2.5D) **/
-							HF					=	3				/**< Quadratic 'height' function **/
+							TRI					=	2,				/**< 2.5D Delaunay triangulation **/
+							QUADRIC				=	3				/**< 2.5D quadric function **/
 };
 
 //! Min number of points to compute local models (see CC_LOCAL_MODEL_TYPES)

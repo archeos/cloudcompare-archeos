@@ -17,9 +17,6 @@
 
 #include "VTKFilter.h"
 
-//CCLib
-#include <ScalarField.h>
-
 //qCC_db
 #include <ccLog.h>
 #include <ccPointCloud.h>
@@ -50,7 +47,7 @@ bool VTKFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) con
 	return false;
 }
 
-CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity || filename.isEmpty())
 		return CC_FERR_BAD_ARGUMENT;
@@ -128,7 +125,7 @@ CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, QString filename)
 		mesh->placeIteratorAtBegining();
 		for (unsigned i=0; i<triCount; ++i)
 		{
-			const CCLib::TriangleSummitsIndexes* tsi = mesh->getNextTriangleIndexes(); //DGM: getNextTriangleIndexes is faster for mesh groups!
+			const CCLib::VerticesIndexes* tsi = mesh->getNextTriangleVertIndexes(); //DGM: getNextTriangleVertIndexes is faster for mesh groups!
 			outFile << "3 " << tsi->i1 << " " << tsi->i2  << " " << tsi->i3 << endl;
 		}
 	}
@@ -163,8 +160,8 @@ CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, QString filename)
 		outFile << "COLOR_SCALARS RGB 3" << endl;
 		for (unsigned i=0; i<ptsCount; ++i)
 		{
-			const colorType* C = vertices->getPointColor(i);
-			outFile << (float)C[0]/(float)MAX_COLOR_COMP << " " << (float)C[1]/(float)MAX_COLOR_COMP << " "  << (float)C[2]/(float)MAX_COLOR_COMP << endl;
+			const ColorCompType* C = vertices->getPointColor(i);
+			outFile << static_cast<float>(C[0])/ccColor::MAX << " " << static_cast<float>(C[1])/ccColor::MAX << " "  << static_cast<float>(C[2])/ccColor::MAX << endl;
 		}
 	}
 
@@ -173,15 +170,17 @@ CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, QString filename)
 	{
 		ccPointCloud* pointCloud = static_cast<ccPointCloud*>(vertices);
 		unsigned sfCount = pointCloud->getNumberOfScalarFields();
-		for (unsigned i=0;i<sfCount;++i)
+		for (unsigned i=0; i<sfCount; ++i)
 		{
-			CCLib::ScalarField* sf = pointCloud->getScalarField(i);
+			ccScalarField* sf = static_cast<ccScalarField*>(pointCloud->getScalarField(i));
 
 			outFile << "SCALARS " << QString(sf->getName()).replace(" ","_") << (sizeof(ScalarType)==4 ? " float" : " double") << " 1" << endl;
 			outFile << "LOOKUP_TABLE default" << endl;
 
-			for (unsigned j=0;j<ptsCount; ++j)
-				outFile << sf->getValue(j) << endl;
+			for (unsigned j=0; j<ptsCount; ++j)
+			{
+				outFile << sf->getGlobalShift() + sf->getValue(j) << endl;
+			}
 		}
 	}
 	else //virtual point cloud, we only have access to its currently displayed scalar field
@@ -191,7 +190,7 @@ CC_FILE_ERROR VTKFilter::saveToFile(ccHObject* entity, QString filename)
 			outFile << "SCALARS ScalarField" << (sizeof(ScalarType)==4 ? " float" : " double") << " 1" << endl;
 			outFile << "LOOKUP_TABLE default" << endl;
 
-			for (unsigned j=0;j<ptsCount; ++j)
+			for (unsigned j=0; j<ptsCount; ++j)
 				outFile << vertices->getPointDisplayedDistance(j) << endl;
 		}
 	}
@@ -438,7 +437,7 @@ CC_FILE_ERROR VTKFilter::loadFile(QString filename, ccHObject& container, LoadPa
 					{
 						indexes.resize(vertCount);
 					}
-					catch (std::bad_alloc)
+					catch (const std::bad_alloc&)
 					{
 						error = CC_FERR_NOT_ENOUGH_MEMORY;
 						break;
@@ -460,7 +459,7 @@ CC_FILE_ERROR VTKFilter::loadFile(QString filename, ccHObject& container, LoadPa
 				{
 					assert(vertCount > 2);
 					unsigned triCount = vertCount-2;
-					if (mesh->size() + triCount > mesh->maxSize())
+					if (mesh->size() + triCount > mesh->capacity())
 					{
 						if (!mesh->reserve(mesh->size()+triCount+256)) //take some advance to avoid too many allocations
 						{
@@ -485,9 +484,9 @@ CC_FILE_ERROR VTKFilter::loadFile(QString filename, ccHObject& container, LoadPa
 				}
 			}
 			
-			if (mesh->size() != 0 && mesh->size() < mesh->maxSize())
+			if (mesh->size() != 0)
 			{
-				mesh->resize(mesh->size());
+				mesh->shrinkToFit();
 			}
 		//end POLYGONS or TRIANGLE_STRIPS
 		}
@@ -564,7 +563,7 @@ CC_FILE_ERROR VTKFilter::loadFile(QString filename, ccHObject& container, LoadPa
 
 			//warning: multiple colors can be stored on a single line!
 			unsigned iCol = 0;
-			colorType rgb[3];
+			ColorCompType rgb[3];
 			unsigned coordIndex = 0;
 			while (iCol < lastDataSize)
 			{
@@ -574,7 +573,7 @@ CC_FILE_ERROR VTKFilter::loadFile(QString filename, ccHObject& container, LoadPa
 				for (int i=0; i<parts.size(); ++i)
 				{
 					bool ok;
-					rgb[coordIndex] = static_cast<colorType>(parts[i].toDouble(&ok) * MAX_COLOR_COMP);
+					rgb[coordIndex] = static_cast<ColorCompType>(parts[i].toDouble(&ok) * ccColor::MAX);
 					if (!ok)
 					{
 						ccLog::Warning("[VTK] Element #%1 of COLOR_SCALARS data is corrupted!",iCol);
@@ -825,7 +824,6 @@ CC_FILE_ERROR VTKFilter::loadFile(QString filename, ccHObject& container, LoadPa
 		mesh->setVisible(true);
 
 		mesh->addChild(vertices);
-		vertices->setVisible(false);
 		vertices->setEnabled(false);
 		vertices->setName("Vertices");
 		vertices->setLocked(true); //DGM: no need to lock it as it is only used by one mesh!

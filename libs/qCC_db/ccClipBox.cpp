@@ -20,13 +20,13 @@
 
 #include "ccClipBox.h"
 
-//qCC_db
-#include <ccGenericPointCloud.h>
-#include <ccCylinder.h>
-#include <ccCone.h>
-#include <ccSphere.h>
-#include <ccTorus.h>
-#include <ccHObjectCaster.h>
+//Local
+#include "ccGenericPointCloud.h"
+#include "ccCylinder.h"
+#include "ccCone.h"
+#include "ccSphere.h"
+#include "ccTorus.h"
+#include "ccHObjectCaster.h"
 
 //system
 #include <assert.h>
@@ -37,7 +37,7 @@ static QSharedPointer<ccCone> c_arrowHead(0);
 static QSharedPointer<ccSphere> c_centralSphere(0);
 static QSharedPointer<ccTorus> c_torus(0);
 
-static void DrawUnitArrow(int ID, const CCVector3& start, const CCVector3& direction, PointCoordinateType scale, const colorType* col, CC_DRAW_CONTEXT& context)
+void DrawUnitArrow(int ID, const CCVector3& start, const CCVector3& direction, PointCoordinateType scale, const ccColor::Rgb& col, CC_DRAW_CONTEXT& context)
 {
 	if (ID > 0)
 		glLoadName(ID);
@@ -84,9 +84,9 @@ static void DrawUnitArrow(int ID, const CCVector3& start, const CCVector3& direc
 	glPopMatrix();
 }
 
-static void DrawUnitTorus(int ID, const CCVector3& center, const CCVector3& direction, PointCoordinateType scale, const colorType* col, CC_DRAW_CONTEXT& context)
+static void DrawUnitTorus(int ID, const CCVector3& center, const CCVector3& direction, PointCoordinateType scale, const ccColor::Rgb& col, CC_DRAW_CONTEXT& context)
 {
-	if (ID>0)
+	if (ID > 0)
 		glLoadName(ID);
 	
 	glMatrixMode(GL_MODELVIEW);
@@ -126,9 +126,8 @@ static void DrawUnitTorus(int ID, const CCVector3& center, const CCVector3& dire
 	glPopMatrix();
 }
 
-/* 
-  // Unused function
-static void DrawUnitSphere(int ID, const CCVector3& center, PointCoordinateType radius, const colorType* col, CC_DRAW_CONTEXT& context)
+// Unused function
+/*static void DrawUnitSphere(int ID, const CCVector3& center, PointCoordinateType radius, const ccColor::Rgb& col, CC_DRAW_CONTEXT& context)
 {
 	if (ID > 0)
 		glLoadName(ID);
@@ -147,11 +146,11 @@ static void DrawUnitSphere(int ID, const CCVector3& center, PointCoordinateType 
 
 	glPopMatrix();
 }
-*/
+//*/
 
-static void DrawUnitCross(int ID, const CCVector3& center, PointCoordinateType scale, const colorType* col, CC_DRAW_CONTEXT& context)
+static void DrawUnitCross(int ID, const CCVector3& center, PointCoordinateType scale, const ccColor::Rgb& col, CC_DRAW_CONTEXT& context)
 {
-	if (ID>0)
+	if (ID > 0)
 		glLoadName(ID);
 	
 	scale /= 2;
@@ -185,7 +184,7 @@ void ccClipBox::reset()
 
 	if (m_associatedEntity)
 	{
-		m_box = m_associatedEntity->getBB();
+		m_box = m_associatedEntity->getOwnBB();
 	}
 
 	update();
@@ -194,36 +193,46 @@ void ccClipBox::reset()
 	emit boxModified(&m_box);
 }
 
-void ccClipBox::setAssociatedEntity(ccHObject* associatedEntity)
+bool ccClipBox::setAssociatedEntity(ccHObject* entity)
 {
 	//release previous one
-	if (m_associatedEntity && m_associatedEntity->isKindOf(CC_TYPES::POINT_CLOUD))
+	if (m_associatedEntity)
 	{
-		ccHObjectCaster::ToGenericPointCloud(m_associatedEntity)->unallocateVisibilityArray();
+		ccGenericPointCloud* points = ccHObjectCaster::ToGenericPointCloud(m_associatedEntity);
+		if (points)
+			points->unallocateVisibilityArray();
 	}
 	m_associatedEntity = 0;
 
 	//try to initialize new one
-	if (associatedEntity)
+	if (entity)
 	{
-		if (!associatedEntity->isKindOf(CC_TYPES::POINT_CLOUD))
+		if (!entity->isKindOf(CC_TYPES::POINT_CLOUD) && !entity->isKindOf(CC_TYPES::MESH))
 		{
-			ccLog::Error("Unhandled entity! Clipping box will be deactivated...");
+			ccLog::Warning("[Clipping box] Unhandled type of entity");
+			return false;
 		}
 		else
 		{
-			if (ccHObjectCaster::ToGenericPointCloud(associatedEntity)->resetVisibilityArray())
+			ccGenericPointCloud* points = ccHObjectCaster::ToGenericPointCloud(entity);
+			if (points)
 			{
-				m_associatedEntity = associatedEntity;
-			}
-			else
-			{
-				ccLog::Error("Not enough memory! Clipping box will be deactivated...");
+				if (points->resetVisibilityArray())
+				{
+					m_associatedEntity = entity;
+				}
+				else
+				{
+					ccLog::Warning("[Clipping box] Not enough memory");
+					return false;
+				}
 			}
 		}
 	}
 
 	reset();
+
+	return true;
 }
 
 void ccClipBox::setActiveComponent(int id)
@@ -434,7 +443,6 @@ bool ccClipBox::move3D(const CCVector3d& uInput)
 		CCVector3d RxU = R.cross(u);
 
 		//look for the most parallel dimension
-		int minDim = 0;
 		double maxDot = m_viewMatrix.getColumnAsVec3D(0).dot(RxU);
 		for (int i=1; i<3; ++i)
 		{
@@ -442,7 +450,6 @@ bool ccClipBox::move3D(const CCVector3d& uInput)
 			if (fabs(dot) > fabs(maxDot))
 			{
 				maxDot = dot;
-				minDim = i;
 			}
 		}
 
@@ -497,12 +504,12 @@ void ccClipBox::shift(const CCVector3& v)
 
 void ccClipBox::update(bool shrink/*=false*/)
 {
-	if (!m_associatedEntity || !m_associatedEntity->isKindOf(CC_TYPES::POINT_CLOUD))
+	ccGenericPointCloud* cloud = m_associatedEntity ? ccHObjectCaster::ToGenericPointCloud(m_associatedEntity) : 0;
+	if (!cloud)
 		return;
 
-	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(m_associatedEntity);
 	unsigned count = cloud->size();
-	if (count==0 || !cloud->isVisibilityTableInstantiated())
+	if (count == 0 || !cloud->isVisibilityTableInstantiated())
 	{
 		assert(false);
 		return;
@@ -512,12 +519,7 @@ void ccClipBox::update(bool shrink/*=false*/)
 
 	if (m_glTransEnabled)
 	{
-		ccGLMatrix transMat;
-		//CCVector3 C = m_box.getCenter();
-		//transMat.setTranslation(-C);
-		//transMat = m_glTrans.inverse() * transMat;
-		//transMat.setTranslation(CCVector3(transMat.getTranslation())+C);
-		transMat = m_glTrans.inverse();
+		ccGLMatrix transMat = m_glTrans.inverse();
 
 		for (unsigned i=0; i<count; ++i)
 		{
@@ -542,36 +544,37 @@ void ccClipBox::update(bool shrink/*=false*/)
 	}
 }
 
-ccBBox ccClipBox::getMyOwnBB()
-{
-	return m_box;
-}
-
-ccBBox ccClipBox::getDisplayBB()
+ccBBox ccClipBox::getOwnBB(bool withGLFeatures/*=false*/)
 {
 	ccBBox bbox = m_box;
 
-	PointCoordinateType scale = computeArrowsScale();
-	bbox.minCorner() -= CCVector3(scale,scale,scale);
-	bbox.maxCorner() += CCVector3(scale,scale,scale);
+	if (withGLFeatures)
+	{
+		PointCoordinateType scale = computeArrowsScale();
+		bbox.minCorner() -= CCVector3(scale,scale,scale);
+		bbox.maxCorner() += CCVector3(scale,scale,scale);
+	}
 
 	return bbox;
 }
 
 PointCoordinateType ccClipBox::computeArrowsScale() const
 {
-	PointCoordinateType scale = m_box.getDiagNorm()/(PointCoordinateType)10.0;
+	PointCoordinateType scale = m_box.getDiagNorm()/10;
 
 	if (m_associatedEntity)
-		scale = std::max<PointCoordinateType>(scale,m_associatedEntity->getMyOwnBB().getDiagNorm()/(PointCoordinateType)100.0);
+	{
+		scale = std::max<PointCoordinateType>(scale,m_associatedEntity->getOwnBB().getDiagNorm()/100);
+	}
 
 	return scale;
 }
 
-const colorType c_lightComp = MAX_COLOR_COMP/2;
-const colorType c_lightRed[3]	= {MAX_COLOR_COMP,c_lightComp,c_lightComp};
-const colorType c_lightGreen[3]	= {c_lightComp,MAX_COLOR_COMP,c_lightComp};
-const colorType c_lightBlue[3]	= {c_lightComp,c_lightComp,MAX_COLOR_COMP};
+const ColorCompType c_lightComp = ccColor::MAX/2;
+const ccColor::Rgb c_lightRed  (ccColor::MAX, c_lightComp , c_lightComp);
+const ccColor::Rgb c_lightGreen(c_lightComp,  ccColor::MAX, c_lightComp);
+const ccColor::Rgb c_lightBlue (c_lightComp,  c_lightComp , ccColor::MAX);
+
 void ccClipBox::drawMeOnly(CC_DRAW_CONTEXT& context)
 {
 	if (!MACRO_Draw3D(context))

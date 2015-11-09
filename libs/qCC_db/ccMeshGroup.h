@@ -41,9 +41,9 @@ public:
 	virtual ccGenericMesh* clone(ccGenericPointCloud* vertices = 0, ccMaterialSet* clonedMaterials = 0, NormsIndexesTableType* clonedNormsTable = 0, TextureCoordsContainer* cloneTexCoords = 0) { return 0; }
 	virtual void refreshBB() {};
 	virtual bool interpolateNormals(unsigned triIndex, const CCVector3& P, CCVector3& N) { return false; }
-	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, colorType rgb[]) { return false; }
-	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture) { return false; }
-	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, colorType rgb[], bool returnColorIfNoTexture) { return false; }
+	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, ccColor::Rgb& rgb) { return false; }
+	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, ccColor::Rgb& rgb, bool interpolateColorIfNoTexture) { return false; }
+	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, ccColor::Rgb& rgb, bool returnColorIfNoTexture) { return false; }
 	virtual bool hasMaterials() const { return false; }
 	const ccMaterialSet* getMaterialSet() const { return 0; }
 	virtual int getTriangleMtlIndex(unsigned triangleIndex) const { return -1; }
@@ -56,7 +56,7 @@ public:
 	virtual void getTriangleNormalIndexes(unsigned triangleIndex, int& i1, int& i2, int& i3) const { i1 = i2 = i3 = -1; }
 	virtual bool getTriangleNormals(unsigned triangleIndex, CCVector3& Na, CCVector3& Nb, CCVector3& Nc) const { return false; }
 	virtual NormsIndexesTableType* getTriNormsTable() const { return 0; }
-	virtual unsigned maxSize() const { return 0; }
+	virtual unsigned capacity() const { return 0; }
 
 	//inherited methods (ccHObject)
 	virtual bool isSerializable() const { return true; }
@@ -65,14 +65,14 @@ public:
 
 	//inherited methods (GenericIndexedMesh)
 	virtual unsigned size() const { return 0; }
-	virtual void forEach(genericTriangleAction& anAction) {}
+	virtual void forEach(genericTriangleAction& action) {}
 	virtual void placeIteratorAtBegining() {}
 	virtual CCLib::GenericTriangle* _getNextTriangle() { return 0; }
 	virtual CCLib::GenericTriangle* _getTriangle(unsigned index) { return 0; }
-	virtual CCLib::TriangleSummitsIndexes* getNextTriangleIndexes() { return 0; }
-	virtual CCLib::TriangleSummitsIndexes* getTriangleIndexes(unsigned triangleIndex) { return 0; }
-	virtual void getTriangleSummits(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C) {}
-	virtual void getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[]) {};
+	virtual CCLib::VerticesIndexes* getNextTriangleVertIndexes() { return 0; }
+	virtual CCLib::VerticesIndexes* getTriangleVertIndexes(unsigned triangleIndex) { return 0; }
+	virtual void getTriangleVertices(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C) {}
+	virtual void getBoundingBox(CCVector3& bbMin, CCVector3& bbMax) {};
 
 protected:
 

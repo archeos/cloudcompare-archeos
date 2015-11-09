@@ -81,6 +81,11 @@ ExtractSIFT::ExtractSIFT()
 									"Extract SIFT keypoints for clouds with intensity/RGB or any scalar field",
 									":/toolbar/PclUtils/icons/sift.png"))
 	, m_dialog(0)
+	, m_nr_octaves(0)
+	, m_min_scale(0)
+	, m_nr_scales_per_octave(0)
+	, m_min_contrast(0)
+	, m_use_min_contrast(false)
 {
 }
 
@@ -149,7 +154,7 @@ void ExtractSIFT::getParametersFromDialog()
 	m_nr_scales_per_octave = m_dialog->scalesPerOctave->value();
 	m_use_min_contrast = m_dialog->useMinContrast->checkState();
 	m_min_contrast = m_use_min_contrast ? static_cast<float>(m_dialog->minContrast->value()) : 0;
-	m_field_to_use = m_dialog->intensityCombo->currentText().toStdString();
+	m_field_to_use = m_dialog->intensityCombo->currentText();
 
 	if (m_field_to_use == "rgb")
 	{
@@ -160,9 +165,9 @@ void ExtractSIFT::getParametersFromDialog()
 		m_mode = SCALAR_FIELD;
 	}
 
-	QString fieldname(m_field_to_use.c_str());
+	QString fieldname(m_field_to_use);
 	fieldname.replace(' ', '_');
-	m_field_to_use_no_space = fieldname.toStdString();
+	m_field_to_use_no_space = qPrintable(fieldname); //DGM: warning, toStdString doesn't preserve "local" characters
 }
 
 int ExtractSIFT::checkParameters()
@@ -207,14 +212,14 @@ int ExtractSIFT::compute()
 			req_fields.push_back("rgb");
 			break;
 		case SCALAR_FIELD:
-			req_fields.push_back(m_field_to_use);
+			req_fields.push_back(qPrintable(m_field_to_use)); //DGM: warning, toStdString doesn't preserve "local" characters
 			break;
 		default:
 			assert(false);
 			break;
 		}
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return -1;
@@ -272,6 +277,10 @@ int ExtractSIFT::compute()
 
 	out_cloud_cc->setName(name.str().c_str());
 	out_cloud_cc->setDisplay(cloud->getDisplay());
+	//copy global shift & scale
+	out_cloud_cc->setGlobalScale(cloud->getGlobalScale());
+	out_cloud_cc->setGlobalShift(cloud->getGlobalShift());
+
 	if (cloud->getParent())
 		cloud->getParent()->addChild(out_cloud_cc);
 

@@ -55,13 +55,36 @@ struct edge
 	edge* nextEdge;
 };
 
+void ReleaseEdgeList(edge**& theEdges, unsigned numberOfVertexes, CCLib::NormalizedProgress* nprogress = 0)
+{
+	for (unsigned i=0; i<numberOfVertexes; ++i)
+	{
+		if (theEdges[i])
+		{
+			edge* e = theEdges[i]->nextEdge;
+			while (e)
+			{
+				edge* nextE = e->nextEdge;
+				delete e;
+				e = nextE;
+			}
+			delete theEdges[i];
+		}
+
+		if (nprogress)
+			nprogress->oneStep();
+	}
+	delete[] theEdges;
+	theEdges = 0;
+}
+
 struct faceIndexes
 {
 	int faceIndex;
 	faceIndexes* nextFace;
 };
 
-CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity || filename.isEmpty())
 		return CC_FERR_BAD_ARGUMENT;
@@ -216,27 +239,27 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 	edge** theEdges = new edge*[numberOfVertexes];
 	memset(theEdges,0,sizeof(edge*)*numberOfVertexes);
 	unsigned ind[3],a,b;
-	int currentEdgeIndex=0,lastEdgeIndexPushed=-1;
+	int lastEdgeIndexPushed = -1;
 
-	int hard=0; //Maya edges cab be "hard" or "soft" ...
+	int hard = 0; //Maya edges cab be "hard" or "soft" ...
 	{
+
 		theMesh->placeIteratorAtBegining();
-		for (unsigned i=0;i<numberOfTriangles;++i)
+		for (unsigned i=0; i<numberOfTriangles; ++i)
 		{
-			const CCLib::TriangleSummitsIndexes* tsi = theMesh->getNextTriangleIndexes(); //DGM: getNextTriangleIndexes is faster for mesh groups!
+			const CCLib::VerticesIndexes* tsi = theMesh->getNextTriangleVertIndexes(); //DGM: getNextTriangleVertIndexes is faster for mesh groups!
 
 			ind[0] = tsi->i1;
 			ind[1] = tsi->i2;
 			ind[2] = tsi->i3;
 
-			uchar k,l;
-			for (k=0; k<3; ++k)
+			for (unsigned char k=0; k<3; ++k)
 			{
-				l=(k<2 ? k+1 : 0);
+				unsigned char l = (k<2 ? k+1 : 0);
 				a = (ind[k]<ind[l] ? ind[k] : ind[l]);
 				b = (a==ind[k] ? ind[l] : ind[k]);
 
-				currentEdgeIndex = -1;
+				int currentEdgeIndex = -1;
 				edge* e = theEdges[a];
 				while (e)
 				{
@@ -263,10 +286,14 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 					if (theEdges[a])
 					{
 						e = theEdges[a];
-						while (e->nextEdge) e=e->nextEdge;
+						while (e->nextEdge)
+							e = e->nextEdge;
 						e->nextEdge = newEdge;
 					}
-					else theEdges[a]=newEdge;
+					else
+					{
+						theEdges[a] = newEdge;
+					}
 
 					/*if (fprintf(fp,"\n \t\t%i %i %i",a,b,hard) < 0)
 						return CC_FERR_WRITING;*/
@@ -279,10 +306,11 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 
 	//now write the edges
 	{
-		unsigned numberOfEdges = unsigned(lastEdgeIndexPushed+1);
+		unsigned numberOfEdges = static_cast<unsigned>(lastEdgeIndexPushed+1);
 		if (fprintf(fp,"\tsetAttr -s %u \".ed[0:%u]\"",numberOfEdges,numberOfEdges-1) < 0)
 		{
 			fclose(fp);
+			ReleaseEdgeList(theEdges, numberOfVertexes);
 			return CC_FERR_WRITING;
 		}
 
@@ -296,6 +324,7 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 				if (fprintf(fp,"\n \t\t%u %u %i",i,e->theOtherPoint,hard) < 0)
 				{
 					fclose(fp);
+					ReleaseEdgeList(theEdges, numberOfVertexes);
 					return CC_FERR_WRITING;
 				}
 				e = e->nextEdge;
@@ -308,6 +337,7 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 	if (fprintf(fp,";\n") < 0)
 	{
 		fclose(fp);
+		ReleaseEdgeList(theEdges, numberOfVertexes);
 		return CC_FERR_WRITING;
 	}
 
@@ -315,6 +345,7 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 	if (fprintf(fp,"\tsetAttr -s %u \".fc[0:%u]\" -type \"polyFaces\"\n",numberOfTriangles,numberOfTriangles-1) < 0)
 	{
 		fclose(fp);
+		ReleaseEdgeList(theEdges, numberOfVertexes);
 		return CC_FERR_WRITING;
 	}
 
@@ -328,14 +359,14 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 				return CC_FERR_WRITING;
 			}
 
-			CCLib::TriangleSummitsIndexes* tsi = theMesh->getNextTriangleIndexes(); //DGM: getNextTriangleIndexes is faster for mesh groups!
+			CCLib::VerticesIndexes* tsi = theMesh->getNextTriangleVertIndexes(); //DGM: getNextTriangleVertIndexes is faster for mesh groups!
 			ind[0] = tsi->i1;
 			ind[1] = tsi->i2;
 			ind[2] = tsi->i3;
 
-			for (uchar k=0; k<3; ++k)
+			for (unsigned char k=0; k<3; ++k)
 			{
-				uchar l = (k<2 ? k+1 : 0);
+				unsigned char l = (k<2 ? k+1 : 0);
 				a = (ind[k]<ind[l] ? ind[k] : ind[l]);
 				b = (a==ind[k] ? ind[l] : ind[k]);
 
@@ -346,6 +377,7 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 				if (fprintf(fp," %i",((e->positif && a==ind[k]) || (!e->positif && a==ind[l]) ? e->edgeIndex : -(e->edgeIndex+1))) < 0)
 				{
 					fclose(fp);
+					ReleaseEdgeList(theEdges, numberOfVertexes);
 					return CC_FERR_WRITING;
 				}
 			}
@@ -353,6 +385,7 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 			if (fprintf(fp,(i+1==numberOfTriangles ? ";\n" : "\n")) < 0)
 			{
 				fclose(fp);
+				ReleaseEdgeList(theEdges, numberOfVertexes);
 				return CC_FERR_WRITING;
 			}
 
@@ -362,22 +395,7 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 
 	//free memory
 	{
-		for (unsigned i=0; i<numberOfVertexes; ++i)
-		{
-			if (theEdges[i])
-			{
-				edge* e = theEdges[i]->nextEdge;
-				while (e)
-				{
-					edge* nextE = e->nextEdge;
-					delete e;
-					e = nextE;
-				}
-				delete theEdges[i];
-			}
-
-			nprogress.oneStep();
-		}
+		ReleaseEdgeList(theEdges, numberOfVertexes, &nprogress);
 	}
 
 	//bonus track
@@ -411,12 +429,12 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 		{
 			for (unsigned i=0; i<numberOfTriangles; ++i)
 			{
-				CCLib::TriangleSummitsIndexes* tsi = theMesh->getNextTriangleIndexes(); //DGM: getNextTriangleIndexes is faster for mesh groups!
+				CCLib::VerticesIndexes* tsi = theMesh->getNextTriangleVertIndexes(); //DGM: getNextTriangleVertIndexes is faster for mesh groups!
 				ind[0] = tsi->i1;
 				ind[1] = tsi->i2;
 				ind[2] = tsi->i3;
 
-				for (uchar j=0; j<3; ++j)
+				for (unsigned char j=0; j<3; ++j)
 				{
 					if (!theFacesIndexes[ind[j]])
 					{
@@ -442,14 +460,12 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 
 		//for each vertex
 		{
-			float col[3];
-			float coef = 1.0f/static_cast<float>(MAX_COLOR_COMP);
 			for (unsigned i=0; i<numberOfVertexes; ++i)
 			{
-				const colorType* c = pc->getPointColor(i);
-				col[0] = static_cast<float>(c[0]) * coef;
-				col[1] = static_cast<float>(c[1]) * coef;
-				col[2] = static_cast<float>(c[2]) * coef;
+				const ColorCompType* c = pc->getPointColor(i);
+				ccColor::Rgbf col(	static_cast<float>(c[0])/ccColor::MAX,
+									static_cast<float>(c[1])/ccColor::MAX,
+									static_cast<float>(c[2])/ccColor::MAX);
 
 				//on compte le nombre de faces
 				int nf = 0;
@@ -463,18 +479,23 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 				if (nf > 0)
 				{
 					if (fprintf(fp,"\tsetAttr -s %i \".vclr[%u].vfcl\";\n",nf,i) < 0)
-						{fclose(fp);return CC_FERR_WRITING;}
+					{
+						fclose(fp);
+						delete[] theFacesIndexes; //DGM: we are missing soem faces here, aren't we?
+						return CC_FERR_WRITING;
+					}
 
-					faceIndexes *oldf, *f = theFacesIndexes[i];
+					faceIndexes* f = theFacesIndexes[i];
 					while (f)
 					{
-						if (fprintf(fp,"\tsetAttr \".vclr[%u].vfcl[%i].frgb\" -type \"float3\" %f %f %f;\n",i,f->faceIndex,col[0],col[1],col[2]) < 0)
+						if (fprintf(fp,"\tsetAttr \".vclr[%u].vfcl[%i].frgb\" -type \"float3\" %f %f %f;\n",i,f->faceIndex,col.r,col.g,col.b) < 0)
 						{
 							fclose(fp);
+							delete[] theFacesIndexes; //DGM: we are missing soem faces here, aren't we?
 							return CC_FERR_WRITING;
 						}
 
-						oldf = f;
+						faceIndexes* oldf = f;
 						f = f->nextFace;
 						delete oldf;
 					}
@@ -485,6 +506,7 @@ CC_FILE_ERROR MAFilter::saveToFile(ccHObject* entity, QString filename)
 			}
 		}
 		delete[] theFacesIndexes;
+		theFacesIndexes = 0;
 
 		if (fprintf(fp,"\tsetAttr \".cn\" -type \"string\" \"colorSet%i\";\n",currentMesh+1) < 0)
 		{

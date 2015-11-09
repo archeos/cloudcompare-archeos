@@ -26,6 +26,7 @@
 //system
 #include <string.h>
 #include <assert.h>
+#include <math.h> //expm1
 
 using namespace CCLib;
 
@@ -38,7 +39,7 @@ FastMarchingForPropagation::FastMarchingForPropagation()
 
 int FastMarchingForPropagation::init(	GenericCloud* theCloud,
 										DgmOctree* theOctree,
-										uchar level,
+										unsigned char level,
 										bool constantAcceleration/*=false*/)
 {
 	assert(theCloud && theOctree);
@@ -62,11 +63,11 @@ int FastMarchingForPropagation::init(	GenericCloud* theCloud,
 		}
 		
 		//on transforme le code de cellule en position
-		int cellPos[3];
+		Tuple3i cellPos;
 		theOctree->getCellPos(cellCodes.back(),level,cellPos,true);
 
 		//on renseigne la grille
-		unsigned gridPos = FM_pos2index(cellPos);
+		unsigned gridPos = pos2index(cellPos);
 
 		PropagationCell* aCell = new PropagationCell;
 		aCell->cellCode = cellCodes.back();
@@ -116,12 +117,11 @@ int FastMarchingForPropagation::step()
 		assert(minTCell->T >= lastT);
 
 		//add its neighbors to the TRIAL set
-		unsigned nIndex;
 		Cell* nCell;
 		for (unsigned i=0;i<m_numberOfNeighbours;++i)
 		{
 			//get neighbor cell
-			nIndex = minTCellIndex + m_neighboursIndexShift[i];
+			unsigned nIndex = minTCellIndex + m_neighboursIndexShift[i];
 			nCell = m_theGrid[nIndex];
 			if (nCell)
 			{
@@ -218,11 +218,27 @@ bool FastMarchingForPropagation::setPropagationTimingsAsDistances()
 	return true;
 }
 
+#ifdef _MSC_VER
+//Visual 2012 (and previous versions) don't know expm1
+#if _MSC_VER <= 1700
+
+// Compute exp(x) - 1 without loss of precision for small values of x.
+template <typename T> T expm1(T x)
+{
+	if (fabs(x) < 1e-5)
+		return x + (x*x)/2;
+	else
+		return exp(x) - 1;
+}
+
+#endif
+#endif
+
 float FastMarchingForPropagation::computeTCoefApprox(Cell* currentCell, Cell* neighbourCell) const
 {
 	PropagationCell* cCell = static_cast<PropagationCell*>(currentCell);
 	PropagationCell* nCell = static_cast<PropagationCell*>(neighbourCell);
-	return exp(m_jumpCoef * (cCell->f-nCell->f)) -1.0f;
+	return expm1(m_jumpCoef * (cCell->f-nCell->f));
 }
 
 void FastMarchingForPropagation::findPeaks()
@@ -244,16 +260,16 @@ void FastMarchingForPropagation::findPeaks()
 				pos[0] = static_cast<int>(i);
 
 				unsigned index =  static_cast<unsigned>(pos[0]+1)
-								+ static_cast<unsigned>(pos[1]+1) * m_decY
-								+ static_cast<unsigned>(pos[2]+1) * m_decZ;
+								+ static_cast<unsigned>(pos[1]+1) * m_rowSize
+								+ static_cast<unsigned>(pos[2]+1) * m_sliceSize;
 				
 				PropagationCell* theCell = reinterpret_cast<PropagationCell*>(m_theGrid[index]);
 
-				bool isMin = true;
-				bool isMax = true;
-
 				if (theCell)
 				{
+					bool isMin = true;
+					bool isMax = true;
+
 					//theCell->state = ACTIVE_CELL;
 
 					for (unsigned n=0; n<CC_FM_MAX_NUMBER_OF_NEIGHBOURS; ++n)

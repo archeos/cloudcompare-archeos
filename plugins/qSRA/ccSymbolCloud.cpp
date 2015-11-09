@@ -41,7 +41,7 @@ bool ccSymbolCloud::reserveLabelArray(unsigned count)
 	{
 		m_labels.reserve(count);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return false;
@@ -55,7 +55,7 @@ void ccSymbolCloud::addLabel(QString label)
 	{
 		m_labels.push_back(label);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		//TODO?
@@ -68,7 +68,7 @@ bool ccSymbolCloud::resizeLabelArray(unsigned count)
 	{
 		m_labels.resize(count);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return false;
@@ -156,10 +156,10 @@ void ccSymbolCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 		//glOrtho(-halfW,halfW,-halfH,halfH,-maxS,maxS);
 
 		//default color
-		const unsigned char* color = context.pointsDefaultCol;
+		const unsigned char* color = context.pointsDefaultCol.rgb;
 		if (isColorOverriden())
 		{
-			color = m_tempColor;
+			color = m_tempColor.rgb;
 			glParams.showColors = false;
 		}
 		

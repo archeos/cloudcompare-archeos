@@ -150,7 +150,7 @@ CCLib::ReferenceCloud* qHPR::removeHiddenPoints(CCLib::GenericIndexedCloudPersis
 		{
 			pointBelongsToCvxHull.resize(nbPoints+1,false);
 		}
-		catch(std::bad_alloc)
+		catch (const std::bad_alloc&)
 		{
 			//not enough memory!
 			delete[] pt_array;
@@ -281,7 +281,11 @@ void qHPR::doAction()
 		QElapsedTimer eTimer;
 		eTimer.start();
 
-		CCLib::ReferenceCloud* theCellCenters = CCLib::CloudSamplingTools::subsampleCloudWithOctreeAtLevel(cloud,(uchar)octreeLevel,CCLib::CloudSamplingTools::NEAREST_POINT_TO_CELL_CENTER,&progressCb,theOctree);
+		CCLib::ReferenceCloud* theCellCenters = CCLib::CloudSamplingTools::subsampleCloudWithOctreeAtLevel(	cloud,
+																											static_cast<unsigned char>(octreeLevel),
+																											CCLib::CloudSamplingTools::NEAREST_POINT_TO_CELL_CENTER,
+																											&progressCb,
+																											theOctree);
 		if (!theCellCenters)
 		{
 			m_app->dispToConsole("Error while simplifying point cloud with octree!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
@@ -319,7 +323,7 @@ void qHPR::doAction()
 		unsigned visibleCellsCount = visibleCells->size();
 
 		CCLib::DgmOctree::cellIndexesContainer cellIndexes;
-		if (!theOctree->getCellIndexes((uchar)octreeLevel,cellIndexes))
+		if (!theOctree->getCellIndexes(static_cast<unsigned char>(octreeLevel), cellIndexes))
 		{
 			m_app->dispToConsole("Couldn't fetch the list of octree cell indexes! (Not enough memory?)",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 			delete visibleCells;
@@ -333,7 +337,7 @@ void qHPR::doAction()
 
 			//points in this cell...
 			CCLib::ReferenceCloud Yk(theOctree->associatedCloud());
-			theOctree->getPointsInCellByCellIndex(&Yk,cellIndexes[index],static_cast<uchar>(octreeLevel));
+			theOctree->getPointsInCellByCellIndex(&Yk,cellIndexes[index],static_cast<unsigned char>(octreeLevel));
 			//...are all visible
 			/*unsigned count = Yk.size();
 			for (unsigned j=0;j<count;++j)
@@ -366,7 +370,7 @@ void qHPR::doAction()
 				newCloud->setDisplay(newCloud->getDisplay());
 				newCloud->setVisible(true);
 				newCloud->setName(cloud->getName()+QString(".visible_points"));
-				cloud->setVisible(false);
+				cloud->setEnabled(false);
 
 				//add associated viewport object
 				cc2DViewportObject* viewportObject = new cc2DViewportObject(QString("Viewport"));

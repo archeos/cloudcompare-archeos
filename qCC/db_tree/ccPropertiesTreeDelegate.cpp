@@ -155,6 +155,7 @@ QSize ccPropertiesTreeDelegate::sizeHint(const QStyleOptionViewItem& option, con
 			return QSize(250,200);
 		case OBJECT_SENSOR_MATRIX_EDITOR:
 		case OBJECT_HISTORY_MATRIX_EDITOR:
+		case OBJECT_GLTRANS_MATRIX_EDITOR:
 			return QSize(250,120);
 		}
 	}
@@ -279,6 +280,13 @@ void ccPropertiesTreeDelegate::fillModel(ccHObject* hObject)
 	{
 		addSeparator("Transformation history");
 		appendWideRow(PERSISTENT_EDITOR(OBJECT_HISTORY_MATRIX_EDITOR));
+
+		if (m_currentObject->isGLTransEnabled())
+		{
+			addSeparator("Display transformation");
+			appendWideRow(PERSISTENT_EDITOR(OBJECT_GLTRANS_MATRIX_EDITOR));
+		}
+
 		fillWithMetaData(m_currentObject);
 	}
 	
@@ -401,13 +409,13 @@ void ccPropertiesTreeDelegate::fillWithHObject(ccHObject* _obj)
 		if (_obj->getSelectionBehavior() == ccHObject::SELECTION_FIT_BBOX)
 		{
 			ccGLMatrix trans;
-			box = _obj->getFitBB(trans);
+			box = _obj->getOwnFitBB(trans);
 			box += trans.getTranslationAsVec3D();
 			fitBBox = true;
 		}
 		else
 		{
-			box = _obj->getBB();
+			box = _obj->getBB_recursive();
 		}
 
 		if (box.isValid())
@@ -432,6 +440,18 @@ void ccPropertiesTreeDelegate::fillWithHObject(ccHObject* _obj)
 		appendRow( ITEM("Current Display"), PERSISTENT_EDITOR(OBJECT_CURRENT_DISPLAY), true );
 }
 
+void ccPropertiesTreeDelegate::fillWithShifted(ccShiftedObject* _obj)
+{
+	assert(_obj && m_model);
+
+	//global shift & scale
+	const CCVector3d& shift = _obj->getGlobalShift();
+	appendRow( ITEM("Global shift"), ITEM(QString("(%1;%2;%3)").arg(shift.x,0,'f',2).arg(shift.y,0,'f',2).arg(shift.z,0,'f',2)) );
+
+	double scale = _obj->getGlobalScale();
+	appendRow( ITEM("Global scale"), ITEM(QString("%1").arg(scale,0,'f',6)) );
+}
+
 void ccPropertiesTreeDelegate::fillWithPointCloud(ccGenericPointCloud* _obj)
 {
 	assert(_obj && m_model);
@@ -441,19 +461,35 @@ void ccPropertiesTreeDelegate::fillWithPointCloud(ccGenericPointCloud* _obj)
 	//number of points
 	appendRow( ITEM("Points"), ITEM(QLocale(QLocale::English).toString(_obj->size())) );
 
-	//shift
-	{
-		const CCVector3d& shift = _obj->getGlobalShift();
-		appendRow( ITEM("Global shift"), ITEM(QString("(%1;%2;%3)").arg(shift.x,0,'f',2).arg(shift.y,0,'f',2).arg(shift.z,0,'f',2)) );
-
-		double scale = _obj->getGlobalScale();
-		appendRow( ITEM("Global scale"), ITEM(QString("%1").arg(scale,0,'f',6)) );
-	}
+	//global shift & scale
+	fillWithShifted(_obj);
 
 	//custom point size
 	appendRow( ITEM("Point size"), PERSISTENT_EDITOR(OBJECT_CLOUD_POINT_SIZE), true );
 
+	//scalar field
 	fillSFWithPointCloud(_obj);
+
+	//scan grid structure(s)
+	if (_obj->isA(CC_TYPES::POINT_CLOUD))
+	{
+		ccPointCloud* cloud = static_cast<ccPointCloud*>(_obj);
+		size_t gridCount = cloud->gridCount();
+		if (gridCount != 0)
+		{
+			if (gridCount != 1)
+				addSeparator("Scan grids");
+			else
+				addSeparator("Scan grid");
+
+			for (size_t i=0; i<gridCount; ++i)
+			{
+				//grid size + valid point count
+				ccPointCloud::Grid::Shared grid = cloud->grid(i);
+				appendRow( ITEM(QString("Scan #%1").arg(i+1)), ITEM(QString("%1 x %2 (%3 points)").arg(grid->w).arg(grid->h).arg(QLocale(QLocale::English).toString(grid->validCount))) );
+			}
+		}
+	}
 }
 
 void ccPropertiesTreeDelegate::fillSFWithPointCloud(ccGenericPointCloud* _obj)
@@ -582,7 +618,7 @@ void ccPropertiesTreeDelegate::fillWithMesh(ccGenericMesh* _obj)
 	appendRow( ITEM("Wireframe"), CHECKABLE_ITEM(_obj->isShownAsWire(),OBJECT_MESH_WIRE) );
 
 	//stippling (ccMesh only)
-	if (_obj->isA(CC_TYPES::MESH))
+	//if (_obj->isA(CC_TYPES::MESH)) //DGM: can't remember why?
 		appendRow( ITEM("Stippling"), CHECKABLE_ITEM(static_cast<ccMesh*>(_obj)->stipplingEnabled(),OBJECT_MESH_STIPPLING) );
 
 	//we also integrate vertices SF into mesh properties
@@ -605,6 +641,9 @@ void ccPropertiesTreeDelegate::fillWithPolyline(ccPolyline* _obj)
 
 	//custom line width
 	appendRow( ITEM("Line width"), PERSISTENT_EDITOR(OBJECT_POLYLINE_WIDTH), true );
+
+	//global shift & scale
+	fillWithShifted(_obj);
 }
 
 void ccPropertiesTreeDelegate::fillWithPointOctree(ccOctree* _obj)
@@ -623,14 +662,14 @@ void ccPropertiesTreeDelegate::fillWithPointOctree(ccOctree* _obj)
 
 	//current display level
 	int level = _obj->getDisplayedLevel();
-	assert(level>0 && level<=ccOctree::MAX_OCTREE_LEVEL);
+	assert(level > 0 && level <= ccOctree::MAX_OCTREE_LEVEL);
 
 	//cell size
-	PointCoordinateType cellSize = _obj->getCellSize(static_cast<uchar>(level));
+	PointCoordinateType cellSize = _obj->getCellSize(static_cast<unsigned char>(level));
 	appendRow( ITEM("Cell size"), ITEM(QString::number(cellSize)) );
 
 	//cell count
-	unsigned cellCount = _obj->getCellNumber(static_cast<uchar>(level));
+	unsigned cellCount = _obj->getCellNumber(static_cast<unsigned char>(level));
 	appendRow( ITEM("Cell count"), ITEM(QLocale(QLocale::English).toString(cellCount)) );
 
 	//total volume of filled cells
@@ -782,10 +821,10 @@ void ccPropertiesTreeDelegate::fillWithGBLSensor(ccGBLSensor* _obj)
 {
 	assert(_obj && m_model);
 
-	addSeparator("GBL Sensor");
+	addSeparator("TLS/GBL Sensor");
 
 	//Uncertainty
-	appendRow( ITEM("Uncertainty"), ITEM(QString::number(_obj->getUncertainty())) );
+	appendRow( ITEM("Uncertainty"), PERSISTENT_EDITOR(OBJECT_SENSOR_UNCERTAINTY), true );
 
 	//angles
 	addSeparator("Angular viewport (degrees)");
@@ -900,6 +939,7 @@ bool ccPropertiesTreeDelegate::isWideEditor(int itemData) const
 	case OBJECT_CLOUD_SF_EDITOR:
 	case OBJECT_SENSOR_MATRIX_EDITOR:
 	case OBJECT_HISTORY_MATRIX_EDITOR:
+	case OBJECT_GLTRANS_MATRIX_EDITOR:
 	case TREE_VIEW_HEADER:
 		return true;
 	default:
@@ -1004,6 +1044,7 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 		}
 		break;
 	case OBJECT_HISTORY_MATRIX_EDITOR:
+	case OBJECT_GLTRANS_MATRIX_EDITOR:
 	case OBJECT_SENSOR_MATRIX_EDITOR:
 		{
 			MatrixDisplayDlg* mdd = new MatrixDisplayDlg(parent);
@@ -1174,6 +1215,15 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 			outputWidget = button;
 		}
 		break;
+	case OBJECT_SENSOR_UNCERTAINTY:
+		{
+			QLineEdit* lineEdit = new QLineEdit(parent);
+			lineEdit->setValidator(new QDoubleValidator(1.0e-8,1.0,8,lineEdit));
+			connect(lineEdit, SIGNAL(editingFinished()), this, SLOT(sensorUncertaintyChanged()));
+
+			outputWidget = lineEdit;
+		}
+		break;
 	case OBJECT_SENSOR_DISPLAY_SCALE:
 		{
 			QDoubleSpinBox *spinBox = new QDoubleSpinBox(parent);
@@ -1220,9 +1270,15 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 			if (m_currentObject)
 			{
 				if (m_currentObject->hasColors())
+				{
 					comboBox->addItem(s_rgbColor);
+					comboBox->setItemIcon(comboBox->count()-1, QIcon(QString::fromUtf8(":/CC/images/typeRgbCcolor.png")));
+				}
 				if (m_currentObject->hasScalarFields())
+				{
 					comboBox->addItem(s_sfColor);
+					comboBox->setItemIcon(comboBox->count()-1, QIcon(QString::fromUtf8(":/CC/images/typeSF.png")));
+				}
 				connect(comboBox, SIGNAL(currentIndexChanged(const QString)), this, SLOT(colorSourceChanged(const QString&)));
 			}
 
@@ -1393,6 +1449,15 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
 			mdd->fillDialogWith(m_currentObject->getGLTransformationHistory());
 			break;
 		}
+	case OBJECT_GLTRANS_MATRIX_EDITOR:
+		{
+			MatrixDisplayDlg *mdd = qobject_cast<MatrixDisplayDlg*>(editor);
+			if (!mdd)
+				return;
+
+			mdd->fillDialogWith(m_currentObject->getGLTransformation());
+			break;
+		}
 	case OBJECT_SENSOR_MATRIX_EDITOR:
 		{
 			MatrixDisplayDlg* mdd = qobject_cast<MatrixDisplayDlg*>(editor);
@@ -1487,6 +1552,17 @@ void ccPropertiesTreeDelegate::setEditorData(QWidget *editor, const QModelIndex 
 			ccSensor* sensor = ccHObjectCaster::ToSensor(m_currentObject);
 			assert(sensor);
 			SetDoubleSpinBoxValue(editor,sensor ? sensor->getActiveIndex() : 0.0);
+			break;
+		}
+	case OBJECT_SENSOR_UNCERTAINTY:
+		{
+			QLineEdit *lineEdit = qobject_cast<QLineEdit*>(editor);
+			if (!lineEdit)
+				return;
+
+			ccGBLSensor* sensor = ccHObjectCaster::ToGBLSensor(m_currentObject);
+			assert(sensor);
+			lineEdit->setText(QString::number(sensor ? sensor->getUncertainty() : 0, 'g', 8));
 			break;
 		}
 	case OBJECT_SENSOR_DISPLAY_SCALE:
@@ -1677,7 +1753,9 @@ void ccPropertiesTreeDelegate::updateItem(QStandardItem * item)
 	}
 
 	if (redraw)
+	{
 		updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::updateDisplay()
@@ -1722,10 +1800,10 @@ void ccPropertiesTreeDelegate::scalarFieldChanged(int pos)
 		return;
 
 	ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
-	if (cloud && cloud->getCurrentDisplayedScalarFieldIndex()+1 != pos)
+	if (cloud && cloud->getCurrentDisplayedScalarFieldIndex() + 1 != pos)
 	{
 		cloud->setCurrentDisplayedScalarField(pos-1);
-		cloud->showSF(pos>0);
+		cloud->showSF(pos > 0);
 
 		updateDisplay();
 		//we must also reset the properties display!
@@ -1743,7 +1821,10 @@ void ccPropertiesTreeDelegate::spawnColorRampEditor()
 	ccScalarField* sf = (cloud ? static_cast<ccScalarField*>(cloud->getCurrentDisplayedScalarField()) : 0);
 	if (sf)
 	{
-		ccColorScaleEditorDialog* editorDialog = new ccColorScaleEditorDialog(ccColorScalesManager::GetUniqueInstance(),sf->getColorScale(),static_cast<ccGLWindow*>(cloud->getDisplay()));
+		ccColorScaleEditorDialog* editorDialog = new ccColorScaleEditorDialog(	ccColorScalesManager::GetUniqueInstance(),
+																				MainWindow::TheInstance(),
+																				sf->getColorScale(),
+																				static_cast<ccGLWindow*>(cloud->getDisplay()));
 		editorDialog->setAssociatedScalarField(sf);
 		if (editorDialog->exec())
 		{
@@ -1803,7 +1884,7 @@ void ccPropertiesTreeDelegate::colorRampStepsChanged(int pos)
 	ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_currentObject);
 	assert(cloud);
 	ccScalarField* sf = static_cast<ccScalarField*>(cloud->getCurrentDisplayedScalarField());
-	if (sf)
+	if (sf && sf->getColorRampSteps() != pos)
 	{
 		sf->setColorRampSteps(pos);
 		updateDisplay();
@@ -1818,8 +1899,11 @@ void ccPropertiesTreeDelegate::octreeDisplayTypeChanged(int pos)
 	ccOctree* octree = ccHObjectCaster::ToOctree(m_currentObject);
 	assert(octree);
 
-	octree->setDisplayType(OCTREE_DISPLAY_TYPE_ENUMS[pos]);
-	updateDisplay();
+	if (octree->getDisplayType() != OCTREE_DISPLAY_TYPE_ENUMS[pos])
+	{
+		octree->setDisplayType(OCTREE_DISPLAY_TYPE_ENUMS[pos]);
+		updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::octreeDisplayedLevelChanged(int val)
@@ -1847,16 +1931,16 @@ void ccPropertiesTreeDelegate::primitivePrecisionChanged(int val)
 	ccGenericPrimitive* primitive = ccHObjectCaster::ToPrimitive(m_currentObject);
 	assert(primitive);
 
-	if (static_cast<unsigned int>(val) == primitive->getDrawingPrecision())
-		return;
+	if (primitive->getDrawingPrecision() != static_cast<unsigned int>(val))
+	{
+		bool wasVisible = primitive->isVisible();
+		primitive->setDrawingPrecision(val);
+		primitive->setVisible(wasVisible);
 
-	bool wasVisible = primitive->isVisible();
-	primitive->setDrawingPrecision(val);
-	primitive->setVisible(wasVisible);
-
-	updateDisplay();
-	//we must also reset the properties display!
-	updateModel();
+		updateDisplay();
+		//we must also reset the properties display!
+		updateModel();
+	}
 }
 
 void ccPropertiesTreeDelegate::sphereRadiusChanged(double val)
@@ -1868,16 +1952,16 @@ void ccPropertiesTreeDelegate::sphereRadiusChanged(double val)
 	assert(sphere);
 
 	PointCoordinateType radius = static_cast<PointCoordinateType>(val);
-	if (radius == sphere->getRadius())
-		return;
+	if (sphere->getRadius() != radius)
+	{
+		bool wasVisible = sphere->isVisible();
+		sphere->setRadius(radius);
+		sphere->setVisible(wasVisible);
 
-	bool wasVisible = sphere->isVisible();
-	sphere->setRadius(radius);
-	sphere->setVisible(wasVisible);
-
-	updateDisplay();
-	//we must also reset the properties display!
-	updateModel();
+		updateDisplay();
+		//we must also reset the properties display!
+		updateModel();
+	}
 }
 
 void ccPropertiesTreeDelegate::coneHeightChanged(double val)
@@ -1889,16 +1973,16 @@ void ccPropertiesTreeDelegate::coneHeightChanged(double val)
 	assert(cone);
 
 	PointCoordinateType height = static_cast<PointCoordinateType>(val);
-	if (height == cone->getHeight())
-		return;
+	if (cone->getHeight() != height)
+	{
+		bool wasVisible = cone->isVisible();
+		cone->setHeight(height);
+		cone->setVisible(wasVisible);
 
-	bool wasVisible = cone->isVisible();
-	cone->setHeight(height);
-	cone->setVisible(wasVisible);
-
-	updateDisplay();
-	//we must also reset the properties display!
-	updateModel();
+		updateDisplay();
+		//we must also reset the properties display!
+		updateModel();
+	}
 }
 
 void ccPropertiesTreeDelegate::coneBottomRadiusChanged(double val)
@@ -1910,16 +1994,16 @@ void ccPropertiesTreeDelegate::coneBottomRadiusChanged(double val)
 	assert(cone);
 
 	PointCoordinateType radius = static_cast<PointCoordinateType>(val);
-	if (radius == cone->getBottomRadius())
-		return;
+	if (cone->getBottomRadius() != radius)
+	{
+		bool wasVisible = cone->isVisible();
+		cone->setBottomRadius(radius); //works for both the bottom and top radii for cylinders!
+		cone->setVisible(wasVisible);
 
-	bool wasVisible = cone->isVisible();
-	cone->setBottomRadius(radius); //works for both the bottom and top radii for cylinders!
-	cone->setVisible(wasVisible);
-
-	updateDisplay();
-	//we must also reset the properties display!
-	updateModel();
+		updateDisplay();
+		//we must also reset the properties display!
+		updateModel();
+	}
 }
 
 void ccPropertiesTreeDelegate::coneTopRadiusChanged(double val)
@@ -1931,26 +2015,28 @@ void ccPropertiesTreeDelegate::coneTopRadiusChanged(double val)
 	assert(cone);
 
 	PointCoordinateType radius = static_cast<PointCoordinateType>(val);
-	if (radius == cone->getTopRadius())
-		return;
+	if (cone->getTopRadius() != radius)
+	{
+		bool wasVisible = cone->isVisible();
+		cone->setTopRadius(radius); //works for both the bottom and top radii for cylinders!
+		cone->setVisible(wasVisible);
 
-	bool wasVisible = cone->isVisible();
-	cone->setTopRadius(radius); //works for both the bottom and top radii for cylinders!
-	cone->setVisible(wasVisible);
-
-	updateDisplay();
-	//we must also reset the properties display!
-	updateModel();
+		updateDisplay();
+		//we must also reset the properties display!
+		updateModel();
+	}
 }
 
 void ccPropertiesTreeDelegate::imageAlphaChanged(int val)
 {
 	ccImage* image = ccHObjectCaster::ToImage(m_currentObject);
-	if (!image)
-		return;
-	image->setAlpha(static_cast<float>(val)/255.0f);
 
-	updateDisplay();
+	float alpha = val/255.0f;
+	if (image && image->getAlpha() != alpha)
+	{
+		image->setAlpha(alpha);
+		updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::applyImageViewport()
@@ -1997,6 +2083,28 @@ void ccPropertiesTreeDelegate::applyLabelViewport()
 	win->redraw();
 }
 
+void ccPropertiesTreeDelegate::sensorUncertaintyChanged()
+{
+	if (!m_currentObject)
+		return;
+
+	QLineEdit* lineEdit = qobject_cast<QLineEdit*>(QObject::sender());
+	if (!lineEdit)
+	{
+		assert(false);
+		return;
+	}
+
+	ccGBLSensor* sensor = ccHObjectCaster::ToGBLSensor(m_currentObject);
+	assert(sensor);
+
+	PointCoordinateType uncertainty = static_cast<PointCoordinateType>(lineEdit->text().toDouble());
+	if (sensor && sensor->getUncertainty() != uncertainty)
+	{
+		sensor->setUncertainty(uncertainty);
+	}
+}
+
 void ccPropertiesTreeDelegate::sensorScaleChanged(double val)
 {
 	if (!m_currentObject)
@@ -2005,8 +2113,11 @@ void ccPropertiesTreeDelegate::sensorScaleChanged(double val)
 	ccSensor* sensor = ccHObjectCaster::ToSensor(m_currentObject);
 	assert(sensor);
 
-	sensor->setGraphicScale(static_cast<PointCoordinateType>(val));
-	updateDisplay();
+	if (sensor && sensor->getGraphicScale() != static_cast<PointCoordinateType>(val))
+	{
+		sensor->setGraphicScale(static_cast<PointCoordinateType>(val));
+		updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::sensorIndexChanged(double val)
@@ -2017,8 +2128,11 @@ void ccPropertiesTreeDelegate::sensorIndexChanged(double val)
 	ccSensor* sensor = ccHObjectCaster::ToSensor(m_currentObject);
 	assert(sensor);
 
-	sensor->setActiveIndex(val);
-	updateDisplay();
+	if (sensor && sensor->getActiveIndex() != val)
+	{
+		sensor->setActiveIndex(val);
+		updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::trihedronsScaleChanged(double val)
@@ -2029,9 +2143,12 @@ void ccPropertiesTreeDelegate::trihedronsScaleChanged(double val)
 	ccIndexedTransformationBuffer* buffer = ccHObjectCaster::ToTransBuffer(m_currentObject);
 	assert(buffer);
 
-	buffer->setTriherdonsDisplayScale(static_cast<float>(val));
-	if (buffer->triherdonsShown())
-		updateDisplay();
+	if (buffer && buffer->triherdonsDisplayScale() != static_cast<float>(val))
+	{
+		buffer->setTriherdonsDisplayScale(static_cast<float>(val));
+		if (buffer->triherdonsShown())
+			updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::cloudPointSizeChanged(int size)
@@ -2042,8 +2159,11 @@ void ccPropertiesTreeDelegate::cloudPointSizeChanged(int size)
 	ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(m_currentObject);
 	assert(cloud);
 
-	cloud->setPointSize(size);
-	updateDisplay();
+	if (cloud && cloud->getPointSize() != size)
+	{
+		cloud->setPointSize(size);
+		updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::polyineWidthChanged(int size)
@@ -2051,13 +2171,14 @@ void ccPropertiesTreeDelegate::polyineWidthChanged(int size)
 	if (!m_currentObject)
 		return;
 
-	ccPolyline* pline = ccHObjectCaster::ToPolyline(m_currentObject);
-	assert(pline);
+	ccPolyline* polyline = ccHObjectCaster::ToPolyline(m_currentObject);
+	assert(polyline);
 
-	if (pline)
-		pline->setWidth(static_cast<PointCoordinateType>(size));
-
-	updateDisplay();
+	if (polyline && polyline->getWidth() != static_cast<PointCoordinateType>(size))
+	{
+		polyline->setWidth(static_cast<PointCoordinateType>(size));
+		updateDisplay();
+	}
 }
 
 void ccPropertiesTreeDelegate::objectDisplayChanged(const QString& newDisplayTitle)
@@ -2087,7 +2208,7 @@ void ccPropertiesTreeDelegate::objectDisplayChanged(const QString& newDisplayTit
 			win->zoomGlobal();
 		}
 
-		MainWindow::RefreshAllGLWindow();
+		MainWindow::RefreshAllGLWindow(false);
 	}
 }
 
@@ -2096,18 +2217,23 @@ void ccPropertiesTreeDelegate::colorSourceChanged(const QString & source)
 	if (!m_currentObject)
 		return;
 
+	bool appearanceChanged = false;
+
 	if (source == c_noneString)
 	{
+		appearanceChanged = m_currentObject->colorsShown() || m_currentObject->sfShown();
 		m_currentObject->showColors(false);
 		m_currentObject->showSF(false);
 	}
 	else if (source == s_rgbColor)
 	{
+		appearanceChanged = !m_currentObject->colorsShown() || m_currentObject->sfShown();
 		m_currentObject->showColors(true);
 		m_currentObject->showSF(false);
 	}
 	else if (source == s_sfColor)
 	{
+		appearanceChanged = m_currentObject->colorsShown() || !m_currentObject->sfShown();
 		m_currentObject->showColors(false);
 		m_currentObject->showSF(true);
 	}
@@ -2116,5 +2242,8 @@ void ccPropertiesTreeDelegate::colorSourceChanged(const QString & source)
 		assert(false);
 	}
 
-	updateDisplay();
+	if (appearanceChanged)
+	{
+		updateDisplay();
+	}
 }
