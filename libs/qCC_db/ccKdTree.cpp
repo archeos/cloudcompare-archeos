@@ -34,14 +34,9 @@ ccKdTree::ccKdTree(ccGenericPointCloud* aCloud)
 	lockVisibility(false);
 }
 
-ccBBox ccKdTree::getMyOwnBB()
+ccBBox ccKdTree::getOwnBB(bool withGLFeatures/*=false*/)
 {
-	return (m_associatedGenericCloud ? m_associatedGenericCloud->getMyOwnBB() : ccBBox());
-}
-
-ccBBox ccKdTree::getDisplayBB()
-{
-	return (m_associatedGenericCloud ? m_associatedGenericCloud->getDisplayBB() : ccBBox());
+	return (m_associatedGenericCloud ? m_associatedGenericCloud->getOwnBB(withGLFeatures) : ccBBox());
 }
 
 //! Recursive visitor for ccKdTree::multiplyBoundingBox
@@ -156,7 +151,7 @@ void ccKdTree::drawMeOnly(CC_DRAW_CONTEXT& context)
 			glPushName(getUniqueIDForDisplay());
 		}
 
-		DrawMeOnlyVisitor(m_associatedGenericCloud->getBB()).visit(m_root);
+		DrawMeOnlyVisitor(m_associatedGenericCloud->getOwnBB()).visit(m_root);
 
 		if (pushName)
 			glPopName();
@@ -221,13 +216,12 @@ bool ccKdTree::convertCellIndexToRandomColor()
 	//for each cell
 	for (size_t i=0; i<leaves.size(); ++i)
 	{
-		colorType col[3];
-		ccColor::Generator::Random(col);
+		ccColor::Rgb col = ccColor::Generator::Random();
 		CCLib::ReferenceCloud* subset = leaves[i]->points;
 		if (subset)
 		{
 			for (unsigned j=0; j<subset->size(); ++j)
-				pc->setPointColor(subset->getPointGlobalIndex(j),col);
+				pc->setPointColor(subset->getPointGlobalIndex(j),col.rgb);
 		}
 	}
 
@@ -282,8 +276,8 @@ ccBBox ccKdTree::getCellBBox(BaseNode* node) const
 	ccBBox& box = helper.m_UpdatedBox;
 	{
 		CCVector3 bbMin,bbMax;
-		m_associatedCloud->getBoundingBox(bbMin.u,bbMax.u);
-		for (int i=0;i<3;++i)
+		m_associatedCloud->getBoundingBox(bbMin,bbMax);
+		for (int i=0; i<3; ++i)
 		{
 			if (box.minCorner().u[i] != box.minCorner().u[i]) //still NaN value?
 				box.minCorner().u[i] = bbMin.u[i]; //we use the main bb limit
@@ -382,12 +376,12 @@ bool ccKdTree::getNeighborLeaves(ccKdTree::BaseNode* cell, ccKdTree::LeafSet& ne
 
 	try
 	{
-		GetNeighborLeavesVisitor visitor(cell, neighbors, cellBox, getMyOwnBB());
+		GetNeighborLeavesVisitor visitor(cell, neighbors, cellBox, getOwnBB(false));
 		if (userDataFilter)
 			visitor.setUserDataFilter(*userDataFilter);
 		visitor.visit(m_root);
 	}
-	catch (std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		return false;
 	}

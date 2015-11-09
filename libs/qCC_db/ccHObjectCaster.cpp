@@ -19,6 +19,7 @@
 
 //types
 #include "ccHObject.h"
+#include "ccShiftedObject.h"
 #include "ccGenericPointCloud.h"
 #include "ccPointCloud.h"
 #include "ccGenericMesh.h"
@@ -97,6 +98,22 @@ ccGenericPointCloud* ccHObjectCaster::ToGenericPointCloud(ccHObject* obj, bool* 
 	return 0;
 }
 
+ccShiftedObject* ccHObjectCaster::ToShifted(ccHObject* obj, bool* lockedVertices /*= 0*/)
+{
+	ccGenericPointCloud* cloud = ToGenericPointCloud(obj, lockedVertices /*= 0*/);
+	if (cloud)
+		return cloud;
+
+	if (obj && obj->isKindOf(CC_TYPES::POLY_LINE))
+	{
+		if (lockedVertices)
+			*lockedVertices = false;
+		return static_cast<ccPolyline*>(obj);
+	}
+
+	return 0;
+}
+
 ccGenericMesh* ccHObjectCaster::ToGenericMesh(ccHObject* obj)
 {
 	return (obj && obj->isKindOf(CC_TYPES::MESH) ? static_cast<ccGenericMesh*>(obj) : 0);
@@ -139,7 +156,7 @@ ccCylinder*	ccHObjectCaster::ToCylinder(ccHObject* obj)
 
 ccCone*		ccHObjectCaster::ToCone(ccHObject* obj)
 {
-	return obj && obj->isA(CC_TYPES::CONE) ? static_cast<ccCone*>(obj) : 0;
+	return obj && obj->isKindOf(CC_TYPES::CONE) ? static_cast<ccCone*>(obj) : 0;
 }
 
 ccPlane*	ccHObjectCaster::ToPlane(ccHObject* obj)

@@ -47,11 +47,13 @@ public:
 		\param updateZoom updates active GL display zoom to fit the whole scene, including this new entity (addToDisplay must be true)
 		\param autoExpandDBTree whether DB tree should automatically be expanded
 		\param checkDimensions whether to check entity's dimensions (and potentially asking the user to shift/rescale it) or not
+		\param autoRedraw whether to redraw the 3D view automatically or not (warning: if 'updateZoom' is true, the 3D view will always be redrawn)
 	**/
 	virtual void addToDB(	ccHObject* obj,
 							bool updateZoom = false,
 							bool autoExpandDBTree = true,
-							bool checkDimensions = false ) = 0;
+							bool checkDimensions = false,
+							bool autoRedraw = true ) = 0;
 
 	//! Removes an entity from main db tree
 	/** Object is automatically detached from its parent.
@@ -88,12 +90,15 @@ public:
 	virtual ccHObject* dbRootObject() = 0;
 
 	//! Forces redraw of all GL windows
-	virtual void redrawAll() = 0;
+	/** \param only2D whether to redraw everything (false) or only the 2D layer (true)
+	**/
+	virtual void redrawAll(bool only2D = false) = 0;
 
 	//! Redraws all GL windows that have the 'refresh' flag on
 	/** See ccGLWindow::toBeRefreshed and ccDrawableObject::prepareDisplayForRefresh.
+		\param only2D whether to redraw everything (false) or only the 2D layer (true)
 	**/
-	virtual void refreshAll() = 0;
+	virtual void refreshAll(bool only2D = false) = 0;
 
 	//! Enables all GL windows
 	virtual void enableAll() = 0;
@@ -116,6 +121,13 @@ public:
 
 	//! Returns color scale manager (unique instance)
 	virtual ccColorScalesManager* getColorScalesManager() = 0;
+
+	//! Spawns an histogram dialog
+	virtual void spawnHistogramDialog(	const std::vector<unsigned>& histoValues,
+										double minVal,
+										double maxVal,
+										QString title,
+										QString xAxisLabel ) = 0;
 
 	//other usefull methods
 	virtual void setFrontView() = 0;

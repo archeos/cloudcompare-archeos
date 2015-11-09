@@ -31,6 +31,7 @@
 
 //System
 #include <assert.h>
+#include <set>
 
 //! Color scale element: one value + one color
 class ccColorScaleElement
@@ -151,6 +152,19 @@ public:
 	//! Sets whether scale is locked or not
 	inline void setLocked(bool state) { m_locked = state; }
 
+	//! Type of a list of custom labels
+	typedef std::set<double> LabelSet;
+
+	//! Returns the list of custom labels (if any)
+	inline LabelSet& customLabels() { return m_customLabels; }
+	//! Returns the list of custom labels (if any - const version)
+	inline const LabelSet& customLabels() const { return m_customLabels; }
+
+	//! Sets the list of custom labels (only if the scale is absolute)
+	/** \warning May throw std::bad_alloc exception)
+	**/
+	inline void setCustomLabels(const LabelSet& labels) { m_customLabels = labels; }
+
 	//! Returns the current number of steps
 	/** A valid scale should always have at least 2 steps!
 	**/
@@ -200,7 +214,7 @@ public:
 		\param outOfRangeColor default color to return if relativePos if out of [0;1]
 		\return corresponding color
 	**/
-	inline const colorType* getColorByValue(double value, const colorType* outOfRangeColor = 0) const
+	inline const ColorCompType* getColorByValue(double value, const ColorCompType* outOfRangeColor = 0) const
 	{
 		assert(m_updated && !m_relative);
 		double relativePos = getRelativePosition(value);
@@ -212,11 +226,11 @@ public:
 		\param outOfRangeColor default color to return if relativePos if out of [0;1]
 		\return corresponding color
 	**/
-	inline const colorType* getColorByRelativePos(double relativePos, const colorType* outOfRangeColor = 0) const
+	inline const ColorCompType* getColorByRelativePos(double relativePos, const ColorCompType* outOfRangeColor = 0) const
 	{
 		assert(m_updated);
 		if (relativePos >= 0.0 && relativePos <= 1.0)
-			return getColorByIndex((unsigned)(relativePos * (double)(MAX_STEPS-1)));
+			return getColorByIndex(static_cast<unsigned>(relativePos * (MAX_STEPS-1))).rgba;
 		else
 			return outOfRangeColor;
 	}
@@ -227,14 +241,14 @@ public:
 		\param outOfRangeColor default color to return if relativePos if out of [0;1]
 		\return corresponding color
 	**/
-	inline const colorType* getColorByRelativePos(double relativePos, unsigned steps, const colorType* outOfRangeColor = 0) const
+	inline const ColorCompType* getColorByRelativePos(double relativePos, unsigned steps, const ColorCompType* outOfRangeColor = 0) const
 	{
 		assert(m_updated);
 		if (relativePos >= 0.0 && relativePos <= 1.0)
 		{
 			//quantized (16 bits) version --> much faster than floor!
-			unsigned index = ((unsigned)((relativePos*(double)steps)*65535.0))>>16;
-			return getColorByIndex((index*(MAX_STEPS-1)) / (steps-1));
+			unsigned index = (static_cast<unsigned>((relativePos*steps)*65535.0))>>16;
+			return getColorByIndex((index*(MAX_STEPS-1)) / steps).rgba;
 		}
 		else
 		{
@@ -246,11 +260,16 @@ public:
 	/** \param index color index in m_rgbaScale array (must be below MAX_STEPS)
 		\return corresponding color
 	**/
-	inline const colorType* getColorByIndex(unsigned index) const
+	inline const ccColor::Rgba& getColorByIndex(unsigned index) const
 	{
 		assert(m_updated && index < MAX_STEPS);
-		return m_rgbaScale + (index << 2);
+		return m_rgbaScale[index];
 	}
+
+	//! Saves this color scale as an XML file
+	bool saveAsXML(QString filename) const;
+	//! Loads a color scale from an XML file
+	static Shared LoadFromXML(QString filename);
 
 	//inherited from ccSerializableObject
 	virtual bool isSerializable() const { return true; }
@@ -272,7 +291,7 @@ protected:
 	QList<ccColorScaleElement> m_steps;
 
 	//! Internal representation (RGBA)
-	colorType m_rgbaScale[MAX_STEPS*4];
+	ccColor::Rgba m_rgbaScale[MAX_STEPS];
 
 	//! Internal representation validity
 	bool m_updated;
@@ -295,6 +314,8 @@ protected:
 	**/
 	double m_absoluteRange;
 
+	//! List of custom labels
+	LabelSet m_customLabels;
 };
 
 #endif //CC_COLOR_SCALE_HEADER

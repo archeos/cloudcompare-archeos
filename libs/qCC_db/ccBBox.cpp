@@ -68,12 +68,19 @@ PointCoordinateType ccBBox::getMaxBoxDim() const
 	return std::max(V.x,std::max(V.y,V.z));
 }
 
-void ccBBox::draw(const colorType col[]) const
+double ccBBox::computeVolume() const
+{
+	CCVector3 V = getDiagVec();
+
+	return static_cast<double>(V.x) * static_cast<double>(V.y) * static_cast<double>(V.z);
+}
+
+void ccBBox::draw(const ccColor::Rgb& col) const
 {
 	if (!m_valid)
 		return;
 
-	glColor3ubv(col);
+	ccGL::Color3v(col.rgb);
 
 	glBegin(GL_LINE_LOOP);
 	ccGL::Vertex3v(m_bbMin.u);
@@ -109,33 +116,25 @@ ccBBox ccBBox::operator + (const ccBBox& aBBox) const
 		return *this;
 
 	ccBBox tempBox;
-
-	tempBox.m_bbMin.x = std::min(m_bbMin.x, aBBox.m_bbMin.x);
-	tempBox.m_bbMin.y = std::min(m_bbMin.y, aBBox.m_bbMin.y);
-	tempBox.m_bbMin.z = std::min(m_bbMin.z, aBBox.m_bbMin.z);
-	tempBox.m_bbMax.x = std::max(m_bbMax.x, aBBox.m_bbMax.x);
-	tempBox.m_bbMax.y = std::max(m_bbMax.y, aBBox.m_bbMax.y);
-	tempBox.m_bbMax.z = std::max(m_bbMax.z, aBBox.m_bbMax.z);
-
-	tempBox.setValidity(true);
+	{
+		tempBox.m_bbMin.x = std::min(m_bbMin.x, aBBox.m_bbMin.x);
+		tempBox.m_bbMin.y = std::min(m_bbMin.y, aBBox.m_bbMin.y);
+		tempBox.m_bbMin.z = std::min(m_bbMin.z, aBBox.m_bbMin.z);
+		tempBox.m_bbMax.x = std::max(m_bbMax.x, aBBox.m_bbMax.x);
+		tempBox.m_bbMax.y = std::max(m_bbMax.y, aBBox.m_bbMax.y);
+		tempBox.m_bbMax.z = std::max(m_bbMax.z, aBBox.m_bbMax.z);
+		tempBox.setValidity(true);
+	}
 
 	return tempBox;
 }
 
 const ccBBox& ccBBox::operator += (const ccBBox& aBBox)
 {
-	if (!m_valid)
+	if (aBBox.isValid())
 	{
-		*this = aBBox;
-	}
-	else if (aBBox.isValid())
-	{
-		m_bbMin.x = std::min(m_bbMin.x, aBBox.m_bbMin.x);
-		m_bbMin.y = std::min(m_bbMin.y, aBBox.m_bbMin.y);
-		m_bbMin.z = std::min(m_bbMin.z, aBBox.m_bbMin.z);
-		m_bbMax.x = std::max(m_bbMax.x, aBBox.m_bbMax.x);
-		m_bbMax.y = std::max(m_bbMax.y, aBBox.m_bbMax.y);
-		m_bbMax.z = std::max(m_bbMax.z, aBBox.m_bbMax.z);
+		add(aBBox.minCorner());
+		add(aBBox.maxCorner());
 	}
 
 	return *this;
@@ -268,13 +267,13 @@ PointCoordinateType ccBBox::minDistTo(const ccBBox& box) const
 	{
 		CCVector3 d(0,0,0);
 
-		for (unsigned char dim=0; dim<3; ++dim)
+		for (unsigned char dim=0; dim < 3; ++dim)
 		{
 			//if the boxes overlap in one dimension, the distance is zero (in this dimension)
 			if (box.m_bbMin.u[dim] > m_bbMax.u[dim])
 				d.u[dim] = box.m_bbMin.u[dim] - m_bbMax.u[dim];
 			else if (box.m_bbMax.u[dim] < m_bbMin.u[dim])
-				d.x = m_bbMin.u[dim] - box.m_bbMax.u[dim];
+				d.u[dim] = m_bbMin.u[dim] - box.m_bbMax.u[dim];
 		}
 
 		return d.norm();

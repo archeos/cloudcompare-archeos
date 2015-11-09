@@ -25,14 +25,19 @@
 #include "ccSensor.h"
 
 ccGenericPointCloud::ccGenericPointCloud(QString name)
-	: ccHObject(name)
+	: ccShiftedObject(name)
 	, m_pointsVisibility(0)
-	, m_globalShift(0,0,0)
-	, m_globalScale(1.0)
 	, m_pointSize(0)
 {
 	setVisible(true);
 	lockVisibility(false);
+}
+
+ccGenericPointCloud::ccGenericPointCloud(const ccGenericPointCloud& cloud)
+	: ccShiftedObject(cloud)
+	, m_pointsVisibility(cloud.m_pointsVisibility)
+	, m_pointSize(cloud.m_pointSize)
+{
 }
 
 ccGenericPointCloud::~ccGenericPointCloud()
@@ -69,8 +74,10 @@ bool ccGenericPointCloud::resetVisibilityArray()
 void ccGenericPointCloud::unallocateVisibilityArray()
 {
 	if (m_pointsVisibility)
+	{
 		m_pointsVisibility->release();
-	m_pointsVisibility=0;
+		m_pointsVisibility = 0;
+	}
 }
 
 bool ccGenericPointCloud::isVisibilityTableInstantiated() const
@@ -78,20 +85,22 @@ bool ccGenericPointCloud::isVisibilityTableInstantiated() const
 	return m_pointsVisibility && m_pointsVisibility->isAllocated();
 }
 
-uchar ccGenericPointCloud::testVisibility(const CCVector3& P) const
+unsigned char ccGenericPointCloud::testVisibility(const CCVector3& P) const
 {
-	uchar bestVisibility = 255; //impossible value
+	unsigned char bestVisibility = 255; //impossible value
 
 	for (ccHObject::Container::const_iterator it = m_children.begin(); it != m_children.end(); ++it)
 	{
 		if ((*it)->isKindOf(CC_TYPES::SENSOR))
 		{
-			uchar visibility = static_cast<ccSensor*>(*it)->checkVisibility(P);
+			unsigned char visibility = static_cast<ccSensor*>(*it)->checkVisibility(P);
 
 			if (visibility == POINT_VISIBLE)
+			{
 				return POINT_VISIBLE; //shortcut
+			}
 
-			bestVisibility = std::min<uchar>(visibility,bestVisibility);
+			bestVisibility = std::min<unsigned char>(visibility,bestVisibility);
 		}
 	}
 
@@ -107,7 +116,7 @@ void ccGenericPointCloud::deleteOctree()
 
 ccOctree* ccGenericPointCloud::getOctree()
 {
-	for (unsigned i=0; i<m_children.size(); ++i)
+	for (size_t i=0; i<m_children.size(); ++i)
 	{
 		if (m_children[i]->isA(CC_TYPES::POINT_OCTREE))
 			return static_cast<ccOctree*>(m_children[i]);
@@ -116,7 +125,7 @@ ccOctree* ccGenericPointCloud::getOctree()
 	return NULL;
 }
 
-ccOctree* ccGenericPointCloud::computeOctree(CCLib::GenericProgressCallback* progressCb)
+ccOctree* ccGenericPointCloud::computeOctree(CCLib::GenericProgressCallback* progressCb, bool autoAddChild/*=true*/)
 {
 	deleteOctree();
 	ccOctree* octree = new ccOctree(this);
@@ -125,7 +134,10 @@ ccOctree* ccGenericPointCloud::computeOctree(CCLib::GenericProgressCallback* pro
 		octree->setDisplay(getDisplay());
 		octree->setVisible(true);
 		octree->setEnabled(false);
-		addChild(octree);
+		if (autoAddChild)
+		{
+			addChild(octree);
+		}
 	}
 	else
 	{
@@ -134,11 +146,6 @@ ccOctree* ccGenericPointCloud::computeOctree(CCLib::GenericProgressCallback* pro
 	}
 
 	return octree;
-}
-
-ccGenericPointCloud::VisibilityTableType* ccGenericPointCloud::getTheVisibilityArray()
-{
-	return m_pointsVisibility;
 }
 
 CCLib::ReferenceCloud* ccGenericPointCloud::getTheVisiblePoints() const
@@ -184,40 +191,17 @@ CCLib::ReferenceCloud* ccGenericPointCloud::getTheVisiblePoints() const
 	return rc;
 }
 
-ccBBox ccGenericPointCloud::getMyOwnBB()
+ccBBox ccGenericPointCloud::getOwnBB(bool withGLFeatures/*=false*/)
 {
 	ccBBox box;
 
 	if (size())
 	{
-		getBoundingBox(box.minCorner().u, box.maxCorner().u);
+		getBoundingBox(box.minCorner(), box.maxCorner());
 		box.setValidity(true);
 	}
+	
 	return box;
-}
-
-void ccGenericPointCloud::setGlobalShift(const CCVector3d& shift)
-{
-	m_globalShift = shift;
-}
-
-void ccGenericPointCloud::setGlobalShift(double x, double y, double z)
-{
-	m_globalShift.x = x;
-	m_globalShift.y = y;
-	m_globalShift.z = z;
-}
-
-void ccGenericPointCloud::setGlobalScale(double scale)
-{
-	if (scale == 0)
-	{
-		ccLog::Warning("[ccGenericPointCloud::setGlobalScale] Can't handle a global scale equal to zero!");
-		m_globalScale = 1.0;
-		return;
-	}
-
-	m_globalScale = scale;
 }
 
 bool ccGenericPointCloud::toFile_MeOnly(QFile& out) const
@@ -225,14 +209,9 @@ bool ccGenericPointCloud::toFile_MeOnly(QFile& out) const
 	if (!ccHObject::toFile_MeOnly(out))
 		return false;
 
-	//'global shift' (dataVersion>=20)
-	if (out.write((const char*)m_globalShift.u,sizeof(double)*3) < 0)
-		return WriteError();
-
-	//'global scale' (dataVersion>=32)
-	if (out.write((const char*)&m_globalScale,sizeof(double)) < 0)
-		return WriteError();
-
+	//'global shift & scale' (dataVersion>=39)
+	saveShiftInfoToFile(out);
+	
 	//'visibility' array (dataVersion>=20)
 	bool hasVisibilityArray = isVisibilityTableInstantiated();
 	if (out.write((const char*)&hasVisibilityArray,sizeof(bool)) < 0)
@@ -256,22 +235,22 @@ bool ccGenericPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flag
 	if (!ccHObject::fromFile_MeOnly(in, dataVersion, flags))
 		return false;
 
-	if (dataVersion<20)
+	if (dataVersion < 20)
 		return CorruptError();
 
-	//'coordinates shift' (dataVersion>=20)
-	if (in.read((char*)m_globalShift.u,sizeof(double)*3) < 0)
-		return ReadError();
-
-	//'global scale' (dataVersion>=33)
-	if (dataVersion >= 33)
+	if (dataVersion < 33)
 	{
-		if (in.read((char*)&m_globalScale,sizeof(double)) < 0)
+		//'coordinates shift' (dataVersion>=20)
+		if (in.read((char*)m_globalShift.u,sizeof(double)*3) < 0)
 			return ReadError();
+
+		m_globalScale = 1.0;
 	}
 	else
 	{
-		m_globalScale = 1.0;
+		//'global shift & scale' (dataVersion>=33)
+		if (!loadShiftInfoFromFile(in))
+			return ReadError();
 	}
 
 	//'visibility' array (dataVersion>=20)
@@ -306,3 +285,21 @@ bool ccGenericPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flag
 	return true;
 }
 
+void ccGenericPointCloud::importParametersFrom(const ccGenericPointCloud* cloud)
+{
+	if (!cloud)
+	{
+		assert(false);
+		return;
+	}
+
+	//original center
+	setGlobalShift(cloud->getGlobalShift());
+	setGlobalScale(cloud->getGlobalScale());
+	//keep the transformation history!
+	setGLTransformationHistory(cloud->getGLTransformationHistory());
+	//custom point size
+	setPointSize(cloud->getPointSize());
+	//meta-data
+	setMetaData(cloud->metaData());
+}

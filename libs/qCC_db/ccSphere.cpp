@@ -194,9 +194,12 @@ void ccSphere::drawNameIn3D(CC_DRAW_CONTEXT& context)
 		return;
 
 	//we display it in the 2D layer in fact!
-	ccBBox bBox = getBB(true,false,m_currentDisplay);
+	ccBBox bBox = getOwnBB();
 	if (bBox.isValid())
 	{
+		ccGLMatrix trans;
+		getAbsoluteGLTransformation(trans);
+
 		const double* MM = context._win->getModelViewMatd(); //viewMat
 		const double* MP = context._win->getProjectionMatd(); //projMat
 		int VP[4];
@@ -204,6 +207,7 @@ void ccSphere::drawNameIn3D(CC_DRAW_CONTEXT& context)
 
 		GLdouble xp,yp,zp;
 		CCVector3 C = bBox.getCenter();
+		trans.apply(C);
 		gluProject(C.x,C.y,C.z,MM,MP,VP,&xp,&yp,&zp);
 
 		//we want to display this name next to the sphere, and not above it!

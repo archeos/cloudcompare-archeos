@@ -29,7 +29,7 @@
 #include <QTextStream>
 #include <QFileInfo>
 
-ccPolyline* ProfileLoader::Load(QString filename, bool ignoreAxisShift/*=true*/, int heightDim/*=2*/, ccMainAppInterface* app/*=0*/)
+ccPolyline* ProfileLoader::Load(QString filename, CCVector3& origin, ccMainAppInterface* app/*=0*/)
 {
 	//load profile as a polyline
 	QFile file(filename);
@@ -48,30 +48,35 @@ ccPolyline* ProfileLoader::Load(QString filename, bool ignoreAxisShift/*=true*/,
 	bool error = false;
 	for (unsigned n=0; n<1; ++n) //fake loop for easy break ;)
 	{
-		//read center
-		CCVector3d G(0,0,0);
+		//read origin
 		{
 			QString headerLine = stream.readLine();
 			if (headerLine.isEmpty() || !headerLine.startsWith("X"))
 			{
 				if (app)
-					app->dispToConsole(QString("Malformed file (center header expected on first line)"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+					app->dispToConsole(QString("Malformed file (origin header expected on first line)"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 				error = true;
 				break;
 			}
 			QString centerLine = stream.readLine();
 			{
 				QStringList tokens = centerLine.split(QRegExp("\\s+"),QString::SkipEmptyParts);
-				if (tokens.size() < 3)
+				bool validLine = false;
+				if (tokens.size() == 3)
+				{
+					bool ok[3] = {false, false, false};
+					origin.x = static_cast<PointCoordinateType>(tokens[0].toDouble(ok+0));
+					origin.y = static_cast<PointCoordinateType>(tokens[1].toDouble(ok+1));
+					origin.z = static_cast<PointCoordinateType>(tokens[2].toDouble(ok+2));
+					validLine = ok[0] && ok[1] && ok[2];
+				}
+				if (!validLine)
 				{
 					if (app)
-						app->dispToConsole(QString("Malformed file (center coordinates expected on second line)"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+						app->dispToConsole(QString("Malformed file (origin coordinates expected on second line)"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 					error = true;
 					break;
 				}
-				G.x = tokens[0].toDouble();
-				G.y = tokens[1].toDouble();
-				G.z = tokens[2].toDouble();
 			}
 		}
 
@@ -87,7 +92,7 @@ ccPolyline* ProfileLoader::Load(QString filename, bool ignoreAxisShift/*=true*/,
 			}
 
 			QString line = stream.readLine();
-			std::vector< Vector2Tpl<double> > points;
+			std::vector< CCVector2d > points;
 			while (!line.isEmpty())
 			{
 				QStringList tokens = line.split(QRegExp("\\s+"),QString::SkipEmptyParts);
@@ -99,18 +104,15 @@ ccPolyline* ProfileLoader::Load(QString filename, bool ignoreAxisShift/*=true*/,
 					break;
 				}
 
-				Vector2Tpl<double> P;
+				CCVector2d P;
 				P.x = tokens[0].toDouble(); //radius
 				P.y = tokens[1].toDouble(); //height
-
-				if (ignoreAxisShift)
-					P.y -= G.u[heightDim];
 
 				try
 				{
 					points.push_back(P);
 				}
-				catch(std::bad_alloc)
+				catch (const std::bad_alloc&)
 				{
 					//not enough memory
 					if (app)
@@ -124,13 +126,13 @@ ccPolyline* ProfileLoader::Load(QString filename, bool ignoreAxisShift/*=true*/,
 
 			//convert 2D points to polyline
 			{
-				unsigned count = (unsigned)points.size();
+				unsigned count = static_cast<unsigned>(points.size());
 				if (count > 1)
 				{
 					ccPointCloud* vertices = new ccPointCloud("vertices");
 					polyline = new ccPolyline(vertices);
 					polyline->addChild(vertices);
-					if (!vertices->reserve(count) || !polyline->reserve(count-1))
+					if (!vertices->reserve(count) || !polyline->reserve(count))
 					{
 						//not enough memory
 						if (app)
@@ -143,10 +145,10 @@ ccPolyline* ProfileLoader::Load(QString filename, bool ignoreAxisShift/*=true*/,
 					{
 						for (unsigned i=0; i<count; ++i)
 						{
-							vertices->addPoint(CCVector3((PointCoordinateType)points[i].x,(PointCoordinateType)points[i].y,0));
+							vertices->addPoint(CCVector3(	static_cast<PointCoordinateType>(points[i].x),
+															static_cast<PointCoordinateType>(points[i].y),
+															0));
 						}
-
-						vertices->setGlobalShift(G);
 					}
 
 					//add segments

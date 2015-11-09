@@ -171,7 +171,7 @@ double StatisticalTestingTools::computeAdaptativeChi2Dist(	const GenericDistribu
 			{
 				classes.push_back(Chi2Class(1.0e-6,(int)histoBefore));
 			}
-			catch(std::bad_alloc)
+			catch (const std::bad_alloc&)
 			{
 				//not enough memory!
 				return -1.0;
@@ -193,7 +193,7 @@ double StatisticalTestingTools::computeAdaptativeChi2Dist(	const GenericDistribu
 			{
 				classes.push_back(currentClass);
 			}
-			catch(std::bad_alloc)
+			catch (const std::bad_alloc&)
 			{
 				//not enough memory!
 				return -1.0;
@@ -207,7 +207,7 @@ double StatisticalTestingTools::computeAdaptativeChi2Dist(	const GenericDistribu
 			{
 				classes.push_back(Chi2Class(1.0e-6,(int)histoAfter));
 			}
-			catch(std::bad_alloc)
+			catch (const std::bad_alloc&)
 			{
 				//not enough memory!
 				return -1.0;
@@ -236,14 +236,14 @@ double StatisticalTestingTools::computeAdaptativeChi2Dist(	const GenericDistribu
 			//otherwise we must merge the smallest class with its neighbor (to make the classes repartition more equilibrated)
 			Chi2ClassList::iterator smallestIt;
 			{
-				Chi2ClassList::iterator nextIt = minIt; nextIt++;
+				Chi2ClassList::iterator nextIt = minIt; ++nextIt;
 				if (minIt == classes.begin())
 				{
 					smallestIt = nextIt;
 				}
 				else
 				{
-					Chi2ClassList::iterator predIt = minIt; predIt--;
+					Chi2ClassList::iterator predIt = minIt; --predIt;
 					smallestIt = (nextIt != classes.end() && nextIt->pi < predIt->pi ? nextIt : predIt);
 				}
 			}
@@ -314,7 +314,7 @@ double StatisticalTestingTools::testCloudWithStatisticalModel(const GenericDistr
 	if (!theOctree)
 	{
 		theOctree = new DgmOctree(theCloud);
-		if (theOctree->build(progressCb)<1)
+		if (theOctree->build(progressCb) < 1)
 		{
 			delete theOctree;
 			return -2.0;
@@ -324,7 +324,7 @@ double StatisticalTestingTools::testCloudWithStatisticalModel(const GenericDistr
 	//on active le champ scalaire (IN) pour recevoir les distances du Chi2
 	theCloud->enableScalarField();
 
-	uchar level = theOctree->findBestLevelForAGivenPopulationPerCell(numberOfNeighbours);
+	unsigned char level = theOctree->findBestLevelForAGivenPopulationPerCell(numberOfNeighbours);
 
 	unsigned numberOfChi2Classes = (unsigned)ceil(sqrt((double)numberOfNeighbours));
 
@@ -356,27 +356,24 @@ double StatisticalTestingTools::testCloudWithStatisticalModel(const GenericDistr
 	}
 
 	//additionnal parameters for local process
-	void* additionalParameters[] = {	(void*)distrib,
-										(void*)&numberOfNeighbours,
-										(void*)&numberOfChi2Classes,
-										(void*)histoValues,
-										(void*)histoMin,
-										(void*)histoMax};
+	void* additionalParameters[] = {	reinterpret_cast<void*>(const_cast<GenericDistribution*>(distrib)),
+										reinterpret_cast<void*>(&numberOfNeighbours),
+										reinterpret_cast<void*>(&numberOfChi2Classes),
+										reinterpret_cast<void*>(histoValues),
+										reinterpret_cast<void*>(histoMin),
+										reinterpret_cast<void*>(histoMax) };
 
 	double maxChi2 = -1.0;
 
 	//let's compute Chi2 distances
-#ifndef ENABLE_MT_OCTREE
-	if (theOctree->executeFunctionForAllCellsAtStartingLevel(level,
-#else
-	if (theOctree->executeFunctionForAllCellsAtStartingLevel_MT(level,
-#endif
-															&computeLocalChi2DistAtLevel,
-															additionalParameters,
-															numberOfNeighbours/2,
-															numberOfNeighbours*3,
-															progressCb,
-															"Statistical Test")>0) //sucess
+	if (theOctree->executeFunctionForAllCellsStartingAtLevel(	level,
+																&computeLocalChi2DistAtLevel,
+																additionalParameters,
+																numberOfNeighbours/2,
+																numberOfNeighbours*3,
+																true,
+																progressCb,
+																"Statistical Test") != 0) //sucess
 	{
 		if (!progressCb || !progressCb->isCancelRequested())
 		{
@@ -400,12 +397,12 @@ bool StatisticalTestingTools::computeLocalChi2DistAtLevel(	const DgmOctree::octr
 															NormalizedProgress* nProgress/*=0*/)
 {
 	//variables additionnelles
-	GenericDistribution* statModel		= (GenericDistribution*)additionalParameters[0];
-	unsigned numberOfNeighbours         = *(unsigned*)additionalParameters[1];
-	unsigned numberOfChi2Classes		= *(unsigned*)additionalParameters[2];
-	unsigned* histoValues				= (unsigned*)additionalParameters[3];
-	ScalarType* histoMin				= (ScalarType*)additionalParameters[4];
-	ScalarType* histoMax				= (ScalarType*)additionalParameters[5];
+	GenericDistribution* statModel		= reinterpret_cast<GenericDistribution*>(additionalParameters[0]);
+	unsigned numberOfNeighbours         = *reinterpret_cast<unsigned*>(additionalParameters[1]);
+	unsigned numberOfChi2Classes		= *reinterpret_cast<unsigned*>(additionalParameters[2]);
+	unsigned* histoValues				= reinterpret_cast<unsigned*>(additionalParameters[3]);
+	ScalarType* histoMin				= reinterpret_cast<ScalarType*>(additionalParameters[4]);
+	ScalarType* histoMax				= reinterpret_cast<ScalarType*>(additionalParameters[5]);
 
 	//number of points in the current cell
 	unsigned n = cell.points->size();
@@ -422,7 +419,7 @@ bool StatisticalTestingTools::computeLocalChi2DistAtLevel(	const DgmOctree::octr
 		{
 			nNSS.pointsInNeighbourhood.resize(n);
 		}
-		catch (std::bad_alloc) //out of memory
+		catch (const std::bad_alloc&) //out of memory
 		{
 			return false;
 		}

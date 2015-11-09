@@ -23,6 +23,8 @@
 
 //qCC_db
 #include <ccGenericGLDisplay.h>
+#include <ccPointCloud.h>
+#include <ccHObjectCaster.h>
 
 //Qt
 #include <QPushButton>
@@ -90,11 +92,11 @@ void ccColorLevelsDlg::updateHistogram()
 				if (	channelComboBox->currentIndex() == RGB
 					||	channelComboBox->currentIndex() == i+1 )
 				{
-					histoValues[i].resize(1 << (sizeof(colorType)*8),0);
+					histoValues[i].resize(1 << (sizeof(ColorCompType)*8),0);
 				}
 			}
 		}
-		catch(std::bad_alloc)
+		catch (const std::bad_alloc&)
 		{
 			//not enough memory
 			m_histogram->clear();
@@ -132,7 +134,7 @@ void ccColorLevelsDlg::updateHistogram()
 		{
 			for (unsigned i=0; i<pointCount; ++i)
 			{
-				const colorType* rgb = m_cloud->getPointColor(i);
+				const ColorCompType* rgb = m_cloud->getPointColor(i);
 				if (histoValuesR)
 					histoValuesR->at(rgb[0])++;
 				if (histoValuesG)
@@ -168,10 +170,6 @@ void ccColorLevelsDlg::onApply()
 	s_outputLevels[1] = maxOutputSpinBox->value();
 	s_outputLevelsEnabled = outputLevelsCheckBox->isChecked();
 
-	bool applyRGB[3] = {channelComboBox->currentIndex() == RGB || channelComboBox->currentIndex() == RED,
-						channelComboBox->currentIndex() == RGB || channelComboBox->currentIndex() == GREEN,
-						channelComboBox->currentIndex() == RGB || channelComboBox->currentIndex() == BLUE };
-
 	if (	m_cloud
 		&&	(	minInputSpinBox->value() != 0
 			||	maxInputSpinBox->value() != 255
@@ -179,13 +177,21 @@ void ccColorLevelsDlg::onApply()
 			||	maxOutputSpinBox->value() != 255
 			) )
 	{
+
+		bool applyRGB[3] = {channelComboBox->currentIndex() == RGB || channelComboBox->currentIndex() == RED,
+						channelComboBox->currentIndex() == RGB || channelComboBox->currentIndex() == GREEN,
+						channelComboBox->currentIndex() == RGB || channelComboBox->currentIndex() == BLUE };
+
+		//update display
+		ccPointCloud* pc = ccHObjectCaster::ToPointCloud(m_cloud);
+
 		unsigned pointCount = m_cloud->size();
 		int qIn = s_inputLevels[1] - s_inputLevels[0];
 		int pOut = s_outputLevels[1] - s_outputLevels[0];
 		for (unsigned i=0; i<pointCount; ++i)
 		{
-			const colorType* rgb = m_cloud->getPointColor(i);
-			colorType newRgb[3];
+			const ColorCompType* rgb = m_cloud->getPointColor(i);
+			ColorCompType newRgb[3];
 			for (unsigned c=0; c<3; ++c)
 			{
 				if (applyRGB[c])
@@ -196,14 +202,24 @@ void ccColorLevelsDlg::onApply()
 						double u = (static_cast<double>(rgb[c]) - s_inputLevels[0]) / qIn;
 						newC = s_outputLevels[0] + u * pOut; 
 					}
-					newRgb[c] = static_cast<colorType>(std::max<double>(std::min<double>(newC,MAX_COLOR_COMP),0.0));
+					newRgb[c] = static_cast<ColorCompType>(std::max<double>(std::min<double>(newC,ccColor::MAX),0.0));
 				}
 				else
 				{
 					newRgb[c] = rgb[c];
 				}
 			}
-			memcpy(const_cast<colorType*>(rgb),newRgb,sizeof(colorType)*3);
+
+			//set the new color
+			if (pc)
+			{
+				pc->setPointColor(i,newRgb);
+			}
+			else
+			{
+				//DGM FIXME: dirty!
+				memcpy(const_cast<ColorCompType*>(rgb),newRgb,sizeof(ColorCompType)*3);
+			}
 		}
 
 		//update display

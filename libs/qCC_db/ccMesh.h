@@ -20,6 +20,7 @@
 
 //CCLib
 #include <SimpleTriangle.h>
+#include <PointProjectionTools.h>
 
 //Local
 #include "qCC_db.h"
@@ -34,14 +35,14 @@ public:
 	//! Default ccMesh constructor
 	/** \param vertices the vertices cloud
 	**/
-	ccMesh(ccGenericPointCloud* vertices);
+	explicit ccMesh(ccGenericPointCloud* vertices);
 
 	//! ccMesh constructor (from a CCLib::GenericIndexedMesh)
 	/** The GenericIndexedMesh should refer to a known ccGenericPointCloud.
 		\param giMesh the GenericIndexedMesh
 		\param giVertices giMesh vertices
 	**/
-	ccMesh(CCLib::GenericIndexedMesh* giMesh, ccGenericPointCloud* giVertices);
+	explicit ccMesh(CCLib::GenericIndexedMesh* giMesh, ccGenericPointCloud* giVertices);
 
 	//! Default destructor
 	virtual ~ccMesh();
@@ -65,6 +66,15 @@ public:
 								NormsIndexesTableType* clonedNormsTable = 0,
 								TextureCoordsContainer* cloneTexCoords = 0);
 
+	//! Creates a Delaunay 2.5D mesh from a point cloud
+	/** See CCLib::PointProjectionTools::computeTriangulation.
+	**/
+	static ccMesh* Triangulate( ccGenericPointCloud* cloud,
+								CC_TRIANGULATION_TYPES type,
+								bool updateNormals = false,
+								PointCoordinateType maxEdgeLength = 0,
+								unsigned char dim = 2);
+
 	//! Merges another mesh into this one
 	/** \param mesh mesh to be merged in this one
 	**/
@@ -72,31 +82,33 @@ public:
 
 	//inherited methods (ccHObject)
 	virtual unsigned getUniqueIDForDisplay() const;
-	virtual ccBBox getMyOwnBB();
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
 	virtual bool isSerializable() const { return true; }
+	virtual const ccGLMatrix& getGLTransformationHistory() const;
 
 	//inherited methods (ccGenericMesh)
 	inline virtual ccGenericPointCloud* getAssociatedCloud() const { return m_associatedCloud; }
 	virtual void refreshBB();
 	virtual bool interpolateNormals(unsigned triIndex, const CCVector3& P, CCVector3& N);
-	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, colorType rgb[]);
-	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture);
-	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, colorType rgb[], bool returnColorIfNoTexture);
-	virtual unsigned maxSize() const;
+	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, ccColor::Rgb& C);
+	virtual void computeInterpolationWeights(unsigned triIndex, const CCVector3& P, CCVector3d& weights) const;
+	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, ccColor::Rgb& C, bool interpolateColorIfNoTexture);
+	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, ccColor::Rgb& C, bool returnColorIfNoTexture);
+	virtual unsigned capacity() const;
 
 	//inherited methods (GenericIndexedMesh)
-	virtual void forEach(genericTriangleAction& anAction);
+	virtual void forEach(genericTriangleAction& action);
 	virtual void placeIteratorAtBegining();
 	virtual CCLib::GenericTriangle* _getNextTriangle(); //temporary
 	virtual CCLib::GenericTriangle* _getTriangle(unsigned triangleIndex); //temporary
-	virtual CCLib::TriangleSummitsIndexes* getNextTriangleIndexes();
-	virtual CCLib::TriangleSummitsIndexes* getTriangleIndexes(unsigned triangleIndex);
-	virtual void getTriangleSummits(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C);
+	virtual CCLib::VerticesIndexes* getNextTriangleVertIndexes();
+	virtual CCLib::VerticesIndexes* getTriangleVertIndexes(unsigned triangleIndex);
+	virtual void getTriangleVertices(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C);
 	virtual unsigned size() const;
-	virtual void getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[]);
+	virtual void getBoundingBox(CCVector3& bbMin, CCVector3& bbMax);
 
-	//const version of getTriangleIndexes
-	const virtual CCLib::TriangleSummitsIndexes* getTriangleIndexes(unsigned triangleIndex) const;
+	//const version of getTriangleVertIndexes
+	const virtual CCLib::VerticesIndexes* getTriangleVertIndexes(unsigned triangleIndex) const;
 
 	//inherited methods (ccDrawableObject)
 	virtual bool hasColors() const;
@@ -104,7 +116,6 @@ public:
 	virtual bool hasScalarFields() const;
 	virtual bool hasDisplayedScalarField() const;
 	virtual bool normalsShown() const;
-	virtual void setDisplay(ccGenericGLDisplay* win);
 	virtual void toggleMaterials() { showMaterials(!materialsShown()); }
 
 	//! Shifts all triangles indexes
@@ -116,9 +127,9 @@ public:
 	/** \warning Bounding-box validity is broken after a call to this method.
 		However, for the sake of performance, no call to notifyGeometryUpdate
 		is made automatically. Make sure to do so when all modifications are done!
-		\param i1 first summit index (relatively to the vertex cloud)
-		\param i2 second summit index (relatively to the vertex cloud)
-		\param i3 third summit index (relatively to the vertex cloud)
+		\param i1 first vertex index (relatively to the vertex cloud)
+		\param i2 second vertex index (relatively to the vertex cloud)
+		\param i3 third vertex index (relatively to the vertex cloud)
 	**/
 	void addTriangle(unsigned i1, unsigned i2, unsigned i3);
 
@@ -135,6 +146,9 @@ public:
 		\return true if the method succeeds, false otherwise
 	**/
 	bool resize(unsigned n);
+
+	//! Removes unused capacity
+	inline void shrinkToFit() { if (size() < capacity()) resize(size()); }
 
 	/*********************************************************/
 	/**************    PER-TRIANGLE NORMALS    ***************/
@@ -176,17 +190,17 @@ public:
 	//! Adds a triplet of normal indexes for next triangle
 	/** Make sure per-triangle normal indexes array is allocated
 		(see reservePerTriangleNormalIndexes)
-		\param i1 first summit normal index
-		\param i2 second summit normal index
-		\param i3 third summit normal index
+		\param i1 first vertex normal index
+		\param i2 second vertex normal index
+		\param i3 third vertex normal index
 	**/
 	void addTriangleNormalIndexes(int i1, int i2, int i3);
 
 	//! Sets a triplet of normal indexes for a given triangle
 	/** \param triangleIndex triangle index
-		\param i1 first summit normal index
-		\param i2 second summit normal index
-		\param i3 third summit normal index
+		\param i1 first vertex normal index
+		\param i2 second vertex normal index
+		\param i3 third vertex normal index
 	**/
 	void setTriangleNormalIndexes(unsigned triangleIndex, int i1, int i2, int i3);
 
@@ -231,6 +245,15 @@ public:
 	**/
 	void addTriangleMtlIndex(int mtlIndex);
 
+	//! Container of per-triangle material descriptors
+	typedef GenericChunkedArray<1,int> triangleMaterialIndexesSet;
+
+	//! Sets per-triangle material indexes array
+	void setTriangleMtlIndexesTable(triangleMaterialIndexesSet* matIndexesTable, bool autoReleaseOldTable = true);
+
+	//! Returns the per-triangle material indexes array
+	inline const triangleMaterialIndexesSet* getTriangleMtlIndexesTable() const { return m_triMtlIndexes; }
+
 	//! Sets triangle material indexes
 	/** Cf. ccMesh::reservePerTriangleMtlIndexes.
 		\param triangleIndex triangle index
@@ -273,17 +296,17 @@ public:
 	//! Adds a triplet of tex coords indexes for next triangle
 	/** Make sure per-triangle tex coords indexes array is allocated
 		(see reservePerTriangleTexCoordIndexes)
-		\param i1 first summit tex coords index
-		\param i2 second summit tex coords index
-		\param i3 third summit tex coords index
+		\param i1 first vertex tex coords index
+		\param i2 second vertex tex coords index
+		\param i3 third vertex tex coords index
 	**/
 	void addTriangleTexCoordIndexes(int i1, int i2, int i3);
 
 	//! Sets a triplet of tex coords indexes for a given triangle
 	/** \param triangleIndex triangle index
-		\param i1 first summit tex coords index
-		\param i2 second summit tex coords index
-		\param i3 third summit tex coords index
+		\param i1 first vertex tex coords index
+		\param i2 second vertex tex coords index
+		\param i3 third vertex tex coords index
 	**/
 	void setTriangleTexCoordIndexes(unsigned triangleIndex, int i1, int i2, int i3);
 
@@ -346,6 +369,9 @@ public:
 	**/
 	void swapTriangles(unsigned index1, unsigned index2);
 
+	//! Transforms the mesh per-triangle normals
+	void transformTriNormals(const ccGLMatrix& trans);
+
 protected:
 
 	//inherited from ccHObject
@@ -356,10 +382,12 @@ protected:
 	virtual void onUpdateOf(ccHObject* obj);
 	virtual void onDeletionOf(const ccHObject* obj);
 
+	//! Same as other 'computeInterpolationWeights' method with a set of 3 vertices indexes
+	void computeInterpolationWeights(unsigned i1, unsigned i2, unsigned i3, const CCVector3& P, CCVector3d& weights) const;
 	//! Same as other 'interpolateNormals' method with a set of 3 vertices indexes
 	bool interpolateNormals(unsigned i1, unsigned i2, unsigned i3, const CCVector3& P, CCVector3& N, const int* triNormIndexes = 0);
 	//! Same as other 'interpolateColors' method with a set of 3 vertices indexes
-	bool interpolateColors(unsigned i1, unsigned i2, unsigned i3, const CCVector3& P, colorType rgb[]);
+	bool interpolateColors(unsigned i1, unsigned i2, unsigned i3, const CCVector3& P, ccColor::Rgb& C);
 
 	//! Used internally by 'subdivide'
 	bool pushSubdivide(/*PointCoordinateType maxArea, */unsigned indexA, unsigned indexB, unsigned indexC);
@@ -406,7 +434,7 @@ protected:
 	//! Triangles' vertices indexes (3 per triangle)
 	triangleIndexesContainer* m_triVertIndexes;
 
-	//! Iterator on the list of triangle summits indexes
+	//! Iterator on the list of triangles
 	unsigned m_globalIterator;
 	//! Dump triangle structure to transmit temporary data
 	CCLib::SimpleRefTriangle m_currentTriangle;
@@ -414,8 +442,6 @@ protected:
 	//! Bounding-box
 	ccBBox m_bBox;
 
-	//! Container of per-triangle material descriptors
-	typedef GenericChunkedArray<1,int> triangleMaterialIndexesSet;
 	//! Per-triangle material indexes
 	triangleMaterialIndexesSet* m_triMtlIndexes;
 

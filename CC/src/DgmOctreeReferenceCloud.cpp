@@ -17,16 +17,13 @@
 
 #include "DgmOctreeReferenceCloud.h"
 
-//system
-#include <string.h>
-
 using namespace CCLib;
 
 DgmOctreeReferenceCloud::DgmOctreeReferenceCloud(DgmOctree::NeighboursSet* associatedSet, unsigned size/*=0*/)
 	: m_globalIterator(0)
 	, m_validBB(false)
 	, m_set(associatedSet)
-	, m_size(size == 0 && associatedSet ? (unsigned)m_set->size() : size)
+	, m_size(size == 0 && associatedSet ? static_cast<unsigned>(m_set->size()) : size)
 {
 	assert(associatedSet);
 }
@@ -69,23 +66,23 @@ void DgmOctreeReferenceCloud::computeBB()
 	m_validBB = true;
 }
 
-void DgmOctreeReferenceCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
+void DgmOctreeReferenceCloud::getBoundingBox(CCVector3& bbMin, CCVector3& bbMax)
 {
 	if (!m_validBB)
 		computeBB();
 
-	memcpy(bbMin, m_bbMin.u, sizeof(PointCoordinateType)*3);
-	memcpy(bbMax, m_bbMax.u, sizeof(PointCoordinateType)*3);
+	bbMin = m_bbMin;
+	bbMax = m_bbMax;
 }
 
-void DgmOctreeReferenceCloud::forEach(genericPointAction& anAction)
+void DgmOctreeReferenceCloud::forEach(genericPointAction& action)
 {
 	unsigned count = size();
 	for (unsigned i=0; i<count; ++i)
 	{
 		//we must change from double container to 'ScalarType' one!
 		ScalarType sqDist = static_cast<ScalarType>(m_set->at(i).squareDistd);
-		anAction(*m_set->at(i).point,sqDist);
+		action(*m_set->at(i).point,sqDist);
 		m_set->at(i).squareDistd = static_cast<double>(sqDist);
 	}
 }

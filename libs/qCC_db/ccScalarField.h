@@ -39,7 +39,7 @@ public:
 	//! Default constructor
 	/** \param name scalar field name
 	**/
-	ccScalarField(const char* name = 0);
+	explicit ccScalarField(const char* name = 0);
 
 	/*** Scalar values display handling ***/
 
@@ -129,14 +129,14 @@ public:
 	//! Returns the color corresponding to a given value (wrt to the current display parameters)
 	/** Warning: must no be called if the SF is not associated to a color scale!
 	**/
-	inline const colorType* getColor(ScalarType value) const
+	inline const ColorCompType* getColor(ScalarType value) const
 	{
 		assert(m_colorScale);
-		return m_colorScale->getColorByRelativePos(normalize(value), m_colorRampSteps, m_showNaNValuesInGrey ? ccColor::lightGrey : 0);
+		return m_colorScale->getColorByRelativePos(normalize(value), m_colorRampSteps, m_showNaNValuesInGrey ? ccColor::lightGrey.rgba : 0);
 	}
 
 	//! Shortcut to getColor
-	inline const colorType* getValueColor(unsigned index) const { return getColor(getValue(index)); }
+	inline const ColorCompType* getValueColor(unsigned index) const { return getColor(getValue(index)); }
 
 	//! Sets whether NaN/out of displayed range values should be displayed in grey or hidden
 	void showNaNValuesInGrey(bool state);
@@ -205,10 +205,18 @@ public:
 	//! Returns modification flag state
 	bool getModificationFlag() const { return m_modified; }
 
+	//! Imports the parameters from another scalar field
+	void importParametersFrom(const ccScalarField* sf);
+
 	//inherited from ccSerializableObject
 	virtual bool isSerializable() const { return true; }
 	virtual bool toFile(QFile& out) const;
 	virtual bool fromFile(QFile& in, short dataVersion, int flags);
+
+	//! Returns the global shift (if any)
+	inline double getGlobalShift() const { return m_globalShift; }
+	//! Sets the global shift
+	inline void setGlobalShift(double shift) { m_globalShift = shift; }
 
 protected:
 
@@ -239,7 +247,7 @@ protected:
 	**/
 	Range m_logSaturationRange;
 
-	// Whether NaN values are shown in grey or are hidden
+	//! Whether NaN values are shown in grey or are hidden
 	bool m_showNaNValuesInGrey;
 
 	//! Whether color scale is symmetrical or not
@@ -267,6 +275,9 @@ protected:
 		will turn this flag on.
 	**/
 	bool m_modified;
+
+	//! Global shift
+	double m_globalShift;
 };
 
 #endif //CC_DB_SCALAR_FIELD_HEADER

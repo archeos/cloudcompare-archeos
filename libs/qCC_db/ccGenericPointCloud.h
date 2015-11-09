@@ -25,7 +25,7 @@
 
 //Local
 #include "qCC_db.h"
-#include "ccHObject.h"
+#include "ccShiftedObject.h"
 #include "ccGLMatrix.h"
 #include "ccAdvancedTypes.h"
 
@@ -49,7 +49,7 @@ class ccOctree;
 	- an octree strucutre
 	- visibility information per point (to hide/display subsets of points)
 **/
-class QCC_DB_LIB_API ccGenericPointCloud : public ccHObject,  virtual public CCLib::GenericIndexedCloudPersist
+class QCC_DB_LIB_API ccGenericPointCloud : public ccShiftedObject,  virtual public CCLib::GenericIndexedCloudPersist
 {
 	friend class ccMesh;
 
@@ -57,6 +57,9 @@ public:
 
 	//! Default constructor
 	ccGenericPointCloud(QString name = QString());
+
+	//! Copy constructor
+	ccGenericPointCloud(const ccGenericPointCloud& cloud);
 
 	//! Default destructor
 	virtual ~ccGenericPointCloud();
@@ -96,9 +99,10 @@ public:
 		WARNING: any previously attached octree will be deleted,
 				 even if new octree computation failed.
 		\param progressCb the caller can get some notification of the process progress through this callback mechanism (see CCLib documentation)
+		\param autoAddChild whether to automatically add the computed octree as child of this cloud or not
 		\return the computed octree
 	**/
-	virtual ccOctree* computeOctree(CCLib::GenericProgressCallback* progressCb=NULL);
+	virtual ccOctree* computeOctree(CCLib::GenericProgressCallback* progressCb = 0, bool autoAddChild = true);
 
 	//! Returns associated octree
 	virtual ccOctree* getOctree();
@@ -116,14 +120,14 @@ public:
 		It may even be 0 if the value shouldn't be displayed.
 		WARNING: scalar field must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
 	**/
-	virtual const colorType* geScalarValueColor(ScalarType d) const = 0;
+	virtual const ColorCompType* geScalarValueColor(ScalarType d) const = 0;
 
 	//! Returns color corresponding to a given point associated scalar value
 	/** The returned value depends on the current scalar field display parameters.
 		It may even be 0 if the value shouldn't be displayed.
 		WARNING: scalar field must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
 	**/
-	virtual const colorType* getPointScalarValueColor(unsigned pointIndex) const = 0;
+	virtual const ColorCompType* getPointScalarValueColor(unsigned pointIndex) const = 0;
 
 	//! Returns scalar value associated to a given point
 	/** The returned value is taken from the current displayed scalar field
@@ -134,12 +138,12 @@ public:
 	//! Returns color corresponding to a given point
 	/** WARNING: color array must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
 	**/
-	virtual const colorType* getPointColor(unsigned pointIndex) const = 0;
+	virtual const ColorCompType* getPointColor(unsigned pointIndex) const = 0;
 
 	//! Returns compressed normal corresponding to a given point
 	/** WARNING: normals array must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
 	**/
-	virtual const normsType& getPointNormalIndex(unsigned pointIndex) const = 0;
+	virtual const CompressedNormType& getPointNormalIndex(unsigned pointIndex) const = 0;
 
 	//! Returns normal corresponding to a given point
 	/** WARNING: normals array must be enabled! (see ccDrawableObject::hasDisplayedScalarField)
@@ -154,10 +158,10 @@ public:
 	//! Array of "visibility" information for each point
 	/** See <CCConst.h>
 	**/
-	typedef GenericChunkedArray<1,uchar> VisibilityTableType;
+	typedef GenericChunkedArray<1,unsigned char> VisibilityTableType;
 
 	//! Returns associated visiblity array
-	virtual VisibilityTableType* getTheVisibilityArray();
+	virtual inline VisibilityTableType* getTheVisibilityArray() { return m_pointsVisibility; }
 
 	//! Returns a ReferenceCloud equivalent to the visiblity array
 	virtual CCLib::ReferenceCloud* getTheVisiblePoints() const;
@@ -178,10 +182,10 @@ public:
 	***************************************************/
 
 	//Inherited from GenericCloud
-	virtual uchar testVisibility(const CCVector3& P) const;
+	virtual unsigned char testVisibility(const CCVector3& P) const;
 
 	//Inherited from ccHObject
-	virtual ccBBox getMyOwnBB();
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
 
 	//! Forces bounding-box update
 	virtual void refreshBB() = 0;
@@ -190,63 +194,27 @@ public:
 	/** \param removeSelectedPoints if true, exported point are also removed from the current point cloud
 		\return new point cloud with selected points
 	**/
-	virtual ccGenericPointCloud* createNewCloudFromVisibilitySelection(bool removeSelectedPoints=false) = 0;
+	virtual ccGenericPointCloud* createNewCloudFromVisibilitySelection(bool removeSelectedPoints = false) = 0;
 
 	//! Applies a rigid transformation (rotation + translation)
 	virtual void applyRigidTransformation(const ccGLMatrix& trans) = 0;
 
-	//! Sets shift applied to original coordinates (information storage only)
-	/** Such a shift can typically be applied at loading time.
+	//! Crops the cloud inside (or outside) a boundig box
+	/** \warning Always returns a selection (potentially empty) if successful.
+		\param box croping box
+		\param inside whether selected points are inside or outside the box
+		\return points falling inside (or outside) as a selection
 	**/
-	void setGlobalShift(double x, double y, double z);
+	virtual CCLib::ReferenceCloud* crop(const ccBBox& box, bool inside = true) = 0;
 
-	//! Sets shift applied to original coordinates (information storage only)
-	/** Such a shift can typically be applied at loading time.
-		Original coordinates are equal to '(P/scale - shift)'
-	**/
-	void setGlobalShift(const CCVector3d& shift);
-
-	//! Returns the shift applied to original coordinates
-	/** See ccGenericPointCloud::setOriginalShift
-	**/
-	const CCVector3d& getGlobalShift() const { return m_globalShift; }
-
-	//! Sets the scale applied to original coordinates (information storage only)
-	void setGlobalScale(double scale);
-
-	//! Returns whether the cloud is shifted or not
-	inline bool isShifted() const
-	{
-		return (	m_globalShift.x != 0
-				||	m_globalShift.y != 0
-				||	m_globalShift.z != 0
-				||	m_globalScale != 1.0 );
-	}
-
-	//! Returns the scale applied to original coordinates
-	/** See ccGenericPointCloud::setOriginalScale
-	**/
-	double getGlobalScale() const { return m_globalScale; }
-
-	//! Returns the point back-projected into the original coordinates system
-	template<typename T> inline CCVector3d toGlobal3d(const Vector3Tpl<T>& Plocal) const
-	{
-		// Pglobal = Plocal/scale - shift
-		return CCVector3d::fromArray(Plocal.u) / m_globalScale - m_globalShift;
-	}
-
-	//! Returns the point projected into the local (shifted) coordinates system
-	template<typename T> inline CCVector3d toLocal3d(const Vector3Tpl<T>& Pglobal) const
-	{
-		// Plocal = (Pglobal + shift) * scale
-		return (CCVector3d::fromArray(Pglobal.u) + m_globalShift) * m_globalScale;
-	}
-	//! Returns the point projected into the local (shifted) coordinates system
-	template<typename T> inline CCVector3 toLocal3pc(const Vector3Tpl<T>& Pglobal) const
-	{
-		CCVector3d Plocal = CCVector3d::fromArray(Pglobal.u) * m_globalScale + m_globalShift;
-		return CCVector3::fromArray(Plocal.u);
-	}
+	//! Multiplies all coordinates by constant factors (one per dimension)
+	/** WARNING: attached octree may be deleted.
+		\param fx multiplication factor along the X dimension
+        \param fy multiplication factor along the Y dimension
+        \param fz multiplication factor along the Z dimension
+		\param center scaling center (0,0,0) by default
+    **/
+	virtual void scale(PointCoordinateType fx, PointCoordinateType fy, PointCoordinateType fz, CCVector3 center = CCVector3(0,0,0)) = 0;
 
 	//inherited from ccSerializableObject
 	virtual bool isSerializable() const { return true; }
@@ -263,6 +231,11 @@ public:
 	**/
 	unsigned char getPointSize() const { return m_pointSize; }
 
+	//! Imports the parameters from another cloud
+	/** Only the specific parameters are imported.
+	**/
+	void importParametersFrom(const ccGenericPointCloud* cloud);
+
 protected:
 
 	//inherited from ccHObject
@@ -274,12 +247,6 @@ protected:
 		will be considered as visible/selected.
 	**/
 	VisibilityTableType* m_pointsVisibility;
-
-	//! Global shift (typically applied at loading time)
-	CCVector3d m_globalShift;
-
-	//! Global scale (typically applied at loading time)
-	double m_globalScale;
 
 	//! Point size (won't be applied if 0)
 	unsigned char m_pointSize;

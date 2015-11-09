@@ -1,0 +1,2 @@
+/usr/bin/ar cr libGLEW_LIB.a  CMakeFiles/GLEW_LIB.dir/src/glew.c.o
+/usr/bin/ranlib libGLEW_LIB.a

@@ -43,16 +43,25 @@ protected:
 	bool commandBestFitPlane				(QStringList& arguments);
 	bool commandCrop						(QStringList& arguments);
 	bool commandCrop2D						(QStringList& arguments);
+	bool commandCrossSection				(QStringList& arguments, QDialog* parent = 0);
+	bool commandColorBanding				(QStringList& arguments);
 	bool matchBBCenters						(QStringList& arguments);
+	bool commandSfArithmetic				(QStringList& arguments);
 	bool commandICP							(QStringList& arguments, QDialog* parent = 0);
+	bool commandDelaunay					(QStringList& arguments, QDialog* parent = 0);
 	bool commandChangeCloudOutputFormat		(QStringList& arguments);
 	bool commandChangeMeshOutputFormat		(QStringList& arguments);
+	bool commandChangePLYExportFormat		(QStringList& arguments);
 	bool commandChangeFBXOutputFormat		(QStringList& arguments);
-	bool commandForcePTXNormalsComputation	(QStringList& arguments);
+	bool commandForceNormalsComputation		(QStringList& arguments);
 	bool commandSaveClouds					(QStringList& arguments);
 	bool commandSaveMeshes					(QStringList& arguments);
 	bool commandAutoSave					(QStringList& arguments);
 	bool setActiveSF						(QStringList& arguments);
+	bool removeAllSFs						(QStringList& arguments);
+	bool commandApplyTransformation			(QStringList& arguments);
+	bool commandLogFile						(QStringList& arguments);
+	bool commandSORFilter					(QStringList& arguments, ccProgressDialog* pDlg = 0);
 
 protected:
 
@@ -74,9 +83,10 @@ protected:
 	{
 		QString basename;
 		QString path;
+		int indexInFile;
 
-		EntityDesc(QString filename);
-		EntityDesc(QString basename, QString path);
+		EntityDesc(QString filename, int _indexInFile =-1);
+		EntityDesc(QString baseName, QString path, int _indexInFile =-1);
 		virtual ccHObject* getEntity() = 0;
 	};
 
@@ -99,29 +109,25 @@ protected:
 	struct CloudDesc : EntityDesc
 	{
 		ccPointCloud* pc;
-		int indexInFile;
 
 		CloudDesc()
 			: EntityDesc(QString())
 			, pc(0)
-			, indexInFile(-1)
 		{}
 
 		CloudDesc(	ccPointCloud* cloud,
 					QString filename,
 					int index = -1)
-			: EntityDesc(filename)
+			: EntityDesc(filename,index)
 			, pc(cloud)
-			, indexInFile(index)
 		{}
 
 		CloudDesc(	ccPointCloud* cloud,
 					QString basename,
 					QString path,
 					int index = -1)
-			: EntityDesc(basename,path)
+			: EntityDesc(basename,path,index)
 			, pc(cloud)
-			, indexInFile(index)
 		{}
 		
 		virtual ccHObject* getEntity() { return static_cast<ccHObject*>(pc); }
@@ -138,8 +144,17 @@ protected:
 		{}
 
 		MeshDesc(	ccGenericMesh* _mesh,
-					QString filename)
-			: EntityDesc(filename)
+					QString filename,
+					int index = -1)
+			: EntityDesc(filename,index)
+			, mesh(_mesh)
+		{}
+
+		MeshDesc(	ccGenericMesh* _mesh,
+					QString basename,
+					QString path,
+					int index = -1)
+			: EntityDesc(basename,path,index)
 			, mesh(_mesh)
 		{}
 
@@ -166,17 +181,20 @@ protected:
 	**/
 	bool saveMeshes(QString suffix = QString(), bool allAtOnce = false);
 
-	//! Removes all clouds
-	void removeClouds();
+	//! Removes all clouds (or only the last one ;)
+	void removeClouds(bool onlyLast = false);
 
-	//! Removes all meshes
-	void removeMeshes();
+	//! Removes all meshes (or only the last one ;)
+	void removeMeshes(bool onlyLast = false);
 
 	//! Currently opened point clouds and their filename
 	std::vector< CloudDesc > m_clouds;
 
 	//! Currently opened meshes and their filename
 	std::vector< MeshDesc > m_meshes;
+
+	//! Oprhan entities
+	ccHObject m_orphans;
 
 	//! Mesh filename
 	QString m_meshFilename;

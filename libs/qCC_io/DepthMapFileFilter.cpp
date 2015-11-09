@@ -46,7 +46,7 @@ bool DepthMapFileFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclu
 	return false;
 }
 
-CC_FILE_ERROR DepthMapFileFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR DepthMapFileFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity || filename.isEmpty())
 		return CC_FERR_BAD_ARGUMENT;
@@ -99,7 +99,7 @@ CC_FILE_ERROR DepthMapFileFilter::saveToFile(QString filename, ccGBLSensor* sens
 
 	//the depth map associated to this sensor
 	const ccGBLSensor::DepthBuffer& db = sensor->getDepthBuffer();
-	if (!db.zBuff)
+	if (db.zBuff.empty())
 	{
 		ccLog::Warning(QString("[DepthMap] sensor '%1' has no associated depth map (you must compute it first)").arg(sensor->getName()));
 		return CC_FERR_NO_SAVE; //this is not a severe error (the process can go on)
@@ -177,13 +177,13 @@ CC_FILE_ERROR DepthMapFileFilter::saveToFile(QString filename, ccGBLSensor* sens
 			//if possible, we create the array of projected colors
 			if (pc->hasColors())
 			{
-				GenericChunkedArray<3,colorType>* rgbColors = new GenericChunkedArray<3,colorType>();
+				GenericChunkedArray<3,ColorCompType>* rgbColors = new GenericChunkedArray<3,ColorCompType>();
 				rgbColors->reserve(nbPoints);
 
 				for (unsigned i=0; i<nbPoints; ++i)
 				{
-					//conversion from colorType[3] to unsigned char[3]
-					const colorType* col = pc->getPointColor(i);
+					//conversion from ColorCompType[3] to unsigned char[3]
+					const ColorCompType* col = pc->getPointColor(i);
 					rgbColors->addElement(col);
 				}
 
@@ -195,7 +195,7 @@ CC_FILE_ERROR DepthMapFileFilter::saveToFile(QString filename, ccGBLSensor* sens
 		}
 	}
 
-	ScalarType* _zBuff = db.zBuff;
+	const ScalarType* _zBuff = &(db.zBuff.front());
 	if (theNorms)
 		theNorms->placeIteratorAtBegining();
 	if (theColors)
@@ -205,12 +205,12 @@ CC_FILE_ERROR DepthMapFileFilter::saveToFile(QString filename, ccGBLSensor* sens
 		for (unsigned j=0; j<db.width; ++j, ++_zBuff)
 		{
 			//grid index and depth
-			fprintf(fp,"%i %i %.12f",j,k,*_zBuff);
+			fprintf(fp,"%u %u %.12f",j,k,*_zBuff);
 
 			//color
 			if (theColors)
 			{
-				const colorType* C = theColors->getCurrentValue();
+				const ColorCompType* C = theColors->getCurrentValue();
 				fprintf(fp," %i %i %i",C[0],C[1],C[2]);
 				theColors->forwardIterator();
 			}

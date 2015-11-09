@@ -17,7 +17,7 @@
 
 #include "ccAlignDlg.h"
 #include "mainwindow.h"
-#include "ccDisplayOptionsDlg.h"
+#include "ccQtHelpers.h"
 
 //CCLib
 #include <CloudSamplingTools.h>
@@ -45,8 +45,8 @@ ccAlignDlg::ccAlignDlg(ccGenericPointCloud *data, ccGenericPointCloud *model, QW
 
 	QColor qRed(255,0,0);
 	QColor qYellow(255,255,0);
-	ccDisplayOptionsDlg::SetButtonColor(dataColorButton,qRed);
-	ccDisplayOptionsDlg::SetButtonColor(modelColorButton,qYellow);
+	ccQtHelpers::SetButtonColor(dataColorButton,qRed);
+	ccQtHelpers::SetButtonColor(modelColorButton,qYellow);
 
 	dataObject = data;
 	modelObject = model;
@@ -113,20 +113,21 @@ unsigned ccAlignDlg::getMaxNumberOfCandidates()
 
 CCLib::ReferenceCloud *ccAlignDlg::getSampledModel()
 {
-	CCLib::ReferenceCloud* sampledCloud=0;
+	CCLib::ReferenceCloud* sampledCloud = 0;
 
 	switch (getSamplingMethod())
 	{
 	case SPACE:
 		{
-			sampledCloud = CCLib::CloudSamplingTools::resampleCloudSpatially(modelObject, static_cast<PointCoordinateType>(modelSamplingRate->value()));
+			CCLib::CloudSamplingTools::SFModulationParams modParams(false);
+			sampledCloud = CCLib::CloudSamplingTools::resampleCloudSpatially(modelObject, static_cast<PointCoordinateType>(modelSamplingRate->value()),modParams);
 		}
 		break;
 	case OCTREE:
 		if (modelObject->getOctree())
 		{
 			sampledCloud = CCLib::CloudSamplingTools::subsampleCloudWithOctreeAtLevel(	modelObject,
-																						(uchar)modelSamplingRate->value(),
+																						static_cast<unsigned char>(modelSamplingRate->value()),
 																						CCLib::CloudSamplingTools::NEAREST_POINT_TO_CELL_CENTER,
 																						NULL,
 																						(CCLib::DgmOctree*)modelObject->getOctree());
@@ -159,20 +160,21 @@ CCLib::ReferenceCloud *ccAlignDlg::getSampledModel()
 
 CCLib::ReferenceCloud *ccAlignDlg::getSampledData()
 {
-	CCLib::ReferenceCloud* sampledCloud=0;
+	CCLib::ReferenceCloud* sampledCloud = 0;
 
 	switch (getSamplingMethod())
 	{
 	case SPACE:
 		{
-			sampledCloud = CCLib::CloudSamplingTools::resampleCloudSpatially(dataObject, static_cast<PointCoordinateType>(dataSamplingRate->value()));
+			CCLib::CloudSamplingTools::SFModulationParams modParams(false);
+			sampledCloud = CCLib::CloudSamplingTools::resampleCloudSpatially(dataObject, static_cast<PointCoordinateType>(dataSamplingRate->value()),modParams);
 		}
 		break;
 	case OCTREE:
 		if (dataObject->getOctree())
 		{
 			sampledCloud = CCLib::CloudSamplingTools::subsampleCloudWithOctreeAtLevel(	dataObject,
-																						static_cast<uchar>(dataSamplingRate->value()),
+																						static_cast<unsigned char>(dataSamplingRate->value()),
 																						CCLib::CloudSamplingTools::NEAREST_POINT_TO_CELL_CENTER,
 																						NULL,
 																						(CCLib::DgmOctree*)dataObject->getOctree());
@@ -218,7 +220,7 @@ void ccAlignDlg::setColorsAndLabels()
 	dataObject->setTempColor(ccColor::yellow);
 	dataObject->prepareDisplayForRefresh_recursive();
 
-	MainWindow::RefreshAllGLWindow();
+	MainWindow::RefreshAllGLWindow(false);
 }
 
 //SLOTS
@@ -231,7 +233,7 @@ void ccAlignDlg::swapModelAndData()
 
 void ccAlignDlg::modelSliderReleased()
 {
-	double rate = static_cast<double>(modelSample->sliderPosition())/static_cast<double>(modelSample->maximum());
+	double rate = static_cast<double>(modelSample->sliderPosition())/modelSample->maximum();
 	if ( getSamplingMethod() == SPACE)
 		rate = 1.0 - rate;
 	rate *= modelSamplingRate->maximum();
@@ -241,7 +243,7 @@ void ccAlignDlg::modelSliderReleased()
 
 void ccAlignDlg::dataSliderReleased()
 {
-	double rate = static_cast<double>(dataSample->sliderPosition())/static_cast<double>(dataSample->maximum());
+	double rate = static_cast<double>(dataSample->sliderPosition())/dataSample->maximum();
 	if (getSamplingMethod() == SPACE)
 		rate = 1.0 - rate;
 	rate *= dataSamplingRate->maximum();
@@ -254,10 +256,10 @@ void ccAlignDlg::modelSamplingRateChanged(double value)
 	QString message("An error occurred");
 
 	CC_SAMPLING_METHOD method = getSamplingMethod();
-	float rate = (float)modelSamplingRate->value()/(float)modelSamplingRate->maximum();
+	float rate = static_cast<float>(modelSamplingRate->value())/modelSamplingRate->maximum();
 	if (method == SPACE)
 		rate = 1.0f-rate;
-	modelSample->setSliderPosition((unsigned)((float)modelSample->maximum()*rate));
+	modelSample->setSliderPosition(static_cast<int>(rate * modelSample->maximum()));
 
 	switch(method)
 	{
@@ -288,7 +290,7 @@ void ccAlignDlg::modelSamplingRateChanged(double value)
 		break;
 	default:
 		{
-			unsigned remaining = (unsigned)(rate * (float)modelObject->size());
+			unsigned remaining = static_cast<unsigned>(rate * modelObject->size());
 			message = QString("%1 remaining points").arg(remaining);
 		}
 		break;
@@ -301,10 +303,10 @@ void ccAlignDlg::dataSamplingRateChanged(double value)
 	QString message("An error occurred");
 
 	CC_SAMPLING_METHOD method = getSamplingMethod();
-	float rate = (float)dataSamplingRate->value()/(float)dataSamplingRate->maximum();
+	double rate = static_cast<float>(dataSamplingRate->value()/dataSamplingRate->maximum());
 	if (method == SPACE)
-		rate = 1.0f-rate;
-	dataSample->setSliderPosition((unsigned)((float)dataSample->maximum()*rate));
+		rate = 1.0 - rate;
+	dataSample->setSliderPosition(static_cast<int>(rate * dataSample->maximum()));
 
 	switch(method)
 	{
@@ -320,7 +322,7 @@ void ccAlignDlg::dataSamplingRateChanged(double value)
 		break;
 	case RANDOM:
 		{
-			message = QString("remaining points (%1%)").arg(rate*100.0f,0,'f',1);
+			message = QString("remaining points (%1%)").arg(rate*100.0,0,'f',1);
 		}
 		break;
 	case OCTREE:
@@ -335,7 +337,7 @@ void ccAlignDlg::dataSamplingRateChanged(double value)
 		break;
 	default:
 		{
-			unsigned remaining = (unsigned)(rate * (float)dataObject->size());
+			unsigned remaining = static_cast<unsigned>(rate * dataObject->size());
 			message = QString("%1 remaining points").arg(remaining);
 		}
 		break;
@@ -388,85 +390,114 @@ void ccAlignDlg::estimateDelta()
 void ccAlignDlg::changeSamplingMethod(int index)
 {
 	//Reste a changer les textes d'aide
-	switch(index)
+	switch (index)
 	{
 	case SPACE:
 		{
-			modelSamplingRate->setDecimals(4);
-			dataSamplingRate->setDecimals(4);
-			int oldSliderPos = modelSample->sliderPosition();
-			CCVector3 min, max;
-			modelObject->getBoundingBox(min.u, max.u);
-			double dist = (min-max).norm();
-			modelSamplingRate->setMaximum(dist);
-			modelSample->setSliderPosition(oldSliderPos);
-			oldSliderPos = dataSample->sliderPosition();
-			dataObject->getBoundingBox(min.u, max.u);
-			dist = (min-max).norm();
-			dataSamplingRate->setMaximum(dist);
-			dataSample->setSliderPosition(oldSliderPos);
-			modelSamplingRate->setSingleStep(0.01);
-			dataSamplingRate->setSingleStep(0.01);
-			modelSamplingRate->setMinimum(0.);
-			dataSamplingRate->setMinimum(0.);
+			//model
+			{
+				modelSamplingRate->setDecimals(4);
+				int oldSliderPos = modelSample->sliderPosition();
+				CCVector3 bbMin, bbMax;
+				modelObject->getBoundingBox(bbMin, bbMax);
+				double dist = (bbMin-bbMax).norm();
+				modelSamplingRate->setMaximum(dist);
+				modelSample->setSliderPosition(oldSliderPos);
+				modelSamplingRate->setSingleStep(0.01);
+				modelSamplingRate->setMinimum(0.);
+			}
+			//data
+			{
+				dataSamplingRate->setDecimals(4);
+				int oldSliderPos = dataSample->sliderPosition();
+				CCVector3 bbMin, bbMax;
+				dataObject->getBoundingBox(bbMin, bbMax);
+				double dist = (bbMin-bbMax).norm();
+				dataSamplingRate->setMaximum(dist);
+				dataSample->setSliderPosition(oldSliderPos);
+				dataSamplingRate->setSingleStep(0.01);
+				dataSamplingRate->setMinimum(0.);
+			}
 		}
 		break;
 	case RANDOM:
 		{
-			modelSamplingRate->setDecimals(0);
-			dataSamplingRate->setDecimals(0);
-			modelSamplingRate->setMaximum((float)modelObject->size());
-			dataSamplingRate->setMaximum((float)dataObject->size());
-			modelSamplingRate->setSingleStep(1.);
-			dataSamplingRate->setSingleStep(1.);
-			modelSamplingRate->setMinimum(0.);
-			dataSamplingRate->setMinimum(0.);
+			//model
+			{
+				modelSamplingRate->setDecimals(0);
+				modelSamplingRate->setMaximum(static_cast<float>(modelObject->size()));
+				modelSamplingRate->setSingleStep(1.);
+				modelSamplingRate->setMinimum(0.);
+			}
+			//data
+			{
+				dataSamplingRate->setDecimals(0);
+				dataSamplingRate->setMaximum(static_cast<float>(dataObject->size()));
+				dataSamplingRate->setSingleStep(1.);
+				dataSamplingRate->setMinimum(0.);
+			}
 		}
 		break;
 	case OCTREE:
 		{
-			if (!modelObject->getOctree())
-				modelObject->computeOctree();
-			if (!dataObject->getOctree())
-				dataObject->computeOctree();
-			modelSamplingRate->setDecimals(0);
-			dataSamplingRate->setDecimals(0);
-			modelSamplingRate->setMaximum((double)CCLib::DgmOctree::MAX_OCTREE_LEVEL);
-			dataSamplingRate->setMaximum((double)CCLib::DgmOctree::MAX_OCTREE_LEVEL);
-			modelSamplingRate->setMinimum(1.);
-			dataSamplingRate->setMinimum(1.);
-			modelSamplingRate->setSingleStep(1.);
-			dataSamplingRate->setSingleStep(1.);
+			//model
+			{
+				if (!modelObject->getOctree())
+					modelObject->computeOctree();
+				modelSamplingRate->setDecimals(0);
+				modelSamplingRate->setMaximum(static_cast<double>(CCLib::DgmOctree::MAX_OCTREE_LEVEL));
+				modelSamplingRate->setMinimum(1.);
+				modelSamplingRate->setSingleStep(1.);
+			}
+			//data
+			{
+				if (!dataObject->getOctree())
+					dataObject->computeOctree();
+				dataSamplingRate->setDecimals(0);
+				dataSamplingRate->setMaximum(static_cast<double>(CCLib::DgmOctree::MAX_OCTREE_LEVEL));
+				dataSamplingRate->setMinimum(1.);
+				dataSamplingRate->setSingleStep(1.);
+			}
 		}
 		break;
 	default:
 		{
-			modelSamplingRate->setDecimals(2);
-			dataSamplingRate->setDecimals(2);
-			modelSamplingRate->setMaximum(100.);
-			dataSamplingRate->setMaximum(100.);
-			modelSamplingRate->setSingleStep(0.01);
-			dataSamplingRate->setSingleStep(0.01);
-			modelSamplingRate->setMinimum(0.);
-			dataSamplingRate->setMinimum(0.);
+			//model
+			{
+				modelSamplingRate->setDecimals(2);
+				modelSamplingRate->setMaximum(100.);
+				modelSamplingRate->setSingleStep(0.01);
+				modelSamplingRate->setMinimum(0.);
+			}
+			//data
+			{
+				dataSamplingRate->setDecimals(2);
+				dataSamplingRate->setMaximum(100.);
+				dataSamplingRate->setSingleStep(0.01);
+				dataSamplingRate->setMinimum(0.);
+			}
 		}
 		break;
 	}
 
 	if (index == NONE)
 	{
+		//model
 		modelSample->setSliderPosition(modelSample->maximum());
-		dataSample->setSliderPosition(dataSample->maximum());
 		modelSample->setEnabled(false);
-		dataSample->setEnabled(false);
 		modelSamplingRate->setEnabled(false);
+		//data
+		dataSample->setSliderPosition(dataSample->maximum());
+		dataSample->setEnabled(false);
 		dataSamplingRate->setEnabled(false);
 	}
 	else
 	{
+		//model
 		modelSample->setEnabled(true);
-		dataSample->setEnabled(true);
 		modelSamplingRate->setEnabled(true);
+		//data
+		dataSample->setEnabled(true);
 		dataSamplingRate->setEnabled(true);
 	}
 

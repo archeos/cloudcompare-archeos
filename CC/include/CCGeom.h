@@ -51,14 +51,42 @@ public:
 	inline Tuple3Tpl(Type a, Type b, Type c) : x(a),y(b),z(c) {}
 
 	//! Constructor from an array of 3 elements
-	inline Tuple3Tpl(const Type p[]) : x(p[0]),y(p[1]),z(p[2]) {}
+	inline explicit Tuple3Tpl(const Type p[]) : x(p[0]),y(p[1]),z(p[2]) {}
 	
 	//! Copy constructor
 	inline Tuple3Tpl(const Tuple3Tpl& v) : x(v.x),y(v.y),z(v.z) {}
+
+	//! Inverse operator
+	inline Tuple3Tpl operator - () const { Tuple3Tpl V(-x,-y,-z); return V; }
+	//! In-place addition operator
+	inline Tuple3Tpl& operator += (const Tuple3Tpl& v) { x+=v.x; y+=v.y; z+=v.z; return *this; }
+	//! In-place substraction operator
+	inline Tuple3Tpl& operator -= (const Tuple3Tpl& v) { x-=v.x; y-=v.y; z-=v.z; return *this; }
+	//! In-place multiplication (by a scalar) operator
+	inline Tuple3Tpl& operator *= (Type v) { x*=v; y*=v; z*=v; return *this; }
+	//! In-place division (by a scalar) operator
+	inline Tuple3Tpl& operator /= (Type v) { x/=v; y/=v; z/=v; return *this; }
+	//! Addition operator
+	inline Tuple3Tpl operator + (const Tuple3Tpl& v) const { return Tuple3Tpl(x+v.x, y+v.y, z+v.z); }
+	//! Substraction operator
+	inline Tuple3Tpl operator - (const Tuple3Tpl& v) const { return Tuple3Tpl(x-v.x, y-v.y, z-v.z); }
+	//! Multiplication operator
+	inline Tuple3Tpl operator * (Type s) const { return Tuple3Tpl(x*s, y*s, z*s); }
+	//! Division operator
+	inline Tuple3Tpl operator / (Type s) const { return Tuple3Tpl(x/s, y/s, z/s); }
 };
 
+//! Tuple of 3 unsigned bytes
+typedef Tuple3Tpl<unsigned char> Tuple3ub;
+//! Tuple of 3 short values
+typedef Tuple3Tpl<short> Tuple3s;
+//! Tuple of 3 int values
+typedef Tuple3Tpl<int> Tuple3i;
+//! Tuple of 3 unsigned int values
+typedef Tuple3Tpl<unsigned int> Tuple3ui;
+
 //! 3D Vector (templated version)
-template <class Type> class Vector3Tpl : public Tuple3Tpl<Type>
+template <typename Type> class Vector3Tpl : public Tuple3Tpl<Type>
 {
 public:
 
@@ -80,7 +108,7 @@ public:
 	inline Vector3Tpl(Type _x, Type _y, Type _z) : Tuple3Tpl<Type>(_x,_y,_z) {}
 
 	//! Constructor from an array of 3 elements
-	inline Vector3Tpl(const Type p[]) : Tuple3Tpl<Type>(p) {}
+	inline explicit Vector3Tpl(const Type p[]) : Tuple3Tpl<Type>(p) {}
 	
 	//! Copy constructor
 	inline Vector3Tpl(const Vector3Tpl& v) : Tuple3Tpl<Type>(v) {}
@@ -93,19 +121,19 @@ public:
 	static inline Vector3Tpl fromArray(const double a[3]) { return Vector3Tpl(static_cast<Type>(a[0]),static_cast<Type>(a[1]),static_cast<Type>(a[2])); }
 
 	//! Dot product
-	inline Type dot(const Vector3Tpl& v) const { return (x*v.x)+(y*v.y)+(z*v.z); }
+	inline Type dot(const Vector3Tpl& v) const { return x*v.x + y*v.y + z*v.z; }
 	//! Cross product
 	inline Vector3Tpl cross(const Vector3Tpl &v) const { return Vector3Tpl((y*v.z)-(z*v.y), (z*v.x)-(x*v.z), (x*v.y)-(y*v.x)); }
 	//! Returns vector square norm
-	inline Type norm2() const { return (x*x)+(y*y)+(z*z); }
+	inline Type norm2() const { return x*x + y*y + z*z; }
 	//! Returns vector square norm (forces double precision output)
-	inline double norm2d() const { return static_cast<double>(x)*static_cast<double>(x) + static_cast<double>(y)*static_cast<double>(y) + static_cast<double>(z)*static_cast<double>(z); }
+	inline double norm2d() const { return static_cast<double>(x)*x + static_cast<double>(y)*y + static_cast<double>(z)*z; }
 	//! Returns vector norm
-	inline Type norm() const { return sqrt(norm2()); }
+	inline Type norm() const { return static_cast<Type>(sqrt(norm2d())); }
 	//! Returns vector norm (forces double precision output)
 	inline double normd() const { return sqrt(norm2d()); }
 	//! Sets vector norm to unity
-	inline void normalize() { Type n = norm2(); if (n>0) *this /= sqrt(n); }
+	inline void normalize() { double n = norm2d(); if (n>0) *this /= static_cast<Type>(sqrt(n)); }
 	//! Returns a normalized vector which is orthogonal to this one
 	inline Vector3Tpl orthogonal() const { Vector3Tpl ort; vorthogonal(u, ort.u); return ort; }
 
@@ -176,12 +204,13 @@ public:
 
 };
 
-// Multiplication of a 3D vector by a scalar (front) operator
-inline Vector3Tpl<float> operator * (float s, const Vector3Tpl<float> &v) {return v*s;}
-inline Vector3Tpl<double> operator * (double s, const Vector3Tpl<double> &v) {return v*s;}
+//! Multiplication of a 3D vector by a scalar (front) operator (float version)
+inline Vector3Tpl<float> operator * (float s, const Vector3Tpl<float> &v) { return v*s; }
+// Multiplication of a 3D vector by a scalar (front) operator (double version)
+inline Vector3Tpl<double> operator * (double s, const Vector3Tpl<double> &v) { return v*s; }
 
 //! 2D Vector
-template <class Type> class Vector2Tpl
+template <typename Type> class Vector2Tpl
 {
 public:
 
@@ -198,7 +227,7 @@ public:
 	/** Inits vector to (0,0).
 		\param s default init value for both coordinates
 	**/
-	inline Vector2Tpl(Type s = 0) : x(s), y(s) {}
+	inline explicit Vector2Tpl(Type s = 0) : x(s), y(s) {}
 
 	//! Constructor from a couple of coordinates
 	/** Inits vector to (x,y).
@@ -219,6 +248,10 @@ public:
 
 	//! Dot product
 	inline Type dot(const Vector2Tpl& v) const { return (x*v.x)+(y*v.y); }
+	//! Cross product
+	/** \return a positive value if (u,v) makes a counter-clockwise turn, negative for clockwise turn, and zero if the vectors are parallel
+	**/
+	inline Type cross(const Vector2Tpl& v) const { return x * v.y - y * v.x; }
 
 	//! Inverse operator
 	inline Vector2Tpl& operator - () {x=-x; y=-y; return *this;}
@@ -254,6 +287,9 @@ typedef Vector3Tpl<double> CCVector3d;
 
 //! Default 2D Vector
 typedef Vector2Tpl<PointCoordinateType> CCVector2;
+
+//! Double 2D Vector
+typedef Vector2Tpl<double> CCVector2d;
 
 //! Int 2D Vector
 typedef Vector2Tpl<int> CCVector2i;

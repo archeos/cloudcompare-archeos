@@ -34,7 +34,7 @@ class QCC_IO_LIB_API AsciiSaveDlg : public QDialog
 public:
 
 	//! Default constructor
-	AsciiSaveDlg(QWidget* parent = 0);
+	explicit AsciiSaveDlg(QWidget* parent = 0);
 
 	//! Destructor
 	virtual ~AsciiSaveDlg();
@@ -50,7 +50,7 @@ public:
 	void enableSavePointCountHeader(bool state);
 
 	//! Returns separator
-	uchar getSeparator() const;
+	unsigned char getSeparator() const;
 
 	//! Set separator (index)
 	/** 0 = space

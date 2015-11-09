@@ -179,6 +179,12 @@ bool WeibullDistribution::computeParameters(const GenericCloud* cloud)
 	ScalarType maxValue = 0;
 	ScalarFieldTools::computeScalarFieldExtremas(cloud, valueShift, maxValue);
 
+	if (!ScalarField::ValidValue(valueShift))
+	{
+		//sf is only composed of NAN values?!
+		return false;
+	}
+
 	valueShift -= static_cast<ScalarType>(ZERO_TOLERANCE);
 
 	if (maxValue <= valueShift)
@@ -425,7 +431,7 @@ bool WeibullDistribution::setChi2ClassesPositions(unsigned numberOfClasses)
 	{
 		chi2ClassesPositions.resize(numberOfClasses-1);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not engouh memory
 		return false;

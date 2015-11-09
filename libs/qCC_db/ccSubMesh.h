@@ -33,7 +33,7 @@ class QCC_DB_LIB_API ccSubMesh : public ccGenericMesh
 public:
 
 	//! Default constructor
-	ccSubMesh(ccMesh* parentMesh);
+	explicit ccSubMesh(ccMesh* parentMesh);
 	//! Destructor
 	virtual ~ccSubMesh();
 
@@ -41,7 +41,7 @@ public:
 	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::SUB_MESH; }
 
 	//inherited methods (ccHObject)
-	virtual ccBBox getMyOwnBB();
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
 	virtual bool isSerializable() const { return true; }
 
 	//inherited methods (ccGenericMesh)
@@ -49,9 +49,9 @@ public:
 	//virtual ccGenericMesh* clone(ccGenericPointCloud* vertices = 0, ccMaterialSet* clonedMaterials = 0, NormsIndexesTableType* clonedNormsTable = 0, TextureCoordsContainer* cloneTexCoords =0);
 	virtual void refreshBB();
 	virtual bool interpolateNormals(unsigned triIndex, const CCVector3& P, CCVector3& N);
-	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, colorType rgb[]);
-	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, colorType rgb[], bool interpolateColorIfNoTexture);
-	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, colorType rgb[], bool returnColorIfNoTexture);
+	virtual bool interpolateColors(unsigned triIndex, const CCVector3& P, ccColor::Rgb& rgb);
+	virtual bool getColorFromMaterial(unsigned triIndex, const CCVector3& P, ccColor::Rgb& rgb, bool interpolateColorIfNoTexture);
+	virtual bool getVertexColorFromMaterial(unsigned triIndex, unsigned char vertIndex, ccColor::Rgb& rgb, bool returnColorIfNoTexture);
 	virtual bool hasMaterials() const;
 	virtual const ccMaterialSet* getMaterialSet() const;
 	virtual int getTriangleMtlIndex(unsigned triangleIndex) const;
@@ -64,7 +64,7 @@ public:
 	virtual void getTriangleNormalIndexes(unsigned triangleIndex, int& i1, int& i2, int& i3) const;
 	virtual bool getTriangleNormals(unsigned triangleIndex, CCVector3& Na, CCVector3& Nb, CCVector3& Nc) const;
 	virtual NormsIndexesTableType* getTriNormsTable() const;
-	virtual unsigned maxSize() const;
+	virtual unsigned capacity() const;
 
 	//inherited methods (ccDrawableObject)
 	virtual bool hasColors() const;
@@ -75,14 +75,14 @@ public:
 
 	//inherited methods (GenericIndexedMesh)
 	inline virtual unsigned size() const { return m_triIndexes->currentSize(); }
-	virtual void forEach(genericTriangleAction& anAction);
+	virtual void forEach(genericTriangleAction& action);
 	inline virtual void placeIteratorAtBegining() { m_globalIterator = 0; }
 	virtual CCLib::GenericTriangle* _getNextTriangle(); //temporary object
 	virtual CCLib::GenericTriangle* _getTriangle(unsigned index); //temporary object
-	virtual CCLib::TriangleSummitsIndexes* getNextTriangleIndexes();
-	virtual CCLib::TriangleSummitsIndexes* getTriangleIndexes(unsigned triangleIndex);
-	virtual void getTriangleSummits(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C);
-	virtual void getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[]);
+	virtual CCLib::VerticesIndexes* getNextTriangleVertIndexes();
+	virtual CCLib::VerticesIndexes* getTriangleVertIndexes(unsigned triangleIndex);
+	virtual void getTriangleVertices(unsigned triangleIndex, CCVector3& A, CCVector3& B, CCVector3& C);
+	virtual void getBoundingBox(CCVector3& bbMin, CCVector3& bbMax);
 
 	//! Returns global index (i.e. relative to the associated mesh) of a given element
 	/** \param localIndex local index (i.e. relative to the internal index container)

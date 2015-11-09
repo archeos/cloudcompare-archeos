@@ -41,7 +41,7 @@ void main (void)
 		//neighbor position (X)
         coordi.x = float(c)/SX;
 		int cabs;
-		if (cabs < 0)
+		if (c < 0)
 			cabs = -c;
 		else
 			cabs = c;
@@ -56,7 +56,7 @@ void main (void)
 
             //pixel distance based damping
 			int dabs;
-			if (dabs < 0)
+			if (d < 0)
 				dabs = -d;
 			else
 				dabs = d;

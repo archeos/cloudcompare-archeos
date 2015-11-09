@@ -105,7 +105,7 @@ public:
 	//! Default constructor
 	/** \param parent parent widget
 	**/
-	AsciiOpenDlg(QWidget* parent = 0);
+	explicit AsciiOpenDlg(QWidget* parent = 0);
 
 	//! Default destructor
 	virtual ~AsciiOpenDlg();
@@ -149,7 +149,7 @@ public:
 	unsigned getSkippedLinesCount() const { return m_skippedLines; }
 
 	//! Returns user selected separator
-	uchar getSeparator() const { return m_separator.cell(); }
+	unsigned char getSeparator() const { return m_separator.cell(); }
 
 	//! Returns roughly estimated average line size (in bytes)
 	double getAverageLineSize() const { return m_averageLineSize; }

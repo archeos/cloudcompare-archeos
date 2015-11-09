@@ -39,6 +39,7 @@
 //dialogs
 #include <ccDisplayOptionsDlg.h>
 #include <ccCameraParamEditDlg.h>
+#include <ccStereoModeDlg.h>
 
 //qCC_db
 #include <ccHObjectCaster.h>
@@ -55,7 +56,7 @@
 #include <assert.h>
 
 //! Current version
-const double CC_VIEWER_VERSION = 1.32;
+const double CC_VIEWER_VERSION = 1.35;
 const QString CC_VIEWER_VERSION_STR = QString::number(CC_VIEWER_VERSION,'f',2);
 
 //Camera parameters dialog
@@ -72,14 +73,18 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 	setWindowTitle(QString("ccViewer V%1").arg(CC_VIEWER_VERSION_STR));
 
 	//insert GL window in a vertical layout
-	QVBoxLayout* verticalLayout_2 = new QVBoxLayout(ui.GLframe);
-	verticalLayout_2->setSpacing(0);
-	const int margin = 10;
-	verticalLayout_2->setContentsMargins(margin,margin,margin,margin);
-	QGLFormat format;
-	format.setSwapInterval(0);
-	m_glWindow = new ccGLWindow(ui.GLframe,format);
-	verticalLayout_2->addWidget(m_glWindow);
+	{
+		QVBoxLayout* verticalLayout = new QVBoxLayout(ui.GLframe);
+		verticalLayout->setSpacing(0);
+		const int margin = 10;
+		verticalLayout->setContentsMargins(margin,margin,margin,margin);
+		QGLFormat format = QGLFormat::defaultFormat();
+		format.setStereo(true);
+		format.setDoubleBuffer(true);
+		//format.setSwapInterval(1);
+		m_glWindow = new ccGLWindow(ui.GLframe,format);
+		verticalLayout->addWidget(m_glWindow);
+	}
 
 	updateGLFrameGradient();
 
@@ -99,8 +104,9 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 #endif
 
 	//Signals & slots connection
-	connect(m_glWindow,								SIGNAL(filesDropped(const QStringList&)),			this,		SLOT(addToDB(const QStringList&)));
-	connect(m_glWindow,								SIGNAL(entitySelectionChanged(int)),				this,		SLOT(selectEntity(int)));
+	connect(m_glWindow,								SIGNAL(filesDropped(QStringList)),			this,		SLOT(addToDB(QStringList)));
+	connect(m_glWindow,								SIGNAL(entitySelectionChanged(int)),		this,		SLOT(selectEntity(int)));
+	connect(m_glWindow,								SIGNAL(exclusiveFullScreenToggled(bool)),	this,		SLOT(onExclusiveFullScreenToggled(bool)));
 	//connect(m_glWindow,							SIGNAL(entitiesSelectionChanged(std::set<int>)),	this,		SLOT(selectEntities(std::set<int>))); //not supported!
 	//connect(m_glWindow,							SIGNAL(newLabel(ccHObject*),						this,		SLOT(handleNewEntity(ccHObject*))); //nothing to do in ccViewer!
 
@@ -132,12 +138,14 @@ ccViewer::ccViewer(QWidget *parent, Qt::WindowFlags flags)
 	connect(ui.actionToggleCustomLight,				SIGNAL(toggled(bool)),						this,	SLOT(toggleCustomLight(bool)));
 	//"Options" menu
 	connect(ui.actionGlobalZoom,					SIGNAL(triggered()),						this,	SLOT(setGlobalZoom()));
+	connect(ui.actionEnableStereo,					SIGNAL(toggled(bool)),						this,	SLOT(toggleStereoMode(bool)));
 	connect(ui.actionFullScreen,					SIGNAL(toggled(bool)),						this,	SLOT(toggleFullScreen(bool)));
 	connect(ui.actionLockRotationVertAxis,			SIGNAL(triggered()),						this,	SLOT(toggleRotationAboutVertAxis()));
 
 	//"Options > Selected" menu
 	connect(ui.actionShowColors,					SIGNAL(toggled(bool)),						this,	SLOT(toggleColorsShown(bool)));
 	connect(ui.actionShowNormals,					SIGNAL(toggled(bool)),						this,	SLOT(toggleNormalsShown(bool)));
+	connect(ui.actionShowMaterials,					SIGNAL(toggled(bool)),						this,	SLOT(toggleMaterialsShown(bool)));
 	connect(ui.actionShowScalarField,				SIGNAL(toggled(bool)),						this,	SLOT(toggleScalarShown(bool)));
 	connect(ui.actionShowColorRamp,					SIGNAL(toggled(bool)),						this,	SLOT(toggleColorbarShown(bool)));
 	connect(ui.actionZoomOnSelectedEntity,			SIGNAL(triggered()),						this,	SLOT(zoomOnSelectedEntity()));
@@ -168,7 +176,7 @@ ccViewer::~ccViewer()
 	if (currentRoot)
 	{
 		m_glWindow->setSceneDB(0);
-		m_glWindow->redraw();
+		//m_glWindow->redraw();
 		delete currentRoot;
 	}
 }
@@ -375,6 +383,7 @@ void ccViewer::selectEntity(int uniqueID)
 
 		ui.actionShowColors->blockSignals(true);
 		ui.actionShowNormals->blockSignals(true);
+		ui.actionShowMaterials->blockSignals(true);
 		ui.actionShowScalarField->blockSignals(true);
 		ui.actionShowColorRamp->blockSignals(true);
 
@@ -382,6 +391,18 @@ void ccViewer::selectEntity(int uniqueID)
 		ui.actionShowColors->setChecked(toSelect->colorsShown());
 		ui.actionShowNormals->setEnabled(toSelect->hasNormals());
 		ui.actionShowNormals->setChecked(toSelect->normalsShown());
+
+		if (toSelect->isKindOf(CC_TYPES::MESH))
+		{
+			ccGenericMesh* mesh = static_cast<ccGenericMesh*>(toSelect);
+			ui.actionShowMaterials->setEnabled(mesh->hasMaterials());
+			ui.actionShowMaterials->setChecked(mesh->materialsShown());
+		}
+		else
+		{
+			ui.actionShowMaterials->setEnabled(false);
+			ui.actionShowMaterials->setChecked(false);
+		}
 
 		ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(toSelect);
 		bool hasSF = (cloud ? cloud->hasScalarFields() : false);
@@ -411,6 +432,7 @@ void ccViewer::selectEntity(int uniqueID)
 
 		ui.actionShowColors->blockSignals(false);
 		ui.actionShowNormals->blockSignals(false);
+		ui.actionShowMaterials->blockSignals(false);
 		ui.actionShowScalarField->blockSignals(false);
 		ui.actionShowColorRamp->blockSignals(false);
 
@@ -419,41 +441,6 @@ void ccViewer::selectEntity(int uniqueID)
 
 	m_glWindow->redraw();
 }
-
-//not supported!
-//void ccViewer::selectEntities(std::set<int> entIDs)
-//{
-//	ccHObject* currentRoot = m_glWindow->getSceneDB();
-//	if (!currentRoot)
-//		return;
-//
-//	//convert input list of IDs to proper entities
-//	ccHObject::Container entities;
-//	size_t labelCount = 0;
-//	{
-//		try
-//		{
-//			entities.reserve(entIDs.size());
-//		}
-//		catch(std::bad_alloc)
-//		{
-//			ccLog::Error("[ccViewer::selectEntities] Not enough memory!");
-//			return;
-//		}
-//
-//		for (std::set<int>::const_iterator it = entIDs.begin(); it != entIDs.end(); ++it)
-//		{
-//			ccHObject* obj = currentRoot->find(*it);
-//			if (obj)
-//			{
-//				entities.push_back(obj);
-//				if (obj->isA(CC_TYPES::LABEL_2D))
-//					++labelCount;
-//			}
-//		}
-//	}
-//
-//}
 
 bool ccViewer::checkForLoadedEntities()
 {
@@ -486,17 +473,26 @@ void ccViewer::updateDisplay()
 void ccViewer::updateGLFrameGradient()
 {
 	//display parameters
-	const unsigned char* bkgCol = m_glWindow->getDisplayParameters().backgroundCol;
-	const unsigned char* forCol = m_glWindow->getDisplayParameters().pointsDefaultCol;
+	static const ccColor::Rgbub s_black(0,0,0);
+	static const ccColor::Rgbub s_white(255,255,255);
+	bool stereoModeEnabled = m_glWindow->stereoModeIsEnabled();
+	const ccColor::Rgbub& bkgCol = stereoModeEnabled ? s_black : m_glWindow->getDisplayParameters().backgroundCol;
+	const ccColor::Rgbub& forCol = stereoModeEnabled ? s_white : m_glWindow->getDisplayParameters().pointsDefaultCol;
 
-	glColor3ubv(bkgCol);
-	glColor3ub(255-forCol[0],255-forCol[1],255-forCol[2]);
+	glColor3ubv(bkgCol.rgb);
+	glColor3ub(255-forCol.r,255-forCol.g,255-forCol.b);
 
-	QString styleSheet = QString("QFrame{border: 2px solid white; border-radius: 10px; background: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 rgb(%1,%2,%3), stop:1 rgb(%4,%5,%6));}").arg(bkgCol[0]).arg(bkgCol[1]).arg(bkgCol[2]).arg(255-forCol[0]).arg(255-forCol[1]).arg(255-forCol[2]);
+	QString styleSheet = QString("QFrame{border: 2px solid white; border-radius: 10px; background: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 rgb(%1,%2,%3), stop:1 rgb(%4,%5,%6));}")
+								.arg(bkgCol.r)
+								.arg(bkgCol.g)
+								.arg(bkgCol.b)
+								.arg(255-forCol.r)
+								.arg(255-forCol.g)
+								.arg(255-forCol.b);
 	ui.GLframe->setStyleSheet(styleSheet);
 }
 
-void ccViewer::addToDB(const QStringList& filenames)
+void ccViewer::addToDB(QStringList filenames)
 {
 	ccHObject* currentRoot = m_glWindow->getSceneDB();
 	if (currentRoot)
@@ -617,10 +613,33 @@ void ccViewer::reflectPerspectiveState()
 	ui.actionSetViewerPerspectiveView->setChecked(perspectiveEnabled && !objectCentered);
 }
 
+
+bool ccViewer::checkStereoMode()
+{
+	if (	m_glWindow
+		&&	m_glWindow->getViewportParameters().perspectiveView
+		&&	m_glWindow->stereoModeIsEnabled())
+	{
+		if (QMessageBox::question(this,"Stereo mode", "Stereo-mode only works in perspective mode. Do you want to disable it?", QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+		{
+			return false;
+		}
+		else
+		{
+			toggleStereoMode(false);
+		}
+	}
+
+	return true;
+}
+
+
 void ccViewer::setOrthoView()
 {
 	if (m_glWindow)
 	{
+		if (!checkStereoMode())
+			return;
 		m_glWindow->setPerspectiveState(false,true);
 		m_glWindow->redraw();
 	}
@@ -712,15 +731,88 @@ void ccViewer::toggleCustomLight(bool state)
 	reflectLightsState();
 }
 
+void ccViewer::toggleStereoMode(bool state)
+{
+	if (!m_glWindow)
+		return;
+
+	bool isActive = m_glWindow->stereoModeIsEnabled();
+	if (isActive == state)
+	{
+		//nothing to do
+		return;
+	}
+
+	if (isActive)
+	{
+		m_glWindow->disableStereoMode();
+	}
+	else
+	{
+		//display a parameters dialog
+		ccStereoModeDlg smDlg(this);
+		smDlg.setParameters(m_glWindow->getStereoParams());
+		if (!smDlg.exec())
+		{
+			//cancelled by the user
+			ui.actionEnableStereo->blockSignals(true);
+			ui.actionEnableStereo->setChecked(false);
+			ui.actionEnableStereo->blockSignals(false);
+			return;
+		}
+
+		//force perspective state!
+		if (!m_glWindow->getViewportParameters().perspectiveView)
+		{
+			m_glWindow->setPerspectiveState(true,true);
+			reflectPerspectiveState();
+		}
+
+		ccGLWindow::StereoParams params = smDlg.getParameters();
+
+		if (params.glassType == ccGLWindow::StereoParams::NVIDIA_VISION)
+		{
+			//force full screen
+			ui.actionFullScreen->setChecked(true);
+		}
+
+		if (!m_glWindow->enableStereoMode(params))
+		{
+			//activation of the stereo mode failed: cancel selection
+			ui.actionEnableStereo->blockSignals(true);
+			ui.actionEnableStereo->setChecked(false);
+			ui.actionEnableStereo->blockSignals(false);
+		}
+	}
+
+	updateDisplay();
+}
+
 void ccViewer::toggleFullScreen(bool state)
 {
-	if (state)
-		showFullScreen();
-	else
-		showNormal();
-
 	if (m_glWindow)
-		m_glWindow->redraw();
+	{
+		if (m_glWindow->stereoModeIsEnabled() && m_glWindow->getStereoParams().glassType == ccGLWindow::StereoParams::NVIDIA_VISION)
+		{
+			//auto disable stereo mode as NVidia Vision only works in full screen mode!
+			ui.actionEnableStereo->setChecked(false);
+		}
+
+		m_glWindow->toggleExclusiveFullScreen(state);
+	}
+}
+
+void ccViewer::onExclusiveFullScreenToggled(bool state)
+{
+	ui.actionFullScreen->blockSignals(true);
+	ui.actionFullScreen->setChecked(m_glWindow ? m_glWindow->exclusiveFullScreen() : false);
+	ui.actionFullScreen->blockSignals(false);
+
+	if (!state && m_glWindow && m_glWindow->stereoModeIsEnabled() && m_glWindow->getStereoParams().glassType == ccGLWindow::StereoParams::NVIDIA_VISION)
+	{
+		//auto disable stereo mode as NVidia Vision only works in full screen mode!
+		ui.actionEnableStereo->setChecked(false);
+	}
 }
 
 void ccViewer::toggleRotationAboutVertAxis()
@@ -832,6 +924,15 @@ void ccViewer::toggleNormalsShown(bool state)
 	m_glWindow->redraw();
 }
 
+void ccViewer::toggleMaterialsShown(bool state)
+{
+	if (m_selectedObject && m_selectedObject->isKindOf(CC_TYPES::MESH))
+	{
+		static_cast<ccGenericMesh*>(m_selectedObject)->showMaterials(state);
+		m_glWindow->redraw();
+	}
+}
+
 void ccViewer::toggleScalarShown(bool state)
 {
 	if (!m_selectedObject)
@@ -850,7 +951,7 @@ void ccViewer::toggleColorbarShown(bool state)
 	if (!cloud)
 		return;
 	cloud->showSFColorsScale(state);
-	m_glWindow->updateGL();
+	m_glWindow->redraw(true, false);
 }
 
 void ccViewer::changeCurrentScalarField(bool state)
@@ -899,7 +1000,7 @@ void ccViewer::zoomOnSelectedEntity()
 	if (!m_glWindow || !m_selectedObject)
 		return;
 
-	ccBBox box = m_selectedObject->getBB(false, false, m_glWindow);
+	ccBBox box = m_selectedObject->getDisplayBB_recursive(false, m_glWindow);
 	m_glWindow->updateConstellationCenterAndZoom(&box);
 	m_glWindow->redraw();
 }
@@ -944,7 +1045,6 @@ void ccViewer::enable3DMouse(bool state)
 		m_3dMouseInput = new Mouse3DInput(this);
 		if (m_3dMouseInput->connect(this,"ccViewer"))
 		{
-			m_3dMouseInput = new Mouse3DInput(this);
 			QObject::connect(m_3dMouseInput, SIGNAL(sigMove3d(std::vector<float>&)),	this,	SLOT(on3DMouseMove(std::vector<float>&)));
 			QObject::connect(m_3dMouseInput, SIGNAL(sigReleased()),						this,	SLOT(on3DMouseReleased()));
 			QObject::connect(m_3dMouseInput, SIGNAL(sigOn3dmouseKeyDown(int)),			this,	SLOT(on3DMouseKeyDown(int)));

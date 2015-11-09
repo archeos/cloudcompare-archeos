@@ -19,8 +19,8 @@
 #include <BundlerFilter.h>
 #include <AsciiFilter.h>
 #include <FBXFilter.h>
-#include <PTXFilter.h>
 #include <BinFilter.h>
+#include <PlyFilter.h>
 
 //qCC
 #include "ccCommon.h"
@@ -29,6 +29,8 @@
 #include "mainwindow.h"
 #include "ccComparisonDlg.h"
 #include "ccRegistrationTools.h"
+#include "ccCropTool.h"
+#include "ccScalarFieldArithmeticsDlg.h"
 
 //Qt
 #include <QMessageBox>
@@ -39,6 +41,9 @@
 #include <QElapsedTimer>
 #include <QStringList>
 #include <QTextStream>
+
+//system
+#include <set>
 
 static const char COMMAND_SILENT_MODE[]						= "SILENT";
 static const char COMMAND_OPEN[]							= "O";				//+file name
@@ -69,7 +74,9 @@ static const char COMMAND_MERGE_CLOUDS[]					= "MERGE_CLOUDS";
 static const char COMMAND_STAT_TEST[]						= "STAT_TEST";
 static const char COMMAND_FILTER_SF_BY_VALUE[]				= "FILTER_SF";
 static const char COMMAND_CLEAR_CLOUDS[]					= "CLEAR_CLOUDS";
+static const char COMMAND_POP_CLOUDS[]						= "POP_CLOUDS";
 static const char COMMAND_CLEAR_MESHES[]					= "CLEAR_MESHES";
+static const char COMMAND_POP_MESHES[]						= "POP_MESHES";
 static const char COMMAND_CLEAR[]							= "CLEAR";
 static const char COMMAND_BEST_FIT_PLANE[]					= "BEST_FIT_PLANE";
 static const char COMMAND_BEST_FIT_PLANE_MAKE_HORIZ[]		= "MAKE_HORIZ";
@@ -79,28 +86,46 @@ static const char COMMAND_ICP[]								= "ICP";
 static const char COMMAND_ICP_REFERENCE_IS_FIRST[]			= "REFERENCE_IS_FIRST";
 static const char COMMAND_ICP_MIN_ERROR_DIIF[]				= "MIN_ERROR_DIFF";
 static const char COMMAND_ICP_ITERATION_COUNT[]				= "ITER";
+static const char COMMAND_ICP_OVERLAP[]						= "OVERLAP";
 static const char COMMAND_ICP_ADJUST_SCALE[]				= "ADJUST_SCALE";
 static const char COMMAND_ICP_RANDOM_SAMPLING_LIMIT[]		= "RANDOM_SAMPLING_LIMIT";
 static const char COMMAND_ICP_ENABLE_FARTHEST_REMOVAL[]		= "FARTHEST_REMOVAL";
+static const char COMMAND_ICP_USE_MODEL_SF_AS_WEIGHT[]		= "MODEL_SF_AS_WEIGHTS";
+static const char COMMAND_ICP_USE_DATA_SF_AS_WEIGHT[]		= "DATA_SF_AS_WEIGHTS";
 static const char COMMAND_CLOUD_EXPORT_FORMAT[]				= "C_EXPORT_FMT";
 static const char COMMAND_ASCII_EXPORT_PRECISION[]			= "PREC";
 static const char COMMAND_ASCII_EXPORT_SEPARATOR[]			= "SEP";
+static const char COMMAND_ASCII_EXPORT_ADD_COL_HEADER[]		= "ADD_HEADER";
+static const char COMMAND_ASCII_EXPORT_ADD_PTS_COUNT[]		= "ADD_PTS_COUNT";
+static const char COMMAND_PLY_EXPORT_FORMAT[]				= "PLY_EXPORT_FMT";
 static const char COMMAND_FBX_EXPORT_FORMAT[]				= "FBX_EXPORT_FMT";
 static const char COMMAND_MESH_EXPORT_FORMAT[]				= "M_EXPORT_FMT";
 static const char COMMAND_EXPORT_EXTENSION[]				= "EXT";
 static const char COMMAND_NO_TIMESTAMP[]					= "NO_TIMESTAMP";
 static const char COMMAND_CROP[]							= "CROP";
 static const char COMMAND_CROP_2D[]							= "CROP2D";
+static const char COMMAND_COLOR_BANDING[]					= "CBANDING";
 static const char COMMAND_CROP_OUTSIDE[]					= "OUTSIDE";
 static const char COMMAND_SAVE_CLOUDS[]						= "SAVE_CLOUDS";
 static const char COMMAND_SAVE_MESHES[]						= "SAVE_MESHES";
 static const char COMMAND_AUTO_SAVE[]						= "AUTO_SAVE";
 static const char COMMAND_SET_ACTIVE_SF[]					= "SET_ACTIVE_SF";
-static const char COMMAND_PTX_COMPUTE_NORMALS[]				= "COMPUTE_PTX_NORMALS";
+static const char COMMAND_REMOVE_ALL_SFS[]					= "REMOVE_ALL_SFS";
+static const char COMMAND_COMPUTE_GRIDDED_NORMALS[]			= "COMPUTE_NORMALS";
+static const char COMMAND_APPLY_TRANSFORMATION[]			= "APPLY_TRANS";
+static const char COMMAND_DELAUNAY[]						= "DELAUNAY";
+static const char COMMAND_DELAUNAY_AA[]						= "AA";
+static const char COMMAND_DELAUNAY_BF[]						= "BEST_FIT";
+static const char COMMAND_DELAUNAY_MAX_EDGE_LENGTH[]		= "MAX_EDGE_LENGTH";
+static const char COMMAND_CROSS_SECTION[]					= "CROSS_SECTION";
+static const char COMMAND_LOG_FILE[]						= "LOG_FILE";
+static const char COMMAND_SF_ARITHMETIC[]					= "SF_ARITHMETIC";
+static const char COMMAND_SOR_FILTER[]						= "SOR";
 
 static const char OPTION_ALL_AT_ONCE[]						= "ALL_AT_ONCE";
 static const char OPTION_ON[]								= "ON";
 static const char OPTION_OFF[]								= "OFF";
+static const char OPTION_LAST[]								= "LAST";
 
 //Current cloud(s) export format (can be modified with the 'COMMAND_CLOUD_EXPORT_FORMAT' option)
 static QString s_CloudExportFormat(BinFilter::GetFileFilter());
@@ -138,7 +163,6 @@ struct CmdLineLoadParameters : public FileIOFilter::LoadParameters
 };
 static CmdLineLoadParameters s_loadParameters;
 
-
 bool IsCommand(const QString& token, const char* command)
 {
 	return token.startsWith("-") && token.mid(1).toUpper() == QString(command);
@@ -153,7 +177,7 @@ int ccCommandLineParser::Parse(int nargs, char** args)
 	}
 
 	//reset default behavior(s)
-	PTXFilter::SetNormalsComputationBehavior(PTXFilter::NEVER);
+	s_loadParameters.autoComputeNormals = false;
 	s_MeshExportFormat = s_CloudExportFormat = BinFilter::GetFileFilter();
 	s_MeshExportExt = s_CloudExportExt = BinFilter::GetDefaultExtension();
 	s_precision = 12;
@@ -219,6 +243,13 @@ static void Print(const QString& message)
 		printf("%s\n",qPrintable(message));
 }
 
+static void Warning(const QString& message)
+{
+	ccConsole::Warning(message);
+	if (s_silentMode)
+		printf("[WARNING] %s\n",qPrintable(message));
+}
+
 static bool Error(const QString& message)
 {
 	ccConsole::Error(message);
@@ -228,23 +259,28 @@ static bool Error(const QString& message)
 	return false;
 }
 
-void ccCommandLineParser::removeClouds()
+void ccCommandLineParser::removeClouds(bool onlyLast/*=false*/)
 {
 	while (!m_clouds.empty())
 	{
 		if (m_clouds.back().pc)
 			delete m_clouds.back().pc;
 		m_clouds.pop_back();
+		if (onlyLast)
+			break;
 	}
 }
 
-void ccCommandLineParser::removeMeshes()
+void ccCommandLineParser::removeMeshes(bool onlyLast/*=false*/)
 {
 	while (!m_meshes.empty())
 	{
-		if (m_meshes.back().mesh)
-			delete m_meshes.back().mesh;
+		MeshDesc& desc = m_meshes.back();
+		if (desc.mesh)
+			delete desc.mesh;
 		m_meshes.pop_back();
+		if (onlyLast)
+			break;
 	}
 }
 
@@ -254,9 +290,12 @@ bool ccCommandLineParser::saveClouds(QString suffix/*=QString()*/, bool allAtOnc
 	if (allAtOnce)
 	{
 		FileIOFilter::Shared filter = FileIOFilter::GetFilter(s_CloudExportFormat,false);
-		bool multiple = false, exclusive = true;
+		bool multiple = false;
 		if (filter)
+		{
+			bool exclusive = true;
 			filter->canSave(CC_TYPES::POINT_CLOUD,multiple,exclusive);
+		}
 		
 		if (multiple)
 		{
@@ -300,9 +339,12 @@ bool ccCommandLineParser::saveMeshes(QString suffix/*=QString()*/, bool allAtOnc
 	if (allAtOnce)
 	{
 		FileIOFilter::Shared filter = FileIOFilter::GetFilter(s_MeshExportFormat,false);
-		bool multiple = false, exclusive = true;
+		bool multiple = false;
 		if (filter)
+		{
+			bool exclusive = true;
 			filter->canSave(CC_TYPES::MESH,multiple,exclusive);
+		}
 		
 		if (multiple)
 		{
@@ -340,7 +382,8 @@ bool ccCommandLineParser::saveMeshes(QString suffix/*=QString()*/, bool allAtOnc
 	return true;
 }
 
-ccCommandLineParser::EntityDesc::EntityDesc(QString filename)
+ccCommandLineParser::EntityDesc::EntityDesc(QString filename, int _indexInFile/*=-1*/)
+	: indexInFile(-1)
 {
 	if (filename.isNull())
 	{
@@ -350,14 +393,15 @@ ccCommandLineParser::EntityDesc::EntityDesc(QString filename)
 	else
 	{
 		QFileInfo fi(filename);
-		basename = fi.baseName();
+		basename = fi.completeBaseName();
 		path = fi.path();
 	}
 }
 
-ccCommandLineParser::EntityDesc::EntityDesc(QString _basename, QString _path)
+ccCommandLineParser::EntityDesc::EntityDesc(QString _basename, QString _path, int _indexInFile/*=-1*/)
 	: basename(_basename)
 	, path(_path)
+	, indexInFile(_indexInFile)
 {
 }
 
@@ -378,20 +422,18 @@ QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QStrin
 	if (entName.isEmpty())
 		entName = entDesc.basename;
 
+	//sub-item?
+	if (entDesc.indexInFile >= 0)
+	{
+		if (suffix.isEmpty())
+			suffix = QString("%1").arg(entDesc.indexInFile);
+		else
+			suffix.prepend(QString("%1_").arg(entDesc.indexInFile));
+	}
+
 	//specific case: clouds
 	bool isCloud = entity->isA(CC_TYPES::POINT_CLOUD);
-	if (isCloud)
-	{
-		CloudDesc& cloudDesc = static_cast<CloudDesc&>(entDesc);
-		if (cloudDesc.indexInFile >= 0)
-		{
-			if (suffix.isEmpty())
-				suffix = QString("%1").arg(cloudDesc.indexInFile);
-			else
-				suffix.prepend(QString("%1_").arg(cloudDesc.indexInFile));
-		}
-	}
-	isCloud |= forceIsCloud; //don't force this before this point (static cast to CloudDesc above!)
+	isCloud |= forceIsCloud;
 
 	if (!suffix.isEmpty())
 		entName += QString("_") + suffix;
@@ -414,15 +456,48 @@ QString ccCommandLineParser::Export(EntityDesc& entDesc, QString suffix/*=QStrin
 	if (!entDesc.path.isEmpty())
 		outputFilename.prepend(QString("%1/").arg(entDesc.path));
 
-	//save file
-	if (FileIOFilter::SaveToFile(	entity,
-									qPrintable(outputFilename),
-									isCloud ? s_CloudExportFormat : s_MeshExportFormat) != CC_FERR_NO_ERROR)
+	bool tempDependencyCreated = false;
+	ccGenericMesh* mesh = 0;
+	if (entity->isKindOf(CC_TYPES::MESH))
 	{
-		return QString("Failed to save result in file '%1'").arg(outputFilename);
+		mesh = static_cast<ccGenericMesh*>(entity);
+		ccGenericPointCloud* vertices = mesh->getAssociatedCloud();
+		//we must save the vertices cloud as well if it's not a child of the mesh!
+		if (vertices && !mesh->isAncestorOf(vertices))
+		{
+			//we save the cloud first!
+			vertices->addChild(mesh,ccHObject::DP_NONE); //we simply add a fake dependency
+			entity = vertices;
+			tempDependencyCreated = true;
+		}
 	}
 
-	return QString();
+	//save file
+	FileIOFilter::SaveParameters parameters;
+	{
+		//no dialog by default for command line mode!
+		parameters.alwaysDisplaySaveDialog = false;
+	}
+
+	CC_FILE_ERROR result = FileIOFilter::SaveToFile(entity,
+													qPrintable(outputFilename),
+													parameters,
+													isCloud ? s_CloudExportFormat : s_MeshExportFormat);
+
+	//restore input state!
+	if (tempDependencyCreated)
+	{
+		if (mesh && entity)
+		{
+			entity->detachChild(mesh);
+		}
+		else
+		{
+			assert(false);
+		}
+	}
+
+	return (result != CC_FERR_NO_ERROR ? QString("Failed to save result in file '%1'").arg(outputFilename) : QString());
 }
 
 bool ccCommandLineParser::commandLoad(QStringList& arguments)
@@ -442,12 +517,12 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: number of lines after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+				return Error(QString("Missing parameter: number of lines after '%1'").arg(COMMAND_OPEN_SKIP_LINES));
 
 			bool ok;
 			skipLines = arguments.takeFirst().toInt(&ok);
 			if (!ok)
-				return Error(QString(QString("Invalid parameter: number of lines after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+				return Error(QString("Invalid parameter: number of lines after '%1'").arg(COMMAND_OPEN_SKIP_LINES));
 			
 			Print(QString("Will skip %1 lines").arg(skipLines));
 		}
@@ -457,7 +532,7 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: global shift vector or %1 after '%2'").arg(COMMAND_KEYWORD_AUTO).arg(COMMAND_OPEN_SHIFT_ON_LOAD)));
+				return Error(QString("Missing parameter: global shift vector or %1 after '%2'").arg(COMMAND_KEYWORD_AUTO).arg(COMMAND_OPEN_SHIFT_ON_LOAD));
 
 			QString firstParam = arguments.takeFirst();
 
@@ -472,7 +547,7 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 			}
 			else if (arguments.size() < 2)
 			{
-				return Error(QString(QString("Missing parameter: global shift vector after '%1' (3 values expected)").arg(COMMAND_OPEN_SHIFT_ON_LOAD)));
+				return Error(QString("Missing parameter: global shift vector after '%1' (3 values expected)").arg(COMMAND_OPEN_SHIFT_ON_LOAD));
 			}
 			else
 			{
@@ -480,13 +555,13 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 				CCVector3d shiftOnLoadVec;
 				shiftOnLoadVec.x = firstParam.toDouble(&ok);
 				if (!ok)
-					return Error(QString(QString("Invalid parameter: X coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+					return Error(QString("Invalid parameter: X coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES));
 				shiftOnLoadVec.y = arguments.takeFirst().toDouble(&ok);
 				if (!ok)
-					return Error(QString(QString("Invalid parameter: Y coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+					return Error(QString("Invalid parameter: Y coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES));
 				shiftOnLoadVec.z = arguments.takeFirst().toDouble(&ok);
 				if (!ok)
-					return Error(QString(QString("Invalid parameter: Z coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES)));
+					return Error(QString("Invalid parameter: Z coordinate of the global shift vector after '%1'").arg(COMMAND_OPEN_SKIP_LINES));
 
 				//set the user defined shift vector as default shift information
 				s_loadParameters.m_coordinatesShiftEnabled = true;
@@ -514,27 +589,86 @@ bool ccCommandLineParser::commandLoad(QStringList& arguments)
 	if (!db)
 		return false/*Error(QString("Failed to open file '%1'").arg(filename))*/;
 
-	//look for clouds inside loaded DB
-	ccHObject::Container clouds;
-	db->filterChildren(clouds,false,CC_TYPES::POINT_CLOUD);
-	size_t count = clouds.size();
-	for (size_t i=0; i<count; ++i)
+	std::set<unsigned> verticesIDs;
+	//first look for meshes inside loaded DB (so that we don't consider mesh vertices as clouds!)
 	{
-		ccPointCloud* pc = static_cast<ccPointCloud*>(clouds[i]);
-		db->detachChild(pc);
-		Print(QString("Found one cloud with %1 points").arg(pc->size()));
-		m_clouds.push_back(CloudDesc(pc,filename,count == 1 ? -1 : static_cast<int>(i)));
+		ccHObject::Container meshes;
+		size_t count = 0;
+		//first look for all REAL meshes (so as to no consider sub-meshes)
+		if (db->filterChildren(meshes,true,CC_TYPES::MESH,true) != 0)
+		{
+			count += meshes.size();
+			for (size_t i=0; i<meshes.size(); ++i)
+			{
+				ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(meshes[i]);
+				if (mesh->getParent())
+					mesh->getParent()->detachChild(mesh);
+
+				ccGenericPointCloud* vertices = mesh->getAssociatedCloud();
+				if (vertices)
+				{
+					verticesIDs.insert(vertices->getUniqueID());
+					Print(QString("Found one mesh with %1 faces and %2 vertices: '%3'").arg(mesh->size()).arg(mesh->getAssociatedCloud()->size()).arg(mesh->getName()));
+					m_meshes.push_back(MeshDesc(mesh,filename,count == 1 ? -1 : static_cast<int>(i)));
+				}
+				else
+				{
+					delete mesh;
+					mesh = 0;
+					assert(false);
+				}
+			}
+		}
+
+		//then look for the other meshes
+		meshes.clear();
+		if (db->filterChildren(meshes,true,CC_TYPES::MESH,false) != 0)
+		{
+			size_t countBefore = count;
+			count += meshes.size();
+			for (size_t i=0; i<meshes.size(); ++i)
+			{
+				ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(meshes[i]);
+				if (mesh->getParent())
+					mesh->getParent()->detachChild(mesh);
+
+				ccGenericPointCloud* vertices = mesh->getAssociatedCloud();
+				if (vertices)
+				{
+					verticesIDs.insert(vertices->getUniqueID());
+					Print(QString("Found one kind of mesh with %1 faces and %2 vertices: '%3'").arg(mesh->size()).arg(mesh->getAssociatedCloud()->size()).arg(mesh->getName()));
+					m_meshes.push_back(MeshDesc(mesh,filename,count == 1 ? -1 : static_cast<int>(countBefore+i)));
+				}
+				else
+				{
+					delete mesh;
+					mesh = 0;
+					assert(false);
+				}
+			}
+		}
 	}
 
-	//look for meshes inside loaded DB
-	ccHObject::Container meshes;
-	db->filterChildren(meshes,false,CC_TYPES::MESH);
-	if (!meshes.empty())
+	//now look for the remaining clouds inside loaded DB
 	{
-		ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(meshes[0]);
-		db->detachChild(mesh);
-		Print(QString("Found one mesh with %1 faces and %2 vertices").arg(mesh->size()).arg(mesh->getAssociatedCloud()->size()));
-		m_meshes.push_back(MeshDesc(mesh,filename));
+		ccHObject::Container clouds;
+		db->filterChildren(clouds,false,CC_TYPES::POINT_CLOUD);
+		size_t count = clouds.size();
+		for (size_t i=0; i<count; ++i)
+		{
+			ccPointCloud* pc = static_cast<ccPointCloud*>(clouds[i]);
+			if (pc->getParent())
+				pc->getParent()->detachChild(pc);
+
+			//if the cloud is a set of vertices, we ignore it!
+			if (verticesIDs.find(pc->getUniqueID()) != verticesIDs.end())
+			{
+				m_orphans.addChild(pc);
+				continue;
+			}
+			Print(QString("Found one cloud with %1 points").arg(pc->size()));
+			m_clouds.push_back(CloudDesc(pc,filename,count == 1 ? -1 : static_cast<int>(i)));
+		}
 	}
 
 	delete db;
@@ -582,12 +716,23 @@ bool ccCommandLineParser::commandSubsample(QStringList& arguments, ccProgressDia
 
 			if (result)
 			{
-				CloudDesc cloudDesc(result,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
-				QString errorStr = Export(cloudDesc,"RANDOM_SUBSAMPLED");
-				delete result;
-				result = 0;
-				if (!errorStr.isEmpty())
-					return Error(errorStr);
+				result->setName(m_clouds[i].pc->getName() + QString(".subsampled"));
+				if (s_autoSaveMode)
+				{
+					CloudDesc cloudDesc(result,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
+					QString errorStr = Export(cloudDesc,"RANDOM_SUBSAMPLED");
+					if (!errorStr.isEmpty())
+					{
+						delete result;
+						return Error(errorStr);
+					}
+				}
+				//replace current cloud by this one
+				delete m_clouds[i].pc;
+				m_clouds[i].pc = result;
+				m_clouds[i].basename += QString("_SUBSAMPLED");
+				//delete result;
+				//result = 0;
 			}
 			else
 			{
@@ -611,7 +756,8 @@ bool ccCommandLineParser::commandSubsample(QStringList& arguments, ccProgressDia
 			ccPointCloud* cloud = m_clouds[i].pc;
 			Print(QString("\tProcessing cloud #%1 (%2)").arg(i+1).arg(!cloud->getName().isEmpty() ? cloud->getName() : "no name"));
 
-			CCLib::ReferenceCloud* refCloud = CCLib::CloudSamplingTools::resampleCloudSpatially(cloud,static_cast<PointCoordinateType>(step),0,pDlg);
+			CCLib::CloudSamplingTools::SFModulationParams modParams(false);
+			CCLib::ReferenceCloud* refCloud = CCLib::CloudSamplingTools::resampleCloudSpatially(cloud,static_cast<PointCoordinateType>(step),modParams,0,pDlg);
 			if (!refCloud)
 				return Error("Subsampling process failed!");
 			Print(QString("\tResult: %1 points").arg(refCloud->size()));
@@ -623,14 +769,23 @@ bool ccCommandLineParser::commandSubsample(QStringList& arguments, ccProgressDia
 
 			if (result)
 			{
-				CloudDesc cloudDesc(result,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
-				QString errorStr = Export(cloudDesc,"SPATIAL_SUBSAMPLED");
-
-				delete result;
-				result = 0;
-
-				if (!errorStr.isEmpty())
-					return Error(errorStr);
+				result->setName(m_clouds[i].pc->getName() + QString(".subsampled"));
+				if (s_autoSaveMode)
+				{
+					CloudDesc cloudDesc(result,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
+					QString errorStr = Export(cloudDesc,"SPATIAL_SUBSAMPLED");
+					if (!errorStr.isEmpty())
+					{
+						delete result;
+						return Error(errorStr);
+					}
+				}
+				//replace current cloud by this one
+				delete m_clouds[i].pc;
+				m_clouds[i].pc = result;
+				m_clouds[i].basename += QString("_SUBSAMPLED");
+				//delete result;
+				//result = 0;
 			}
 			else
 			{
@@ -645,7 +800,7 @@ bool ccCommandLineParser::commandSubsample(QStringList& arguments, ccProgressDia
 
 		bool ok = false;
 		int octreeLevel = arguments.takeFirst().toInt(&ok);
-		if (!ok || octreeLevel<1 || octreeLevel>CCLib::DgmOctree::MAX_OCTREE_LEVEL)
+		if (!ok || octreeLevel < 1 || octreeLevel > CCLib::DgmOctree::MAX_OCTREE_LEVEL)
 			return Error("Invalid octree level!");
 		Print(QString("\tOctree level: %1").arg(octreeLevel));
 
@@ -654,7 +809,7 @@ bool ccCommandLineParser::commandSubsample(QStringList& arguments, ccProgressDia
 			ccPointCloud* cloud = m_clouds[i].pc;
 			Print(QString("\tProcessing cloud #%1 (%2)").arg(i+1).arg(!cloud->getName().isEmpty() ? cloud->getName() : "no name"));
 
-			CCLib::ReferenceCloud* refCloud = CCLib::CloudSamplingTools::subsampleCloudWithOctreeAtLevel(cloud,static_cast<uchar>(octreeLevel),CCLib::CloudSamplingTools::NEAREST_POINT_TO_CELL_CENTER,pDlg);
+			CCLib::ReferenceCloud* refCloud = CCLib::CloudSamplingTools::subsampleCloudWithOctreeAtLevel(cloud,static_cast<unsigned char>(octreeLevel),CCLib::CloudSamplingTools::NEAREST_POINT_TO_CELL_CENTER,pDlg);
 			if (!refCloud)
 				return Error("Subsampling process failed!");
 			Print(QString("\tResult: %1 points").arg(refCloud->size()));
@@ -666,14 +821,23 @@ bool ccCommandLineParser::commandSubsample(QStringList& arguments, ccProgressDia
 
 			if (result)
 			{
-				CloudDesc cloudDesc(result,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
-				QString errorStr = Export(cloudDesc,QString("OCTREE_LEVEL_%1_SUBSAMPLED").arg(octreeLevel));
-
-				delete result;
-				result = 0;
-
-				if (!errorStr.isEmpty())
-					return Error(errorStr);
+				result->setName(m_clouds[i].pc->getName() + QString(".subsampled"));
+				if (s_autoSaveMode)
+				{
+					CloudDesc cloudDesc(result,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
+					QString errorStr = Export(cloudDesc,QString("OCTREE_LEVEL_%1_SUBSAMPLED").arg(octreeLevel));
+					if (!errorStr.isEmpty())
+					{
+						delete result;
+						return Error(errorStr);
+					}
+				}
+				//replace current cloud by this one
+				delete m_clouds[i].pc;
+				m_clouds[i].pc = result;
+				m_clouds[i].basename += QString("_SUBSAMPLED");
+				//delete result;
+				//result = 0;
 			}
 			else
 			{
@@ -931,12 +1095,56 @@ bool ccCommandLineParser::commandRoughness(QStringList& arguments, QDialog* pare
 	ccHObject::Container entities;
 	entities.resize(m_clouds.size());
 	for (unsigned i=0; i<m_clouds.size(); ++i)
-		entities[i]=m_clouds[i].pc;
+		entities[i] = m_clouds[i].pc;
 
 	if (MainWindow::ApplyCCLibAlgortihm(MainWindow::CCLIB_ALGO_ROUGHNESS,entities,parent,additionalParameters))
 	{
 		//save output
 		if (s_autoSaveMode && !saveClouds(QString("ROUGHNESS_KERNEL_%2").arg(kernelSize)))
+			return false;
+	}
+
+	return true;
+}
+
+bool ccCommandLineParser::commandApplyTransformation(QStringList& arguments)
+{
+	Print("[APPLY TRANSFORMATION]");
+
+	if (arguments.empty())
+		return Error(QString("Missing parameter: transformation file after \"-%1\"").arg(COMMAND_APPLY_TRANSFORMATION));
+
+	QString filename = arguments.takeFirst();
+	ccGLMatrix mat;
+	if (!mat.fromAsciiFile(filename))
+		return Error(QString("Failed to read transformation matrix file '%1'!").arg(filename));
+
+	Print(QString("Transformation:\n") + mat.toString(6));
+
+	if (m_clouds.empty() && m_meshes.empty())
+		return Error(QString("No entity on which to apply the transformation! (be sure to open one with \"-%1 [filename]\" before \"-%2\")").arg(COMMAND_OPEN).arg(COMMAND_APPLY_TRANSFORMATION));
+
+	//apply transformation
+	if (!m_clouds.empty())
+	{
+		for (unsigned i=0; i<m_clouds.size(); ++i)
+		{
+			m_clouds[i].pc->applyGLTransformation_recursive(&mat);
+			m_clouds[i].pc->setName(m_clouds[i].pc->getName()+".transformed");
+		}
+		//save output
+		if (s_autoSaveMode && !saveClouds("TRANSFORMED"))
+			return false;
+	}
+	if (!m_meshes.empty())
+	{
+		for (unsigned i=0; i<m_meshes.size(); ++i)
+		{
+			m_meshes[i].mesh->applyGLTransformation_recursive(&mat);
+			m_meshes[i].mesh->setName(m_meshes[i].mesh->getName()+".transformed");
+		}
+		//save output
+		if (s_autoSaveMode && !saveMeshes("TRANSFORMED"))
 			return false;
 	}
 
@@ -1067,14 +1275,22 @@ bool ccCommandLineParser::commandFilterSFByValue(QStringList& arguments)
 			ccPointCloud* fitleredCloud = m_clouds[i].pc->filterPointsByScalarValue(thisMinVal,thisMaxVal);
 			if (fitleredCloud)
 			{
+				Print(QString("\t\tCloud '%1' --> %2/%3 points remaining").arg(m_clouds[i].pc->getName()).arg(fitleredCloud->size()).arg(m_clouds[i].pc->size()));
+
 				CloudDesc resultDesc(fitleredCloud,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
-				QString errorStr = Export(resultDesc,QString("FILTERED_[%1_%2]").arg(thisMinVal).arg(thisMaxVal));
-
-				delete fitleredCloud;
-				fitleredCloud = 0;
-
-				if (!errorStr.isEmpty())
-					return Error(errorStr);
+				//replace current cloud by this one
+				delete m_clouds[i].pc;
+				m_clouds[i].pc = fitleredCloud;
+				m_clouds[i].basename += QString("_FILTERED_[%1_%2]").arg(thisMinVal).arg(thisMaxVal);
+				if (s_autoSaveMode)
+				{
+					QString errorStr = Export(resultDesc);
+					if (!errorStr.isEmpty())
+					{
+						delete fitleredCloud;
+						return Error(errorStr);
+					}
+				}
 			}
 		}
 	}
@@ -1117,10 +1333,12 @@ bool ccCommandLineParser::commandMergeClouds(QStringList& arguments)
 	m_clouds.resize(1);
 	//update the first one
 	m_clouds.front().basename += QString("_MERGED");
-	QString errorStr = Export(m_clouds.front());
-	if (!errorStr.isEmpty())
-		return Error(errorStr);
-
+	if (s_autoSaveMode)
+	{
+		QString errorStr = Export(m_clouds.front());
+		if (!errorStr.isEmpty())
+			return Error(errorStr);
+	}
 	return true;
 }
 
@@ -1153,6 +1371,34 @@ bool ccCommandLineParser::setActiveSF(QStringList& arguments)
 	return true;
 }
 
+bool ccCommandLineParser::removeAllSFs(QStringList& arguments)
+{
+	//no argument required
+	for (unsigned i=0; i<m_clouds.size(); ++i)
+	{
+		if (m_clouds[i].pc/* && m_clouds[i].pc->hasScalarFields()*/)
+		{
+			m_clouds[i].pc->deleteAllScalarFields();
+			m_clouds[i].pc->showSF(false);
+		}
+	}
+
+	for (unsigned i=0; i<m_meshes.size(); ++i)
+	{
+		if (m_meshes[i].mesh)
+		{
+			ccGenericPointCloud* cloud = m_meshes[i].mesh->getAssociatedCloud();
+			if (cloud->isA(CC_TYPES::POINT_CLOUD))
+			{
+				static_cast<ccPointCloud*>(cloud)->deleteAllScalarFields();
+				cloud->showSF(false);
+			}
+		}
+	}
+
+	return true;
+}
+
 bool ccCommandLineParser::matchBBCenters(QStringList& arguments)
 {
 	Print("[MATCH B.B. CENTERS]");
@@ -1173,11 +1419,11 @@ bool ccCommandLineParser::matchBBCenters(QStringList& arguments)
 		return true;
 	}
 
-	CCVector3 firstCenter = entities.front()->getEntity()->getBBCenter();
+	CCVector3 firstCenter = entities.front()->getEntity()->getOwnBB().getCenter();
 	for (size_t i=1; i<entities.size(); ++i)
 	{
 		ccHObject* ent = entities[i]->getEntity();
-		CCVector3 center = ent->getBBCenter();
+		CCVector3 center = ent->getOwnBB().getCenter();
 		CCVector3 T = firstCenter-center;
 
 		//transformation (used only for translation)
@@ -1187,9 +1433,12 @@ bool ccCommandLineParser::matchBBCenters(QStringList& arguments)
 		//apply translation matrix
 		ent->applyGLTransformation_recursive(&glTrans);
 		Print(QString("Entity '%1' has been translated: (%2,%3,%4)").arg(ent->getName()).arg(T.x).arg(T.y).arg(T.z));
-		QString errorStr = Export(*entities[i]);
-		if (!errorStr.isEmpty())
-			return Error(errorStr);
+		if (s_autoSaveMode)
+		{
+			QString errorStr = Export(*entities[i]);
+			if (!errorStr.isEmpty())
+				return Error(errorStr);
+		}
 	}
 
 	return true;
@@ -1279,11 +1528,10 @@ bool ccCommandLineParser::commandBestFitPlane(QStringList& arguments)
 			}
 
 			//compute the transformation matrix that would make this normal points towards +Z
-			ccGLMatrix makeZPosMatrix = ccGLMatrix::FromToRotation(N,CCVector3(0,0,1.0f));
+			ccGLMatrix makeZPosMatrix = ccGLMatrix::FromToRotation(N,CCVector3(0,0,PC_ONE));
 			CCVector3 Gt = C;
 			makeZPosMatrix.applyRotation(Gt);
 			makeZPosMatrix.setTranslation(C-Gt);
-			makeZPosMatrix.invert();
 
 			txtStream << "Orientation matrix:" << endl;
 			txtStream << makeZPosMatrix.toString(s_precision,' ') << endl;
@@ -1303,14 +1551,93 @@ bool ccCommandLineParser::commandBestFitPlane(QStringList& arguments)
 				pc->applyGLTransformation_recursive(&makeZPosMatrix);
 				Print(QString("Cloud '%1' has been transformed with the above matrix").arg(pc->getName()));
 				m_clouds[i].basename += QString("_HORIZ");
-				QString errorStr = Export(m_clouds[i]);
-				if (!errorStr.isEmpty())
-					ccConsole::Warning(errorStr);
+				if (s_autoSaveMode)
+				{
+					QString errorStr = Export(m_clouds[i]);
+					if (!errorStr.isEmpty())
+						ccConsole::Warning(errorStr);
+				}
 			}
 		}
 		else
 		{
 			ccConsole::Warning(QString("Failed to compute best fit plane for cloud '%1'").arg(m_clouds[i].pc->getName()));
+		}
+	}
+
+	return true;
+}
+
+bool ccCommandLineParser::commandSORFilter(QStringList& arguments, ccProgressDialog* pDlg/*=0*/)
+{
+	Print("[SOR FILTER]");
+
+	if (arguments.empty())
+		return Error(QString("Missing parameter: number of neighbors mode after \"-%1\"").arg(COMMAND_SOR_FILTER));
+
+	QString knnStr = arguments.takeFirst();
+	bool ok;
+	int knn = knnStr.toInt(&ok);
+	if (!ok || knn <= 0)
+		return Error(QString("Invalid parameter: number of neighbors (%1)").arg(knnStr));
+
+	if (arguments.empty())
+		return Error(QString("Missing parameter: sigma multiplier after number of neighbors (SOR)"));
+	QString sigmaStr = arguments.takeFirst();
+	double nSigma = sigmaStr.toDouble(&ok);
+	if (!ok || nSigma < 0)
+		return Error(QString("Invalid parameter: sigma multiplier (%1)").arg(nSigma));
+
+	if (m_clouds.empty())
+		return Error(QString("No cloud available. Be sure to open one first!"));
+
+	for (size_t i=0; i<m_clouds.size(); ++i)
+	{
+		ccPointCloud* cloud = m_clouds[i].pc;
+		assert(cloud);
+
+		//computation
+		CCLib::ReferenceCloud* selection = CCLib::CloudSamplingTools::sorFilter(cloud,
+																				knn,
+																				nSigma,
+																				0,
+																				pDlg);
+
+		if (selection)
+		{
+			ccPointCloud* cleanCloud = cloud->partialClone(selection);
+			if (cleanCloud)
+			{
+				cleanCloud->setName(cloud->getName()+QString(".clean"));
+				if (s_autoSaveMode)
+				{
+					CloudDesc cloudDesc(cleanCloud,m_clouds[i].basename,m_clouds[i].path,m_clouds[i].indexInFile);
+					QString errorStr = Export(cloudDesc,"SOR");
+					if (!errorStr.isEmpty())
+					{
+						delete cleanCloud;
+						return Error(errorStr);
+					}
+				}
+				//replace current cloud by this one
+				delete m_clouds[i].pc;
+				m_clouds[i].pc = cleanCloud;
+				m_clouds[i].basename += QString("_SOR");
+				//delete cleanCloud;
+				//cleanCloud = 0;
+			}
+			else
+			{
+				return Error(QString("Not enough memory to create a clean version of cloud '%1'!").arg(cloud->getName()));
+			}
+			
+			delete selection;
+			selection = 0;
+		}
+		else
+		{
+			//no points fall inside selection!
+			return Error(QString("Failed to apply SOR filter on cloud '%1'! (not enough memory?)").arg(cloud->getName()));
 		}
 	}
 
@@ -1360,9 +1687,395 @@ bool ccCommandLineParser::commandSampleMesh(QStringList& arguments, ccProgressDi
 		m_clouds.push_back(CloudDesc(cloud,m_meshes[i].basename+QString("_SAMPLED_POINTS"),m_meshes[i].path));
 
 		//save it as well
-		QString errorStr = Export(m_clouds.back());
-		if (!errorStr.isEmpty())
-			return Error(errorStr);
+		if (s_autoSaveMode)
+		{
+			QString errorStr = Export(m_clouds.back());
+			if (!errorStr.isEmpty())
+				return Error(errorStr);
+		}
+	}
+
+	return true;
+}
+
+//to read the 'Cross Section' tool XML parameters file
+#include <QXmlStreamReader>
+static QString s_xmlCloudCompare		= "CloudCompare";
+static QString s_xmlBoxThickness		= "BoxThickness";
+static QString s_xmlBoxCenter			= "BoxCenter";
+static QString s_xmlRepeatDim			= "RepeatDim";
+static QString s_xmlRepeatGap			= "RepeatGap";
+static QString s_xmlFilePath			= "FilePath";
+static QString s_outputXmlFilePath		= "OutputFilePath";
+
+bool ReadVector(const QXmlStreamAttributes& attributes, CCVector3& P, QString element)
+{
+	if (attributes.size() < 3)
+	{
+		return Error(QString("Invalid XML file (3 attributes expected for element '<%1>')").arg(element));
+	}
+
+	int count = 0;
+	for (int i=0; i<attributes.size(); ++i)
+	{
+		QString name = attributes[i].name().toString().toUpper();
+		QString value = attributes[i].value().toString();
+
+		bool ok = false;
+		if (name == "X")
+		{
+			P.x = value.toDouble(&ok);
+			++count;
+		}
+		else if (name == "Y")
+		{
+			P.y = value.toDouble(&ok);
+			++count;
+		}
+		else if (name == "Z")
+		{
+			P.z = value.toDouble(&ok);
+			++count;
+		}
+		else
+		{
+			ok = true;
+		}
+		
+		if (!ok)
+		{
+			return Error(QString("Invalid XML file (numerical attribute expected for attribute '%1' of element '<%2>')").arg(name).arg(element));
+		}
+	}
+
+	if (count < 3)
+	{
+		return Error(QString("Invalid XML file (attributes 'X','Y' and 'Z' are mandatory for element '<%1>')").arg(element));
+	}
+
+	return true;
+}
+
+bool ccCommandLineParser::commandCrossSection(QStringList& arguments, QDialog* parent/*=0*/)
+{
+	Print("[CROSS SECTION]");
+
+	//expected argument: XML file
+	if (arguments.empty())
+		return Error(QString("Missing parameter: XML parameters file after \"-%1\"").arg(COMMAND_CROSS_SECTION));
+	QString xmlFilename = arguments.takeFirst();
+
+	//read the XML file
+	CCVector3 boxCenter(0,0,0), boxThickness(0,0,0);
+	bool repeatDim[3] = {false, false, false};
+	double repeatGap = 0.0;
+	bool inside = true;
+	bool autoCenter = true;
+	QString inputFilePath;
+	QString outputFilePath;
+	{
+		QFile file(xmlFilename);
+		if (!file.open(QFile::ReadOnly | QFile::Text))
+		{
+			return Error(QString("Couldn't open XML file '%1'").arg(xmlFilename));
+		}
+
+		//read file content
+		QXmlStreamReader stream(&file);
+
+		//expected: CloudCompare
+		if (	!stream.readNextStartElement()
+			||	stream.name() != s_xmlCloudCompare)
+		{
+			return Error(QString("Invalid XML file (should start by '<%1>')").arg(s_xmlCloudCompare));
+		}
+		
+		unsigned mandatoryCount = 0;
+		while (stream.readNextStartElement()) //loop over the elements
+		{
+			if (stream.name() == s_xmlBoxThickness)
+			{
+				QXmlStreamAttributes attributes = stream.attributes();
+				if (!ReadVector(attributes,boxThickness,s_xmlBoxThickness))
+					return false;
+				stream.skipCurrentElement();
+				++mandatoryCount;
+			}
+			else if (stream.name() == s_xmlBoxCenter)
+			{
+				QXmlStreamAttributes attributes = stream.attributes();
+				if (!ReadVector(attributes,boxCenter,s_xmlBoxCenter))
+					return false;
+				stream.skipCurrentElement();
+				autoCenter = false;
+			}
+			else if (stream.name() == s_xmlRepeatDim)
+			{
+				QString itemValue = stream.readElementText();
+				bool ok = false;
+				int dim = itemValue.toInt(&ok);
+				if (!ok || dim < 0 || dim > 2)
+				{
+					return Error(QString("Invalid XML file (invalid value for '<%1>')").arg(s_xmlRepeatDim));
+				}
+				repeatDim[dim] = true;
+			}
+			else if (stream.name() == s_xmlRepeatGap)
+			{
+				QString itemValue = stream.readElementText();
+				bool ok = false;
+				repeatGap = itemValue.toDouble(&ok);
+				if (!ok)
+				{
+					return Error(QString("Invalid XML file (invalid value for '<%1>')").arg(s_xmlRepeatGap));
+				}
+			}
+			else if (stream.name() == s_xmlFilePath)
+			{
+				inputFilePath = stream.readElementText();
+				if (!QDir(inputFilePath).exists())
+				{
+					return Error(QString("Invalid file path (directory pointed by '<%1>' doesn't exist)").arg(s_xmlFilePath));
+				}
+				//++mandatoryCount;
+			}
+			else if (stream.name() == s_outputXmlFilePath)
+			{
+				outputFilePath = stream.readElementText();
+				if (!QDir(outputFilePath).exists())
+				{
+					return Error(QString("Invalid output file path (directory pointed by '<%1>' doesn't exist)").arg(s_outputXmlFilePath));
+				}
+				//++mandatoryCount;
+			}
+			else
+			{
+				Warning(QString("Unknown element: %1").arg(stream.name().toString()));
+				stream.skipCurrentElement();
+			}
+		}
+
+		if (mandatoryCount < 1 || (!repeatDim[0] && !repeatDim[1] && !repeatDim[2]))
+		{
+			return Error(QString("Some mandatory elements are missing in the XML file (see documentation)"));
+		}
+	}
+
+	//safety checks
+	if (	boxThickness.x < ZERO_TOLERANCE
+		||	boxThickness.y < ZERO_TOLERANCE
+		||	boxThickness.z < ZERO_TOLERANCE)
+	{
+		return Error(QString("Invalid box thickness"));
+	}
+	
+	CCVector3 repeatStep = boxThickness + CCVector3(repeatGap,repeatGap,repeatGap);
+	if (	(repeatDim[0] && repeatStep.x < ZERO_TOLERANCE)
+		||	(repeatDim[1] && repeatStep.y < ZERO_TOLERANCE)
+		||	(repeatDim[2] && repeatStep.z < ZERO_TOLERANCE))
+	{
+		return Error(QString("Repeat gap can't be equal or smaller than 'minus' box width"));
+	}
+
+	if (outputFilePath.isEmpty())
+	{
+		outputFilePath = inputFilePath;
+	}
+
+	int iterationCount = 1;
+
+	//shall we load the entities?
+	QStringList files;
+	QDir dir;
+	bool fromFiles = false;
+	if (!inputFilePath.isEmpty())
+	{
+		//look for all files in the input directory
+		dir = QDir(inputFilePath);
+		assert(dir.exists());
+		files = dir.entryList(QDir::Files);
+		iterationCount = files.size();
+		fromFiles = true;
+
+		//remove any cloud or mesh in memory!
+		removeClouds();
+		removeMeshes();
+	}
+
+	for (int f=0; f<iterationCount; ++f)
+	{
+		//shall we load files?
+		QString filename;
+		if (fromFiles)
+		{
+			assert(f < files.size());
+			filename = dir.absoluteFilePath(files[f]);
+			QFileInfo fileinfo(filename);
+			if (!fileinfo.isFile() || fileinfo.suffix().toUpper() == "XML")
+			{
+				continue;
+			}
+
+			//let's try to load the file
+			Print(QString("Processing file: '%1'").arg(files[f]));
+			QStringList loadArguments;
+			loadArguments << filename;
+			if (!commandLoad(loadArguments))
+			{
+				Warning("\tFailed to load file!");
+				continue;
+			}
+		}
+		else
+		{
+			assert(iterationCount == 1);
+		}
+
+		//repeat crop process on each file (or do it only once on the currently loaded entities)
+		{
+			ccHObject::Container entities;
+			try
+			{
+				for (size_t i=0; i<m_clouds.size(); ++i)
+					entities.push_back(m_clouds[i].pc);
+				for (size_t j=0; j<m_meshes.size(); ++j)
+					entities.push_back(m_meshes[j].mesh);
+			}
+			catch (const std::bad_alloc&)
+			{
+				return Error("Not enough memory!");
+			}
+			
+			for (size_t i=0; i<entities.size(); ++i)
+			{
+				//check entity bounding-box
+				ccHObject* ent = entities[i];
+				ccBBox bbox = ent->getOwnBB();
+				if (!bbox.isValid())
+				{
+					Warning(QString("Entity '%1' has an invalid bounding-box!").arg(ent->getName()));
+					continue;
+				}
+
+				//browse to/create a subdirectory with the (base) filename as name
+				QString basename;
+				if (fromFiles)
+				{
+					basename = QFileInfo(filename).baseName();
+				}
+				else
+				{
+					basename = i < m_clouds.size() ? m_clouds[i].basename : m_meshes[i-m_clouds.size()].basename;
+				}
+
+				if (entities.size() > 1)
+					basename += QString("_%1").arg(i+1);
+
+				QDir outputDir(outputFilePath);
+				if (outputFilePath.isEmpty())
+				{
+					if (fromFiles)
+					{
+						assert(false);
+						outputDir = QDir(QCoreApplication::applicationDirPath());
+					}
+					else
+					{
+						outputDir = QDir(i < m_clouds.size() ? m_clouds[i].path : m_meshes[i-m_clouds.size()].path);
+					}
+				}
+
+				assert(outputDir.exists());
+				if (outputDir.cd(basename))
+				{
+					//if the directory already exists...
+					Warning(QString("Subdirectory '%1' already exists").arg(basename));
+				}
+				else if (outputDir.mkdir(basename))
+				{
+					outputDir.cd(basename);
+				}
+				else
+				{
+					Warning(QString("Failed to create subdirectory '%1' (check access rights and base name validity!)").arg(basename));
+					continue;
+				}
+
+				//place the initial box at the beginning of the entity bounding box
+				CCVector3 C0 = autoCenter ? bbox.getCenter() : boxCenter;
+				unsigned steps[3] = {1,1,1};
+				for (unsigned d=0; d<3; ++d)
+				{
+					if (repeatDim[d])
+					{
+						PointCoordinateType boxHalfWidth = boxThickness.u[d]/2;
+						PointCoordinateType distToMinBorder = C0.u[d]-boxHalfWidth - bbox.minCorner().u[d];
+						int stepsToMinBorder = static_cast<int>(ceil(distToMinBorder / repeatStep.u[d]));
+						C0.u[d] -= stepsToMinBorder * repeatStep.u[d];
+
+						PointCoordinateType distToMaxBorder = bbox.maxCorner().u[d] - C0.u[d];
+						assert(distToMaxBorder >= 0);
+						unsigned stepsToMaxBoder = static_cast<unsigned>(ceil(distToMaxBorder / repeatStep.u[d]));
+						steps[d] = std::max<unsigned>(stepsToMaxBoder,1);
+					}
+				}
+
+				Print(QString("Will extract up to (%1 x %2 x %3) = %4 sections").arg(steps[0]).arg(steps[1]).arg(steps[2]).arg(steps[0]*steps[1]*steps[2]));
+
+				//now extract the slices
+				for (unsigned dx=0; dx<steps[0]; ++dx)
+				{
+					for (unsigned dy=0; dy<steps[1]; ++dy)
+					{
+						for (unsigned dz=0; dz<steps[2]; ++dz)
+						{
+							CCVector3 C = C0 + CCVector3(dx*repeatStep.x,dy*repeatStep.y,dz*repeatStep.z);
+							ccBBox cropBox(C-boxThickness/2,C+boxThickness/2);
+							Print(QString("Box (%1;%2;%3) --> (%4;%5;%6)")
+								.arg(cropBox.minCorner().x).arg(cropBox.minCorner().y).arg(cropBox.minCorner().z)
+								.arg(cropBox.maxCorner().x).arg(cropBox.maxCorner().y).arg(cropBox.maxCorner().z)
+								);
+							ccHObject* croppedEnt = ccCropTool::Crop(ent, cropBox, inside);
+							if (croppedEnt)
+							{
+								QString outputBasename = basename + QString("_%1_%2_%3").arg(C.x).arg(C.y).arg(C.z);
+								QString errorStr;
+								//original entity is a cloud?
+								if (i < m_clouds.size())
+								{
+									CloudDesc desc(	static_cast<ccPointCloud*>(croppedEnt),
+													outputBasename,
+													outputDir.absolutePath(),
+													entities.size() > 1 ? static_cast<int>(i) : -1);
+									errorStr = Export(desc);
+								}
+								else //otherwise it's a mesh
+								{
+									MeshDesc desc(	static_cast<ccMesh*>(croppedEnt),
+													outputBasename,
+													outputDir.absolutePath(),
+													entities.size() > 1 ? static_cast<int>(i) : -1);
+									errorStr = Export(desc);
+								}
+								
+								delete croppedEnt;
+								croppedEnt = 0;
+								
+								if (!errorStr.isEmpty())
+									return Error(errorStr);
+							}
+						}
+					}
+				}
+			}
+
+			if (fromFiles)
+			{
+				//unload entities
+				removeClouds();
+				removeMeshes();
+			}
+		}
 	}
 
 	return true;
@@ -1374,8 +2087,8 @@ bool ccCommandLineParser::commandCrop(QStringList& arguments)
 
 	if (arguments.empty())
 		return Error(QString("Missing parameter: box extents after \"-%1\" (Xmin:Ymin:Zmin:Xmax:Ymax:Zmax)").arg(COMMAND_CROP));
-	if (m_clouds.empty())
-		return Error(QString("No point cloud available. Be sure to open or generate one first!"));
+	if (m_clouds.empty() && m_meshes.empty())
+		return Error(QString("No point cloud or mesh available. Be sure to open or generate one first!"));
 
 	//decode box extents
 	CCVector3 boxMin,boxMax;
@@ -1415,40 +2128,47 @@ bool ccCommandLineParser::commandCrop(QStringList& arguments)
 	}
 
 	ccBBox cropBox(boxMin,boxMax);
-	for (unsigned i=0; i<m_clouds.size(); ++i)
+	//crop clouds
 	{
-		CCLib::ReferenceCloud* ref = m_clouds[i].pc->crop(cropBox,inside);
-		if (ref)
+		for (unsigned i=0; i<m_clouds.size(); ++i)
 		{
-			if (ref->size() != 0)
+			ccHObject* croppedCloud = ccCropTool::Crop(m_clouds[i].pc, cropBox, inside);
+			if (croppedCloud)
 			{
-				ccPointCloud* croppedCloud = m_clouds[i].pc->partialClone(ref);
-				delete ref;
-				ref = 0;
-
-				if (croppedCloud)
+				delete m_clouds[i].pc;
+				assert(croppedCloud->isA(CC_TYPES::POINT_CLOUD));
+				m_clouds[i].pc = static_cast<ccPointCloud*>(croppedCloud);
+				m_clouds[i].basename += "_CROPPED";
+				if (s_autoSaveMode)
 				{
-					delete m_clouds[i].pc;
-					m_clouds[i].pc = croppedCloud;
-					croppedCloud->setName(m_clouds[i].pc->getName() + QString(".cropped"));
-					m_clouds[i].basename += "_CROPPED";
-					Export(m_clouds[i]);
-				}
-				else
-				{
-					return Error(QString("Not enough memory to crop cloud '%1'!").arg(m_clouds[i].pc->getName()));
+					QString errorStr = Export(m_clouds[i]);
+					if (!errorStr.isEmpty())
+						return Error(errorStr);
 				}
 			}
-			else
-			{
-				delete ref;
-				ref = 0;
-				return Error (QString("No point of cloud '%1' falls inside the input box!").arg(m_clouds[i].pc->getName()));
-			}
+			//otherwise an error message has already been issued
 		}
-		else
+	}
+
+	//crop meshes
+	{
+		for (unsigned i=0; i<m_meshes.size(); ++i)
 		{
-			return Error(QString("Crop process failed! (not enough memory)"));
+			ccHObject* croppedMesh = ccCropTool::Crop(m_meshes[i].mesh, cropBox, inside);
+			if (croppedMesh)
+			{
+				delete m_meshes[i].mesh;
+				assert(croppedMesh->isA(CC_TYPES::MESH));
+				m_meshes[i].mesh = static_cast<ccMesh*>(croppedMesh);
+				m_meshes[i].basename += "_CROPPED";
+				if (s_autoSaveMode)
+				{
+					QString errorStr = Export(m_meshes[i]);
+					if (!errorStr.isEmpty())
+						return Error(errorStr);
+				}
+			}
+			//otherwise an error message has already been issued
 		}
 	}
 
@@ -1468,7 +2188,7 @@ bool ccCommandLineParser::commandCrop2D(QStringList& arguments)
 	ccPointCloud vertices("polyline.vertices");
 	ccPolyline poly(&vertices);
 
-	//number of vertices
+	//orthogonal dimension
 	unsigned char orthoDim = 2;
 	{
 		QString orthoDimStr = arguments.takeFirst().toUpper();
@@ -1559,7 +2279,12 @@ bool ccCommandLineParser::commandCrop2D(QStringList& arguments)
 					m_clouds[i].pc = croppedCloud;
 					croppedCloud->setName(m_clouds[i].pc->getName() + QString(".cropped"));
 					m_clouds[i].basename += "_CROPPED";
-					Export(m_clouds[i]);
+					if (s_autoSaveMode)
+					{
+						QString errorStr = Export(m_clouds[i]);
+						if (!errorStr.isEmpty())
+							return Error(errorStr);
+					}
 				}
 				else
 				{
@@ -1577,6 +2302,82 @@ bool ccCommandLineParser::commandCrop2D(QStringList& arguments)
 		{
 			return Error(QString("Crop process failed! (not enough memory)"));
 		}
+	}
+
+	return true;
+}
+
+bool ccCommandLineParser::commandColorBanding(QStringList& arguments)
+{
+	Print("[COLOR BANDING]");
+
+	if (arguments.size() < 2)
+		return Error(QString("Missing parameter(s) after \"-%1\" (DIM FREQUENCY)").arg(COMMAND_COLOR_BANDING));
+	if (m_clouds.empty() && m_meshes.empty())
+		return Error(QString("No entity available. Be sure to open or generate one first!"));
+
+	//dimension
+	unsigned char dim = 2;
+	QString dimStr = "Z";
+	{
+		dimStr = arguments.takeFirst().toUpper();
+		if (dimStr == "X")
+			dim = 0;
+		else if (dimStr == "Y")
+			dim = 1;
+		else if (dimStr == "Z")
+			dim = 2;
+		else
+			return Error(QString("Invalid parameter: dimension after \"-%1\" (expected: X, Y or Z)").arg(COMMAND_COLOR_BANDING));
+	}
+
+	//frequency
+	bool ok = true;
+	int freq = 0;
+	{
+		QString countStr = arguments.takeFirst();
+		freq = countStr.toInt(&ok);
+		if (!ok)
+			return Error(QString("Invalid parameter: frequency after \"-%1 DIM\" (in Hz, integer value)").arg(COMMAND_COLOR_BANDING));
+	}
+
+	//process clouds
+	if (!m_clouds.empty())
+	{
+		for (size_t i=0; i<m_clouds.size(); ++i)
+		{
+			if (m_clouds[i].pc)
+				if (!m_clouds[i].pc->setRGBColorByBanding(dim,freq))
+					return Error("Not enough memory");
+		}
+		
+		//save output
+		if (s_autoSaveMode && !saveClouds(QString("COLOR_BANDING_%1_%2").arg(dimStr).arg(freq)))
+			return false;
+	}
+
+	if (!m_meshes.empty())
+	{
+		bool hasMeshes = false;
+		for (size_t i=0; i<m_meshes.size(); ++i)
+		{
+			ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(m_meshes[i].mesh);
+			if (cloud)
+			{
+				if (!cloud->setRGBColorByBanding(dim,freq))
+					return Error("Not enough memory");
+				m_meshes[i].mesh->showColors(true);
+				hasMeshes = true;
+			}
+			else
+			{
+				Warning(QString("Vertices of mesh '%1' are locked (they may be shared by multiple entities for instance). Can't apply the current command on them.").arg(m_meshes[i].mesh->getName()));
+			}
+		}
+
+		//save output
+		if (hasMeshes && s_autoSaveMode && !saveMeshes(QString("COLOR_BANDING_%1_%2").arg(dimStr).arg(freq)))
+			return false;
 	}
 
 	return true;
@@ -1824,8 +2625,7 @@ bool ccCommandLineParser::commandDist(QStringList& arguments, bool cloud2meshDis
 	}
 	if (octreeLevel > 0)
 	{
-		compDlg.octreeLevelCheckBox->setChecked(true);
-		compDlg.octreeLevelSpinBox->setValue(octreeLevel);
+		compDlg.octreeLevelComboBox->setCurrentIndex(octreeLevel);
 	}
 
 	//C2M-only parameters
@@ -1859,7 +2659,7 @@ bool ccCommandLineParser::commandDist(QStringList& arguments, bool cloud2meshDis
 		}
 	}
 
-	if (!compDlg.compute())
+	if (!compDlg.computeDistances())
 	{
 		compDlg.cancelAndExit();
 		return Error("An error occured during distances computation!");
@@ -1873,9 +2673,12 @@ bool ccCommandLineParser::commandDist(QStringList& arguments, bool cloud2meshDis
 
 	compCloud.basename += suffix;
 
-	QString errorStr = Export(compCloud);
-	if (!errorStr.isEmpty())
-		return Error(errorStr);
+	if (s_autoSaveMode)
+	{
+		QString errorStr = Export(compCloud);
+		if (!errorStr.isEmpty())
+			return Error(errorStr);
+	}
 
 
 	return true;
@@ -2027,9 +2830,175 @@ bool ccCommandLineParser::commandStatTest(QStringList& arguments, ccProgressDial
 			}
 
 			m_clouds[i].basename += QString("_STAT_TEST_%1").arg(distrib->getName());
-			QString errorStr = Export(m_clouds[i]);
-			if (!errorStr.isEmpty())
-				return Error(errorStr);
+			if (s_autoSaveMode)
+			{
+				QString errorStr = Export(m_clouds[i]);
+				if (!errorStr.isEmpty())
+					return Error(errorStr);
+			}
+		}
+	}
+
+	return true;
+}
+
+bool ccCommandLineParser::commandDelaunay(QStringList& arguments, QDialog* parent/*=0*/)
+{
+	Print("[DELAUNAY TRIANGULATION]");
+
+	bool axisAligned = true;
+	double maxEdgeLength = 0;
+
+	while (!arguments.empty())
+	{
+		QString argument = arguments.front();
+		if (IsCommand(argument,COMMAND_DELAUNAY_AA))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+			axisAligned = true;
+		}
+		else if (IsCommand(argument,COMMAND_DELAUNAY_BF))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+			axisAligned = false;
+		}
+		else if (IsCommand(argument,COMMAND_DELAUNAY_MAX_EDGE_LENGTH))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+			
+			if (arguments.empty())
+				return Error(QString("Missing parameter: max edge length value after '%1'").arg(COMMAND_DELAUNAY_MAX_EDGE_LENGTH));
+			bool ok;
+			maxEdgeLength = arguments.takeFirst().toDouble(&ok);
+			if (!ok)
+				return Error(QString("Invalid value for max edge length! (after %1)").arg(COMMAND_DELAUNAY_MAX_EDGE_LENGTH));
+			Print(QString("Max edge length: %1").arg(maxEdgeLength));
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	Print(QString("Axis aligned: %1").arg(axisAligned ? "yes" : "no"));
+
+	//try to triangulate each cloud
+	for (size_t i=0; i<m_clouds.size(); ++i)
+	{
+		ccPointCloud* cloud = m_clouds[i].pc;
+		Print(QString("\tProcessing cloud #%1 (%2)").arg(i+1).arg(!cloud->getName().isEmpty() ? cloud->getName() : "no name"));
+
+		ccMesh* mesh = ccMesh::Triangulate(	cloud,
+											axisAligned ? DELAUNAY_2D_AXIS_ALIGNED : DELAUNAY_2D_BEST_LS_PLANE,
+											false,
+											static_cast<PointCoordinateType>(maxEdgeLength),
+											2 //XY plane by default
+											);
+		
+		if (mesh)
+		{
+			Print(QString("\tResulting mesh: #%1 faces, %2 vertices").arg(mesh->size()).arg(mesh->getAssociatedCloud()->size()));
+
+			MeshDesc meshDesc;
+			meshDesc.mesh = mesh;
+			meshDesc.basename = m_clouds[i].basename;
+			meshDesc.path = m_clouds[i].path;
+			meshDesc.indexInFile = m_clouds[i].indexInFile;
+
+			//save mesh
+			if (s_autoSaveMode)
+			{
+				QString outputFilename;
+				QString errorStr = Export(meshDesc,"DELAUNAY",&outputFilename);
+				if (!errorStr.isEmpty())
+					ccConsole::Warning(errorStr);
+			}
+
+			//add the resulting mesh to the main set
+			m_meshes.push_back(meshDesc);
+
+			//the mesh takes ownership of the cloud.
+			//Therefore we have to remove all clouds from the 'cloud set'! (see below)
+			//(otherwise bad things will happen when we'll clear it later ;)
+			cloud->setEnabled(false);
+			mesh->addChild(cloud);
+		}
+	}
+	//mehses have taken ownership of the clouds!
+	m_clouds.clear();
+
+	return true;
+}
+
+bool ccCommandLineParser::commandSfArithmetic(QStringList& arguments)
+{
+	Print("[SF ARITHMETIC]");
+
+	if (arguments.size() < 2)
+	{
+		return Error(QString("Missing parameter(s): SF index and/or operation after '%1' (2 values expected)").arg(COMMAND_SF_ARITHMETIC));
+	}
+
+	//read sf index
+	int sfIndex = -1;
+	{
+		bool ok = true;
+		QString sfIndex = arguments.takeFirst();
+		if (sfIndex.toUpper() == OPTION_LAST)
+			sfIndex = -2;
+		else
+			sfIndex = sfIndex.toInt(&ok);
+		if (!ok || sfIndex < 0)
+			return Error(QString("Invalid SF index! (after %1)").arg(COMMAND_SF_ARITHMETIC));
+	}
+
+	//read operation type
+	ccScalarFieldArithmeticsDlg::Operation operation = ccScalarFieldArithmeticsDlg::INVALID;
+	{
+		QString opName = arguments.takeFirst();
+		operation = ccScalarFieldArithmeticsDlg::GetOperationByName(opName);
+		if (operation == ccScalarFieldArithmeticsDlg::INVALID)
+		{
+			return Error(QString("Unknown operation! (%1)").arg(opName));
+		}
+	}
+
+	//apply operation on clouds
+	for (size_t i=0; i<m_clouds.size(); ++i)
+	{
+		ccPointCloud* cloud = m_clouds[i].pc;
+		if (cloud && cloud->getNumberOfScalarFields() != 0 && sfIndex < static_cast<int>(cloud->getNumberOfScalarFields()))
+		{
+			if (!ccScalarFieldArithmeticsDlg::Apply(cloud, operation, sfIndex < 0 ? static_cast<int>(cloud->getNumberOfScalarFields())-1 : sfIndex))
+				return Error(QString("Failed top apply operation on cloud '%1'").arg(cloud->getName()));
+			else if (s_autoSaveMode)
+			{
+				QString errorStr = Export(m_clouds[i],"SF_ARITHMETIC");
+				if (!errorStr.isEmpty())
+					return Error(errorStr);
+			}
+		}
+	}
+
+	//and meshes!
+	for (size_t j=0; j<m_meshes.size(); ++j)
+	{
+		bool isLocked = false;
+		ccGenericMesh* mesh = m_meshes[j].mesh;
+		ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(mesh,&isLocked);
+		if (cloud && !isLocked && cloud->getNumberOfScalarFields() != 0 && sfIndex < static_cast<int>(cloud->getNumberOfScalarFields()))
+		{
+			if (!ccScalarFieldArithmeticsDlg::Apply(cloud, operation, sfIndex < 0 ? static_cast<int>(cloud->getNumberOfScalarFields())-1 : sfIndex))
+				return Error(QString("Failed top apply operation on mesh '%1'").arg(mesh->getName()));
+			else if (s_autoSaveMode)
+			{
+				QString errorStr = Export(m_meshes[j],"SF_ARITHMETIC");
+				if (!errorStr.isEmpty())
+					return Error(errorStr);
+			}
 		}
 	}
 
@@ -2038,6 +3007,8 @@ bool ccCommandLineParser::commandStatTest(QStringList& arguments, ccProgressDial
 
 bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0*/)
 {
+	Print("[ICP]");
+
 	//look for local options
 	bool referenceIsFirst = false;
 	bool adjustScale = false;
@@ -2045,6 +3016,9 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 	double minErrorDiff = 1.0e-6;
 	unsigned iterationCount = 0;
 	unsigned randomSamplingLimit = 20000;
+	unsigned  overlap = 100;
+	int modelSFAsWeights = -1;
+	int dataSFAsWeights = -1;
 
 	while (!arguments.empty())
 	{
@@ -2076,11 +3050,11 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: min error difference after '%1'").arg(COMMAND_ICP_MIN_ERROR_DIIF)));
+				return Error(QString("Missing parameter: min error difference after '%1'").arg(COMMAND_ICP_MIN_ERROR_DIIF));
 			bool ok;
 			minErrorDiff = arguments.takeFirst().toDouble(&ok);
 			if (!ok || minErrorDiff <= 0)
-				return Error(QString("Invalid value for min. error difference! (%1)").arg(COMMAND_ICP_MIN_ERROR_DIIF));
+				return Error(QString("Invalid value for min. error difference! (after %1)").arg(COMMAND_ICP_MIN_ERROR_DIIF));
 		}
 		else if (IsCommand(argument,COMMAND_ICP_ITERATION_COUNT))
 		{
@@ -2088,11 +3062,25 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: number of iterations after '%1'").arg(COMMAND_ICP_ITERATION_COUNT)));
+				return Error(QString("Missing parameter: number of iterations after '%1'").arg(COMMAND_ICP_ITERATION_COUNT));
 			bool ok;
-			iterationCount = arguments.takeFirst().toUInt(&ok);
+			QString arg = arguments.takeFirst();
+			iterationCount = arg.toUInt(&ok);
 			if (!ok || iterationCount == 0)
-				return Error(QString("Invalid number of iterations! (%1)").arg(COMMAND_ICP_ITERATION_COUNT));
+				return Error(QString("Invalid number of iterations! (%1)").arg(arg));
+		}
+		else if (IsCommand(argument,COMMAND_ICP_OVERLAP))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+
+			if (arguments.empty())
+				return Error(QString("Missing parameter: overlap percentage after '%1'").arg(COMMAND_ICP_OVERLAP));
+			bool ok;
+			QString arg = arguments.takeFirst();
+			overlap = arg.toUInt(&ok);
+			if (!ok || overlap < 10 || overlap > 100)
+				return Error(QString("Invalid overlap value! (%1 --> should be between 10 and 100)").arg(arg));
 		}
 		else if (IsCommand(argument,COMMAND_ICP_RANDOM_SAMPLING_LIMIT))
 		{
@@ -2100,11 +3088,51 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: random sampling limit value after '%1'").arg(COMMAND_ICP_RANDOM_SAMPLING_LIMIT)));
+				return Error(QString("Missing parameter: random sampling limit value after '%1'").arg(COMMAND_ICP_RANDOM_SAMPLING_LIMIT));
 			bool ok;
 			randomSamplingLimit = arguments.takeFirst().toUInt(&ok);
 			if (!ok || randomSamplingLimit < 3)
-				return Error(QString("Invalid random sampling limit! (%1)").arg(COMMAND_ICP_RANDOM_SAMPLING_LIMIT));
+				return Error(QString("Invalid random sampling limit! (after %1)").arg(COMMAND_ICP_RANDOM_SAMPLING_LIMIT));
+		}
+		else if (IsCommand(argument,COMMAND_ICP_USE_MODEL_SF_AS_WEIGHT))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+
+			if (arguments.empty())
+				return Error(QString("Missing parameter: SF index after '%1'").arg(COMMAND_ICP_USE_MODEL_SF_AS_WEIGHT));
+			QString sfIndex = arguments.takeFirst();
+			if (sfIndex.toUpper() == OPTION_LAST)
+			{
+				modelSFAsWeights = -2;
+			}
+			else
+			{
+				bool ok;
+				modelSFAsWeights = sfIndex.toInt(&ok);
+				if (!ok || modelSFAsWeights < 0)
+					return Error(QString("Invalid SF index! (after %1)").arg(COMMAND_ICP_USE_MODEL_SF_AS_WEIGHT));
+			}
+		}
+		else if (IsCommand(argument,COMMAND_ICP_USE_DATA_SF_AS_WEIGHT))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+
+			if (arguments.empty())
+				return Error(QString("Missing parameter: SF index after '%1'").arg(COMMAND_ICP_USE_DATA_SF_AS_WEIGHT));
+			QString sfIndex = arguments.takeFirst();
+			if (sfIndex.toUpper() == OPTION_LAST)
+			{
+				dataSFAsWeights = -2;
+			}
+			else
+			{
+				bool ok;
+				dataSFAsWeights = sfIndex.toInt(&ok);
+				if (!ok || dataSFAsWeights < 0)
+					return Error(QString("Invalid SF index! (after %1)").arg(COMMAND_ICP_USE_DATA_SF_AS_WEIGHT));
+			}
 		}
 		else
 		{
@@ -2133,31 +3161,72 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 			return Error("Not enough loaded entities (expect at least 2!)");
 	}
 
+	//put them in the right order (data first, model next)
 	if (referenceIsFirst)
+	{
 		std::swap(dataAndModel[0],dataAndModel[1]);
+	}
+
+	//check that the scalar fields (weights) exist
+	if (dataSFAsWeights != -1)
+	{
+		ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(dataAndModel[0]->getEntity());
+		if (!cloud || cloud->getNumberOfScalarFields() == 0 || dataSFAsWeights >= static_cast<int>(cloud->getNumberOfScalarFields()))
+		{
+			return Error(QString("Invalid SF index for data entity! (%1)").arg(dataSFAsWeights));
+		}
+		else
+		{
+			if (dataSFAsWeights < 0) //last SF
+				dataSFAsWeights = static_cast<int>(cloud->getNumberOfScalarFields())-1;
+			Print(QString("[ICP] SF #%1 (data entity) will be used as weights").arg(dataSFAsWeights));
+			cloud->setCurrentDisplayedScalarField(dataSFAsWeights);
+		}
+
+	}
+	if (modelSFAsWeights != -1)
+	{
+		ccPointCloud* cloud = ccHObjectCaster::ToPointCloud(dataAndModel[1]->getEntity());
+		if (!cloud || cloud->getNumberOfScalarFields() == 0 || modelSFAsWeights >= static_cast<int>(cloud->getNumberOfScalarFields()))
+		{
+			return Error(QString("Invalid SF index for model entity! (%1)").arg(modelSFAsWeights));
+		}
+		else
+		{
+			if (modelSFAsWeights < 0) //last SF
+				modelSFAsWeights = static_cast<int>(cloud->getNumberOfScalarFields())-1;
+			Print(QString("[ICP] SF #%1 (model entity) will be used as weights").arg(modelSFAsWeights));
+			cloud->setCurrentDisplayedScalarField(modelSFAsWeights);
+		}
+	}
 
 	ccGLMatrix transMat;
 	double finalError = 0.0;
 	double finalScale = 1.0;
+	unsigned finalPointCount = 0;
 	if ( ccRegistrationTools::ICP(	dataAndModel[0]->getEntity(),
 									dataAndModel[1]->getEntity(),
 									transMat,
 									finalScale,
 									finalError,
+									finalPointCount,
 									minErrorDiff,
 									iterationCount,
 									randomSamplingLimit,
 									enableFarthestPointRemoval,
 									iterationCount != 0 ? CCLib::ICPRegistrationTools::MAX_ITER_CONVERGENCE : CCLib::ICPRegistrationTools::MAX_ERROR_CONVERGENCE,
 									adjustScale,
-									false,
-									false,
+									overlap/100.0,
+									dataSFAsWeights >= 0,
+									modelSFAsWeights >= 0,
 									CCLib::ICPRegistrationTools::SKIP_NONE,
 									parent ))
 	{
 		ccHObject* data = dataAndModel[0]->getEntity();
 		data->applyGLTransformation_recursive(&transMat);
 		Print(QString("Entity '%1' has been registered").arg(data->getName()));
+		Print(QString("RMS: %1").arg(finalError));
+		Print(QString("Number of points used for final step: %1").arg(finalPointCount));
 
 		//save matrix in a separate text file
 		{
@@ -2173,9 +3242,12 @@ bool ccCommandLineParser::commandICP(QStringList& arguments, QDialog* parent/*=0
 		}
 
 		dataAndModel[0]->basename += QString("_REGISTERED");
-		QString errorStr = Export(*dataAndModel[0]);
-		if (!errorStr.isEmpty())
-			return Error(errorStr);
+		if (s_autoSaveMode)
+		{
+			QString errorStr = Export(*dataAndModel[0]);
+			if (!errorStr.isEmpty())
+				return Error(errorStr);
+		}
 	}
 	else
 	{
@@ -2245,9 +3317,6 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 		saveDialog->enableSwapColorAndSF(false); //default order: point, color, SF, normal
 		saveDialog->enableSaveColumnsNamesHeader(false);
 		saveDialog->enableSavePointCountHeader(false);
-
-		if (s_silentMode)
-			saveDialog->setAutoShow(false);
 	}
 
 	//look for additional parameters
@@ -2260,7 +3329,7 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: extension after '%1'").arg(COMMAND_EXPORT_EXTENSION)));
+				return Error(QString("Missing parameter: extension after '%1'").arg(COMMAND_EXPORT_EXTENSION));
 
 			s_CloudExportExt = arguments.takeFirst();
 			Print(QString("New output extension for clouds: %1").arg(s_CloudExportExt));
@@ -2271,7 +3340,7 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: precision value after '%1'").arg(COMMAND_ASCII_EXPORT_PRECISION)));
+				return Error(QString("Missing parameter: precision value after '%1'").arg(COMMAND_ASCII_EXPORT_PRECISION));
 			bool ok;
 			int precision = arguments.takeFirst().toInt(&ok);
 			if (!ok || precision < 0)
@@ -2286,7 +3355,6 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 			{
 				saveDialog->setCoordsPrecision(precision);
 				saveDialog->setSfPrecision(precision);
-				saveDialog->setAutoShow(false);
 			}
 		}
 		else if (IsCommand(argument,COMMAND_ASCII_EXPORT_SEPARATOR))
@@ -2295,7 +3363,7 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: separator character after '%1'").arg(COMMAND_ASCII_EXPORT_SEPARATOR)));
+				return Error(QString("Missing parameter: separator character after '%1'").arg(COMMAND_ASCII_EXPORT_SEPARATOR));
 
 			if (fileFilter != AsciiFilter::GetFileFilter())
 				ccConsole::Warning(QString("Argument '%1' is only applicable to ASCII format!").arg(argument));
@@ -2312,14 +3380,43 @@ bool ccCommandLineParser::commandChangeCloudOutputFormat(QStringList& arguments)
 			else if (separatorStr == "TAB")
 				index = 3;
 			else
-				return Error(QString("Invalid separator! ('%1')").arg(COMMAND_ASCII_EXPORT_SEPARATOR));
+				return Error(QString("Invalid separator! ('%1')").arg(separatorStr));
 
 			QSharedPointer<AsciiSaveDlg> saveDialog = AsciiFilter::GetSaveDialog();
 			assert(saveDialog);
 			if (saveDialog)
 			{
 				saveDialog->setSeparatorIndex(index);
-				saveDialog->setAutoShow(false);
+			}
+		}
+		else if (IsCommand(argument,COMMAND_ASCII_EXPORT_ADD_COL_HEADER))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+
+			if (fileFilter != AsciiFilter::GetFileFilter())
+				ccConsole::Warning(QString("Argument '%1' is only applicable to ASCII format!").arg(argument));
+
+			QSharedPointer<AsciiSaveDlg> saveDialog = AsciiFilter::GetSaveDialog();
+			assert(saveDialog);
+			if (saveDialog)
+			{
+				saveDialog->enableSaveColumnsNamesHeader(true);
+			}
+		}
+		else if (IsCommand(argument,COMMAND_ASCII_EXPORT_ADD_PTS_COUNT))
+		{
+			//local option confirmed, we can move on
+			arguments.pop_front();
+
+			if (fileFilter != AsciiFilter::GetFileFilter())
+				ccConsole::Warning(QString("Argument '%1' is only applicable to ASCII format!").arg(argument));
+
+			QSharedPointer<AsciiSaveDlg> saveDialog = AsciiFilter::GetSaveDialog();
+			assert(saveDialog);
+			if (saveDialog)
+			{
+				saveDialog->enableSavePointCountHeader(true);
 			}
 		}
 		else
@@ -2354,7 +3451,7 @@ bool ccCommandLineParser::commandChangeMeshOutputFormat(QStringList& arguments)
 			arguments.pop_front();
 
 			if (arguments.empty())
-				return Error(QString(QString("Missing parameter: extension after '%1'").arg(COMMAND_EXPORT_EXTENSION)));
+				return Error(QString("Missing parameter: extension after '%1'").arg(COMMAND_EXPORT_EXTENSION));
 
 			s_MeshExportExt = arguments.takeFirst();
 			Print(QString("New output extension for meshes: %1").arg(s_MeshExportExt));
@@ -2383,10 +3480,33 @@ bool ccCommandLineParser::commandChangeFBXOutputFormat(QStringList& arguments)
 	return true;
 }
 
-bool ccCommandLineParser::commandForcePTXNormalsComputation(QStringList& arguments)
+bool ccCommandLineParser::commandChangePLYExportFormat(QStringList& arguments)
+{
+	if (arguments.empty())
+		return Error(QString("Missing parameter: format (ASCII, BINARY_LE, or BINARY_BE) after '%1'").arg(COMMAND_PLY_EXPORT_FORMAT));
+
+	//if (fileFilter != PlyFilter::GetFileFilter())
+	//	ccConsole::Warning(QString("Argument '%1' is only applicable to PLY format!").arg(argument));
+
+	QString plyFormat = arguments.takeFirst().toUpper();
+	//printf("%s\n",qPrintable(plyFormat));
+
+	if (plyFormat == "ASCII")
+		PlyFilter::SetDefaultOutputFormat(PLY_ASCII);
+	else if (plyFormat == "BINARY_BE")
+		PlyFilter::SetDefaultOutputFormat(PLY_BIG_ENDIAN);
+	else if (plyFormat == "BINARY_LE")
+		PlyFilter::SetDefaultOutputFormat(PLY_LITTLE_ENDIAN);
+	else
+		return Error(QString("Invalid PLY format! ('%1')").arg(plyFormat));
+
+	return true;
+}
+
+bool ccCommandLineParser::commandForceNormalsComputation(QStringList& arguments)
 {
 	//simply change the default filter behavior
-	PTXFilter::SetNormalsComputationBehavior(PTXFilter::ALWAYS);
+	s_loadParameters.autoComputeNormals = true;
 
 	return true;
 }
@@ -2442,7 +3562,7 @@ bool ccCommandLineParser::commandSaveMeshes(QStringList& arguments)
 bool ccCommandLineParser::commandAutoSave(QStringList& arguments)
 {
 	if (arguments.empty())
-		return Error(QString(QString("Missing parameter: option after '%1' (%2/%2)").arg(COMMAND_AUTO_SAVE).arg(OPTION_ON).arg(OPTION_OFF)));
+		return Error(QString("Missing parameter: option after '%1' (%2/%2)").arg(COMMAND_AUTO_SAVE).arg(OPTION_ON).arg(OPTION_OFF));
 
 	QString option = arguments.takeFirst().toUpper();
 	if (option == OPTION_ON)
@@ -2457,10 +3577,25 @@ bool ccCommandLineParser::commandAutoSave(QStringList& arguments)
 	}
 	else
 	{
-		return Error(QString(QString("Unrecognized option afer '%1' (%2 or %3 expected)").arg(COMMAND_AUTO_SAVE).arg(OPTION_ON).arg(OPTION_OFF)));
+		return Error(QString("Unrecognized option afer '%1' (%2 or %3 expected)").arg(COMMAND_AUTO_SAVE).arg(OPTION_ON).arg(OPTION_OFF));
 	}
 
 	return true;
+}
+
+bool ccCommandLineParser::commandLogFile(QStringList& arguments)
+{
+	if (arguments.empty())
+		return Error(QString("Missing parameter: filename after '%1'").arg(COMMAND_LOG_FILE));
+
+	QString filename = arguments.takeFirst();
+	if (!ccConsole::TheInstance())
+	{
+		assert(s_silentMode);
+		ccConsole::Init();
+	}
+
+	return ccConsole::TheInstance() ? ccConsole::TheInstance()->setLogFile(filename) : false;
 }
 
 int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
@@ -2510,6 +3645,11 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		{
 			success = commandRoughness(arguments,parent);
 		}
+		// "APPLY_TRANSFO" (APPLY 4x4 TRANSFORMATION)
+		else if (IsCommand(argument,COMMAND_APPLY_TRANSFORMATION))
+		{
+			success = commandApplyTransformation(arguments);
+		}
 		//Import Bundler file + orthorectification
 		else if (IsCommand(argument,COMMAND_BUNDLER))
 		{
@@ -2555,10 +3695,20 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		{
 			success = commandStatTest(arguments,&progressDlg);
 		}
+		//SF Arithmetic tool
+		else if (IsCommand(argument,COMMAND_SF_ARITHMETIC))
+		{
+			success = commandSfArithmetic(arguments);
+		}
 		//ICP registration
 		else if (IsCommand(argument,COMMAND_ICP))
 		{
 			success = commandICP(arguments,parent);
+		}
+		//Delaunay 2.5D triangulation
+		else if (IsCommand(argument,COMMAND_DELAUNAY))
+		{
+			success = commandDelaunay(arguments,parent);
 		}
 		//Crop
 		else if (IsCommand(argument,COMMAND_CROP))
@@ -2570,6 +3720,21 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		{
 			success = commandCrop2D(arguments);
 		}
+		//Cross section
+		else if (IsCommand(argument,COMMAND_CROSS_SECTION))
+		{
+			success = commandCrossSection(arguments);
+		}
+		//Color banding
+		else if (IsCommand(argument,COMMAND_COLOR_BANDING))
+		{
+			success = commandColorBanding(arguments);
+		}
+		// "SOR" FILTER
+		else if (IsCommand(argument,COMMAND_SOR_FILTER))
+		{
+			success = commandSORFilter(arguments,&progressDlg);
+		}
 		//Change default cloud output format
 		else if (IsCommand(argument,COMMAND_CLOUD_EXPORT_FORMAT))
 		{
@@ -2580,19 +3745,29 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		{
 			success = commandChangeMeshOutputFormat(arguments);
 		}
+		else if (IsCommand(argument,COMMAND_PLY_EXPORT_FORMAT))
+		{
+			success = commandChangePLYExportFormat(arguments);
+		}
 		//Set default FBX output format
 		else if (IsCommand(argument,COMMAND_FBX_EXPORT_FORMAT))
 		{
 			success = commandChangeFBXOutputFormat(arguments);
 		}
-		//Force normal computation when importing PTX files
-		else if (IsCommand(argument,COMMAND_PTX_COMPUTE_NORMALS))
+		//Force normal computation when importing gridded clouds
+		else if (IsCommand(argument,COMMAND_COMPUTE_GRIDDED_NORMALS))
 		{
-			success = commandForcePTXNormalsComputation(arguments);
+			success = commandForceNormalsComputation(arguments);
 		}
+		//Set the current "active" scalar-field
 		else if (IsCommand(argument,COMMAND_SET_ACTIVE_SF))
 		{
 			success = setActiveSF(arguments);
+		}
+		//Removes all scalar-fields
+		else if (IsCommand(argument,COMMAND_REMOVE_ALL_SFS))
+		{
+			success = removeAllSFs(arguments);
 		}
 		//save all loaded clouds
 		else if (IsCommand(argument,COMMAND_SAVE_CLOUDS))
@@ -2614,10 +3789,20 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		{
 			removeClouds();
 		}
+		//unload the last loaded cloud
+		else if (IsCommand(argument,COMMAND_POP_CLOUDS))
+		{
+			removeClouds(true);
+		}
 		//unload all loaded meshes
 		else if (IsCommand(argument,COMMAND_CLEAR_MESHES))
 		{
 			removeMeshes();
+		}
+		//unload the last loaded cloud
+		else if (IsCommand(argument,COMMAND_POP_MESHES))
+		{
+			removeMeshes(true);
 		}
 		//unload all loaded entities
 		else if (IsCommand(argument,COMMAND_CLEAR))
@@ -2629,6 +3814,11 @@ int ccCommandLineParser::parse(QStringList& arguments, QDialog* parent/*=0*/)
 		else if (IsCommand(argument,COMMAND_NO_TIMESTAMP))
 		{
 			s_addTimestamp = false;
+		}
+		//log file
+		else if (IsCommand(argument,COMMAND_LOG_FILE))
+		{
+			success = commandLogFile(arguments);
 		}
 		//silent mode (i.e. no console)
 		else if (IsCommand(argument,COMMAND_SILENT_MODE))

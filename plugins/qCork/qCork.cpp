@@ -103,7 +103,7 @@ bool ToCorkMesh(const ccMesh* in, CorkMesh& out, ccMainAppInterface* app = 0)
 		outVerts.resize(vertCount);
 		outTris.resize(triCount);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		if (app)
 			app->dispToConsole("[Cork] Not enough memory!",ccMainAppInterface::ERR_CONSOLE_MESSAGE);
@@ -121,7 +121,7 @@ bool ToCorkMesh(const ccMesh* in, CorkMesh& out, ccMainAppInterface* app = 0)
 	{
 		for(unsigned i=0; i<triCount; i++)
 		{
-			const CCLib::TriangleSummitsIndexes* tsi = in->getTriangleIndexes(i);
+			const CCLib::VerticesIndexes* tsi = in->getTriangleVertIndexes(i);
 			CorkTriangle corkTri;
 			corkTri.a = tsi->i1;
 			corkTri.b = tsi->i2;
@@ -294,7 +294,7 @@ bool doPerformBooleanOp()
 			break;
 		}
 	}
-	catch(std::exception e)
+	catch(const std::exception& e)
 	{
 		if (s_params.app)
 			s_params.app->dispToConsole(QString("Exception caught: %1").arg(e.what()),ccMainAppInterface::WRN_CONSOLE_MESSAGE);

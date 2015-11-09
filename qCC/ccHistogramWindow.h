@@ -39,6 +39,7 @@ class QCPColoredBars;
 class QCPBarsWithText;
 class QCPHiddenArea;
 class QCPArrow;
+class Ui_HistogramDialog;
 
 //! Histogram widget
 class ccHistogramWindow : public QCustomPlot
@@ -48,7 +49,7 @@ class ccHistogramWindow : public QCustomPlot
 public:
 
 	//! Default constructor
-	ccHistogramWindow(QWidget *parent = 0);
+	explicit ccHistogramWindow(QWidget *parent = 0);
 
 	//! Destructor
 	virtual ~ccHistogramWindow();
@@ -63,11 +64,13 @@ public:
 		\param sf associated scalar field
 		\param initialNumberOfClasses initial number of classes
 		\param numberOfClassesCanBeChanged whether to allow the user to modify the number of classes
+		\param showNaNValuesInGrey show NaN values (in gray)
 		\return success
 	**/
 	void fromSF(ccScalarField* sf,
 				unsigned initialNumberOfClasses = 0,
-				bool numberOfClassesCanBeChanged = true);
+				bool numberOfClassesCanBeChanged = true,
+				bool showNaNValuesInGrey = true);
 
 	//! Creates histogram from a bin array (each bin = number of elements per class)
 	/** Number of classes can't be modified.
@@ -105,6 +108,13 @@ public:
 	/** Only works if a SF is associated and color scheme is USE_SF_SCALE.
 	**/
 	void refreshBars();
+
+	//! Returns the current histogram bins
+	inline const std::vector<unsigned>& histoValues() const { return m_histoValues; }
+	//! Returns the current histogram min value
+	inline double minVal() const { return m_minVal; }
+	//! Returns the current histogram max value
+	inline double maxVal() const { return m_maxVal; }
 
 public: //SF interactor mode
 
@@ -152,7 +162,6 @@ protected: //attributes
 
 	//Title
 	QString m_titleStr;
-	bool m_showTitle;
 	QCPPlotTitle* m_titlePlot;
 
 	//! Color scheme
@@ -215,17 +224,35 @@ protected: //SF interactor mode
 //! Encapsulating dialog for ccHistogramWindow
 class ccHistogramWindowDlg : public QDialog
 {
+	Q_OBJECT
+
 public:
 	//! Default constructor
-	ccHistogramWindowDlg(QWidget* parent = 0);
+	explicit ccHistogramWindowDlg(QWidget* parent = 0);
+	//! Destructor
+	virtual ~ccHistogramWindowDlg();
 
 	//! Returns encapsulated ccHistogramWindow
 	inline ccHistogramWindow* window() { return m_win; }
+
+	//! Exports histogram to a CSV file
+	bool exportToCSV(QString filename) const;
+
+protected slots:
+
+	//! When the export to CSV file button is pressed
+	void onExportToCSV();
+
+	//! When the export to Image file button is pressed
+	void onExportToImage();
 
 protected:
 
 	//Associated histogram window
 	ccHistogramWindow* m_win;
+
+	//! Associated widgets
+	Ui_HistogramDialog* m_gui;
 };
 
 #endif

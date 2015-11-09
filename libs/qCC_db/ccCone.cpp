@@ -99,12 +99,12 @@ bool ccCone::buildUp()
 	assert(m_triNormals);
 
 	//2 first points: centers of the top & bottom surfaces
-	CCVector3 bottomCenter = -CCVector3(-m_xOff,-m_yOff,m_height)/2;
+	CCVector3 bottomCenter = CCVector3(m_xOff,m_yOff,-m_height)/2;
 	CCVector3 topCenter = CCVector3(-m_xOff,-m_yOff,m_height)/2;
 	{
 		//bottom center
 		verts->addPoint(bottomCenter);
-		normsType nIndex = ccNormalVectors::GetNormIndex(CCVector3(0,0,-1).u);
+		CompressedNormType nIndex = ccNormalVectors::GetNormIndex(CCVector3(0,0,-1).u);
 		m_triNormals->addElement(nIndex);
 		//top center
 		verts->addPoint(topCenter);
@@ -120,8 +120,8 @@ bool ccCone::buildUp()
 		{
 			for (unsigned i=0; i<steps; ++i)
 			{
-				CCVector3 P(bottomCenter.x + cos(angle_rad_step*static_cast<PointCoordinateType>(i))*m_bottomRadius,
-							bottomCenter.y + sin(angle_rad_step*static_cast<PointCoordinateType>(i))*m_bottomRadius,
+				CCVector3 P(bottomCenter.x + cos(angle_rad_step*i)*m_bottomRadius,
+							bottomCenter.y + sin(angle_rad_step*i)*m_bottomRadius,
 							bottomCenter.z);
 				verts->addPoint(P);
 			}
@@ -131,8 +131,8 @@ bool ccCone::buildUp()
 		{
 			for (unsigned i=0; i<steps; ++i)
 			{
-				CCVector3 P(topCenter.x + cos(angle_rad_step*static_cast<PointCoordinateType>(i))*m_topRadius,
-							topCenter.y + sin(angle_rad_step*static_cast<PointCoordinateType>(i))*m_topRadius,
+				CCVector3 P(topCenter.x + cos(angle_rad_step*i)*m_topRadius,
+							topCenter.y + sin(angle_rad_step*i)*m_topRadius,
 							topCenter.z);
 				verts->addPoint(P);
 			}
@@ -142,14 +142,14 @@ bool ccCone::buildUp()
 			for (unsigned i=0; i<steps; ++i)
 			{
 				//slope
-				CCVector3 u(-sin(angle_rad_step*static_cast<PointCoordinateType>(i)),cos(angle_rad_step*static_cast<PointCoordinateType>(i)),0);
+				CCVector3 u(-sin(angle_rad_step*i),cos(angle_rad_step*i),0);
 				CCVector3 v(bottomCenter.x-topCenter.x + u.y*(m_bottomRadius-m_topRadius),
-							 bottomCenter.y-topCenter.y - u.x*(m_bottomRadius-m_topRadius),
-							 bottomCenter.z-topCenter.z);
+							bottomCenter.y-topCenter.y - u.x*(m_bottomRadius-m_topRadius),
+							bottomCenter.z-topCenter.z);
 				CCVector3 N = v.cross(u);
 				N.normalize();
 
-				normsType nIndex = ccNormalVectors::GetNormIndex(N.u);
+				CompressedNormType nIndex = ccNormalVectors::GetNormIndex(N.u);
 				m_triNormals->addElement(nIndex);
 			}
 		}

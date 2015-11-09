@@ -135,7 +135,7 @@ void qRansacSD::doAction()
 	//input cloud
 	unsigned count = pc->size();
 	bool hasNorms = pc->hasNormals();
-	PointCoordinateType bbMin[3],bbMax[3];
+	CCVector3 bbMin, bbMax;
 	pc->getBoundingBox(bbMin,bbMax);
 	const CCVector3d& globalShift = pc->getGlobalShift();
 	double globalScale = pc->getGlobalScale();
@@ -176,12 +176,12 @@ void qRansacSD::doAction()
 		
 		//manually set bounding box!
 		Vec3f cbbMin,cbbMax;
-		cbbMin[0] = static_cast<float>(bbMin[0]);
-		cbbMin[1] = static_cast<float>(bbMin[1]);
-		cbbMin[2] = static_cast<float>(bbMin[2]);
-		cbbMax[0] = static_cast<float>(bbMax[0]);
-		cbbMax[1] = static_cast<float>(bbMax[1]);
-		cbbMax[2] = static_cast<float>(bbMax[2]);
+		cbbMin[0] = static_cast<float>(bbMin.x);
+		cbbMin[1] = static_cast<float>(bbMin.y);
+		cbbMin[2] = static_cast<float>(bbMin.z);
+		cbbMax[0] = static_cast<float>(bbMax.x);
+		cbbMax[1] = static_cast<float>(bbMax.y);
+		cbbMax[2] = static_cast<float>(bbMax.z);
 		cloud.setBBox(cbbMin,cbbMax);
 	}
 
@@ -407,8 +407,7 @@ void qRansacSD::doAction()
 			}
 
 			//random color
-			colorType col[3];
-			ccColor::Generator::Random(col);
+			ccColor::Rgb col = ccColor::Generator::Random();
 			pcShape->setRGBColor(col);
 			pcShape->showColors(true);
 			pcShape->showNormals(saveNormals);
@@ -524,36 +523,55 @@ void qRansacSD::doAction()
 				float alpha = cone->Internal().Angle();
 
 				//compute max height
-				CCVector3 maxP = CCVector3::fromArray(CC.getValue());
-				float maxHeight = 0;
-				for (size_t j=0; j<shapePointsCount; ++j)
+				Vec3f minP, maxP;
+				float minHeight, maxHeight;
+				minP = maxP = cloud[0].pos;
+				minHeight = maxHeight = cone->Internal().Height(cloud[0].pos);
+				for (size_t j=1; j<shapePointsCount; ++j)
 				{
-					float h = cone->Internal().Height(cloud[count-1-j].pos);
-					if (h > maxHeight)
+					float h = cone->Internal().Height(cloud[j].pos);
+					if (h < minHeight)
+					{
+						minHeight = h;
+						minP = cloud[j].pos;
+					}
+					else if (h > maxHeight)
 					{
 						maxHeight = h;
-						maxP = CCVector3::fromArray(cloud[count-1-j].pos);
+						maxP = cloud[j].pos;
 					}
+
 				}
 
-				pcShape->setName(QString("Cone (alpha=%1/h=%2)").arg(alpha,0,'f').arg(maxHeight,0,'f'));
+				pcShape->setName(QString("Cone (alpha=%1/h=%2)").arg(alpha,0,'f').arg(maxHeight-minHeight,0,'f'));
 
-				float radius = tan(alpha)*maxHeight;
-				CCVector3 Z = CCVector3::fromArray(CA.getValue());
-				CCVector3 C = CCVector3::fromArray(CC.getValue()); //cone apex
+				float minRadius = tan(alpha)*minHeight;
+				float maxRadius = tan(alpha)*maxHeight;
 
-				//construct remaining of base
-				Z.normalize();
-				CCVector3 X = maxP - (C + maxHeight * Z);
-				X.normalize();
-				CCVector3 Y = Z * X;
+				//let's build the cone primitive
+				{
+					//the bottom should be the largest part so we inverse the axis direction
+					CCVector3 Z = -CCVector3::fromArray(CA.getValue());
+					Z.normalize();
+				
+					//the center is halfway between the min and max height
+					float midHeight = (minHeight + maxHeight)/2;
+					CCVector3 C = CCVector3::fromArray((CC + CA * midHeight).getValue());
 
-				//we build matrix from these vecctors
-				ccGLMatrix glMat(X,Y,Z,C+(maxHeight/2)*Z);
+					//radial axis
+					CCVector3 X = CCVector3::fromArray((maxP - (CC + maxHeight * CA)).getValue());
+					X.normalize();
+				
+					//orthogonal radial axis
+					CCVector3 Y = Z * X;
 
-				//cone primitive
-				prim = new ccCone(0,radius,maxHeight,0,0,&glMat);
-				prim->setEnabled(false);
+					//we build the transformation matrix from these vecctors
+					ccGLMatrix glMat(X,Y,Z,C);
+
+					//eventually create the cone primitive
+					prim = new ccCone(maxRadius, minRadius, maxHeight-minHeight, 0, 0, &glMat);
+					prim->setEnabled(false);
+				}
 
 				}
 				break;
