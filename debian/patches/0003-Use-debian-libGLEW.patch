@@ -13,11 +13,9 @@ Subject: Use debian libGLEW
  qCC/CMakeLists.txt               | 2 +-
  8 files changed, 13 insertions(+), 13 deletions(-)
 
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 4d2a67e..df0f337 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -68,7 +68,7 @@ include( CMakeExternalLibs.cmake )
+@@ -62,7 +62,7 @@ include( CMakeExternalLibs.cmake )
  include( contrib/AllSupport.cmake )
  
  # Libs requested by both qCC & ccViewer
@@ -26,20 +24,17 @@ index 4d2a67e..df0f337 100644
  add_subdirectory( libs/CCFbo )
  add_subdirectory( libs/qCC_db ) # must always be included after CCFbo (dependency)
  add_subdirectory( libs/qCC_io ) # must always be included after qCC_db (dependency)
-diff --git a/ccViewer/CMakeLists.txt b/ccViewer/CMakeLists.txt
-index 1fb69ca..e51e5c2 100644
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
-@@ -9,7 +9,7 @@ if(POLICY CMP0020)
-   cmake_policy(SET CMP0020 OLD)
- endif()
+@@ -1,6 +1,6 @@
+ cmake_minimum_required(VERSION 2.8)
  
 -include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
 +# include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
-@@ -77,7 +77,7 @@ else()
+@@ -68,7 +68,7 @@ else()
  	add_executable( ${PROJECT_NAME} ${header_list} ${source_list} ${moc_list} ${generated_ui_list} ${generated_qrc_list} ${rc_list})
  endif()
  
@@ -48,11 +43,9 @@ index 1fb69ca..e51e5c2 100644
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
-diff --git a/libs/CCFbo/CMakeLists.txt b/libs/CCFbo/CMakeLists.txt
-index 8124701..647e5b8 100644
 --- a/libs/CCFbo/CMakeLists.txt
 +++ b/libs/CCFbo/CMakeLists.txt
-@@ -11,7 +11,7 @@ endif()
+@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
  
  include_directories( ${EXTERNAL_LIBS_INCLUDE_DIR} )
  include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/include )
@@ -61,7 +54,7 @@ index 8124701..647e5b8 100644
  
  project( CC_FBO_LIB )
  
-@@ -26,7 +26,7 @@ endif()
+@@ -17,7 +17,7 @@ endif()
  
  add_library( ${PROJECT_NAME} STATIC ${header_list} ${source_list} )
  
@@ -70,12 +63,10 @@ index 8124701..647e5b8 100644
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
  if ( USE_QT5 )
-diff --git a/libs/qCC_db/CMakeLists.txt b/libs/qCC_db/CMakeLists.txt
-index bcccab8..70d388d 100644
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
-@@ -11,7 +11,7 @@ endif()
- 
+@@ -1,7 +1,7 @@
+ cmake_minimum_required(VERSION 2.8)
  
  include_directories( ${EXTERNAL_LIBS_INCLUDE_DIR} )
 -include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
@@ -83,7 +74,7 @@ index bcccab8..70d388d 100644
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  if( MSVC )
-@@ -32,7 +32,7 @@ endif()
+@@ -22,7 +22,7 @@ endif()
  add_library( ${PROJECT_NAME} SHARED ${header_list} ${source_list} ${moc_list} )
  
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
@@ -92,11 +83,9 @@ index bcccab8..70d388d 100644
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
-diff --git a/libs/qCC_glWindow/CMakeLists.txt b/libs/qCC_glWindow/CMakeLists.txt
-index e4ec9b5..d31b6be 100644
 --- a/libs/qCC_glWindow/CMakeLists.txt
 +++ b/libs/qCC_glWindow/CMakeLists.txt
-@@ -11,7 +11,7 @@ endif()
+@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
  
  include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
  include_directories( ${EXTERNAL_LIBS_INCLUDE_DIR} )
@@ -105,7 +94,7 @@ index e4ec9b5..d31b6be 100644
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
-@@ -34,7 +34,7 @@ add_library( ${PROJECT_NAME} STATIC ${header_list} ${source_list} ${moc_list} )
+@@ -25,7 +25,7 @@ add_library( ${PROJECT_NAME} STATIC ${he
  
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
@@ -114,11 +103,9 @@ index e4ec9b5..d31b6be 100644
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
  
-diff --git a/libs/qCC_io/CMakeLists.txt b/libs/qCC_io/CMakeLists.txt
-index ae8a957..265f0ab 100644
 --- a/libs/qCC_io/CMakeLists.txt
 +++ b/libs/qCC_io/CMakeLists.txt
-@@ -11,7 +11,7 @@ endif()
+@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
  
  include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
  include_directories( ${EXTERNAL_LIBS_INCLUDE_DIR} )
@@ -127,8 +114,6 @@ index ae8a957..265f0ab 100644
  include_directories( ${CC_CORE_LIB_SOURCE_DIR}/include )
  include_directories( ${CC_FBO_LIB_SOURCE_DIR}/include )
  include_directories( ${QCC_DB_LIB_SOURCE_DIR} )
-diff --git a/plugins/CMakePluginTpl.cmake b/plugins/CMakePluginTpl.cmake
-index d5114e6..79010e3 100644
 --- a/plugins/CMakePluginTpl.cmake
 +++ b/plugins/CMakePluginTpl.cmake
 @@ -3,7 +3,7 @@
@@ -149,11 +134,9 @@ index d5114e6..79010e3 100644
  target_link_libraries( ${PROJECT_NAME} CC_FBO_LIB )
  target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
  target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
-diff --git a/qCC/CMakeLists.txt b/qCC/CMakeLists.txt
-index adc3e53..04f9e97 100644
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -78,7 +78,7 @@ else()
+@@ -69,7 +69,7 @@ else()
  	add_executable( ${PROJECT_NAME} ${header_list} ${source_list} ${moc_list} ${generated_ui_list} ${generated_qrc_list} ${rc_list} ${resource_list} ${txt_list} )
  endif()
  

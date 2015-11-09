@@ -6,11 +6,9 @@ Subject: Add-OpenMP-linker-flag
  plugins/qPoissonRecon/CMakeLists.txt | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/plugins/qPoissonRecon/CMakeLists.txt b/plugins/qPoissonRecon/CMakeLists.txt
-index 96ed2c8..97abef4 100644
 --- a/plugins/qPoissonRecon/CMakeLists.txt
 +++ b/plugins/qPoissonRecon/CMakeLists.txt
-@@ -20,7 +20,7 @@ add_subdirectory (PoissonRecon6.11)
+@@ -13,7 +13,7 @@ add_subdirectory (PoissonReconLib)
  
  include( ../CMakePluginTpl.cmake )
  

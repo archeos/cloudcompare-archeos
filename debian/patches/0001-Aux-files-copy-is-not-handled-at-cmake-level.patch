@@ -7,11 +7,9 @@ Subject: Aux files copy is not handled at cmake level
  qCC/CMakeLists.txt      | 8 ++++----
  2 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/ccViewer/CMakeLists.txt b/ccViewer/CMakeLists.txt
-index 1a33d37..27c5e10 100644
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
-@@ -131,9 +131,9 @@ if( WIN32 )
+@@ -124,9 +124,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files
@@ -24,11 +22,9 @@ index 1a33d37..27c5e10 100644
  
  # Put together our App bundle on Mac OS X
  if( APPLE )
-diff --git a/qCC/CMakeLists.txt b/qCC/CMakeLists.txt
-index e227e78..24416eb 100644
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -123,7 +123,7 @@ endif()
+@@ -116,7 +116,7 @@ endif()
  install_ext( TARGETS ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} )
  
  # Auxiliary files
@@ -37,7 +33,7 @@ index e227e78..24416eb 100644
  
  if( WIN32 )
  	# Export Qt dlls
-@@ -136,9 +136,9 @@ if( WIN32 )
+@@ -129,9 +129,9 @@ if( WIN32 )
  endif()
  
  # Install auxiliary files
