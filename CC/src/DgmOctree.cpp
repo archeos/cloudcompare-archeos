@@ -23,6 +23,7 @@
 #include "GenericIndexedCloudPersist.h"
 #include "CCMiscTools.h"
 #include "ScalarField.h"
+#include "RayAndBox.h"
 
 //system
 #include <algorithm>
@@ -192,8 +193,8 @@ void DgmOctree::clear()
 	m_numberOfProjectedPoints = 0;
 	m_thePointsAndTheirCellCodes.clear();
 
-	memset(m_fillIndexes,0,sizeof(int)*(MAX_OCTREE_LEVEL+1)*6);
-	memset(m_cellSize,0,sizeof(PointCoordinateType)*(MAX_OCTREE_LEVEL+2));
+	memset(m_fillIndexes, 0, sizeof(int)*(MAX_OCTREE_LEVEL+1)*6);
+	memset(m_cellSize, 0, sizeof(PointCoordinateType)*(MAX_OCTREE_LEVEL+2));
 	updateCellCountTable();
 }
 
@@ -488,9 +489,11 @@ void DgmOctree::updateCellSizeTable()
 	//update the cell dimension for each subdivision level
 	m_cellSize[0] = m_dimMax.x - m_dimMin.x;
 
+	unsigned long long d = 1;
 	for (int k=1; k<=MAX_OCTREE_LEVEL; k++)
 	{
-		m_cellSize[k] = m_cellSize[k-1] / 2;
+		d <<= 1;
+		m_cellSize[k] = m_cellSize[0] / d;
 	}
 }
 
@@ -578,6 +581,8 @@ void DgmOctree::computeCellsStatistics(unsigned char level)
 struct MonoDimensionalCellCodes
 {
 	//! Total number of positions/values (1024 at level 10, 2M. at level 21)
+	/** \warning Never pass a 'constant initializer' by reference
+	**/
 	static const int VALUE_COUNT = OCTREE_LENGTH(CCLib::DgmOctree::MAX_OCTREE_LEVEL);
 	
 	//! Default initialization
@@ -697,7 +702,7 @@ bool DgmOctree::getPointsInCell(OctreeCellCodeType cellCode,
 								unsigned char level,
 								ReferenceCloud* subset,
 								bool isCodeTruncated/*=false*/,
-								bool clearOutputCloud/*=true*/) const
+								bool clearOutputCloud/* = true*/) const
 {
 	unsigned char bitDec = GET_BIT_SHIFT(level);
 	if (!isCodeTruncated)
@@ -942,7 +947,7 @@ void DgmOctree::getCellDistanceFromBorders(	const Tuple3i& cellPos,
 											int neighbourhoodLength,
 											int* limits) const
 {
-	const int* fillIndexes = m_fillIndexes+6*level;
+	const int* fillIndexes = m_fillIndexes + 6*level;
 
 	int* _limits = limits;
 	for (int dim=0; dim<3; ++dim)
@@ -1497,7 +1502,7 @@ double DgmOctree::findTheNearestNeighborStartingFromCell(NearestNeighboursSearch
 		else
 		{
 			//fill indexes for current level
-			const int* _fillIndexes = m_fillIndexes+6*nNSS.level;
+			const int* _fillIndexes = m_fillIndexes + 6*nNSS.level;
 			int diagonalDistance = 0;
 			for (int dim=0; dim<3; ++dim)
 			{
@@ -1676,7 +1681,7 @@ unsigned DgmOctree::findNearestNeighborsStartingFromCell(	NearestNeighboursSearc
 		else
 		{
 			//fill indexes for current level
-			const int* _fillIndexes = m_fillIndexes+6*nNSS.level;
+			const int* _fillIndexes = m_fillIndexes + 6*nNSS.level;
 			int diagonalDistance = 0;
 			for (int dim=0; dim<3; ++dim)
 			{
@@ -1892,6 +1897,174 @@ int DgmOctree::getPointsInSphericalNeighbourhood(	const CCVector3& sphereCenter,
 	}
 
 	return static_cast<int>(neighbours.size());
+}
+
+size_t DgmOctree::getPointsInBoxNeighbourhood(BoxNeighbourhood& params) const
+{
+	//cell size
+	const PointCoordinateType& cs = getCellSize(params.level);
+
+	//we are going to test all the cells that may intersect this box
+	//first we extract the box... bounding box ;)
+	CCVector3 minCorner, maxCorner;
+	if (params.axes)
+	{
+		//normalize axes (just in case)
+		params.axes[0].normalize();
+		params.axes[1].normalize();
+		params.axes[2].normalize();
+
+		const PointCoordinateType& dx = params.dimensions.x;
+		const PointCoordinateType& dy = params.dimensions.y;
+		const PointCoordinateType& dz = params.dimensions.z;
+		
+		CCVector3 corners[8] =
+		{
+			CCVector3(-dx/2, -dy/2, -dz/2),
+			CCVector3(-dx/2, -dy/2,  dz/2),
+			CCVector3(-dx/2,  dy/2,  dz/2),
+			CCVector3(-dx/2,  dy/2, -dz/2),
+			CCVector3( dx/2, -dy/2, -dz/2),
+			CCVector3( dx/2, -dy/2,  dz/2),
+			CCVector3( dx/2,  dy/2,  dz/2),
+			CCVector3( dx/2,  dy/2, -dz/2)
+		};
+
+		//position of the box vertices in the octree coordinate system
+		for (unsigned char i=0; i<8; ++i)
+		{
+			corners[i] = corners[i].x * params.axes[0] + corners[i].y * params.axes[1] + corners[i].z * params.axes[2];
+			if (i)
+			{
+				if (corners[i].x < minCorner.x)
+					minCorner.x = corners[i].x;
+				else if (corners[i].x > maxCorner.x)
+					maxCorner.x = corners[i].x;
+
+				if (corners[i].y < minCorner.y)
+					minCorner.y = corners[i].y;
+				else if (corners[i].y > maxCorner.y)
+					maxCorner.y = corners[i].y;
+
+				if (corners[i].z < minCorner.z)
+					minCorner.z = corners[i].z;
+				else if (corners[i].z > maxCorner.z)
+					maxCorner.z = corners[i].z;
+			}
+			else
+			{
+				minCorner = maxCorner = corners[0];
+			}
+		}
+
+		//up to now min and max corners where centered on (0,0,0)
+		minCorner = params.center + minCorner;
+		maxCorner = params.center + maxCorner;
+	}
+	else
+	{
+		minCorner = params.center - params.dimensions/2;
+		maxCorner = params.center + params.dimensions/2;
+	}
+
+	Tuple3i minCornerPos;
+	getTheCellPosWhichIncludesThePoint(&minCorner, minCornerPos, params.level);
+	Tuple3i maxCornerPos;
+	getTheCellPosWhichIncludesThePoint(&maxCorner, maxCornerPos, params.level);
+
+	const int* minFillIndexes = getMinFillIndexes(params.level);
+	const int* maxFillIndexes = getMaxFillIndexes(params.level);
+
+	//don't need to look outside the octree limits!
+	minCornerPos.x = std::max<int>(minCornerPos.x, minFillIndexes[0]);
+	minCornerPos.y = std::max<int>(minCornerPos.y, minFillIndexes[1]);
+	minCornerPos.z = std::max<int>(minCornerPos.z, minFillIndexes[2]);
+
+	maxCornerPos.x = std::min<int>(maxCornerPos.x, maxFillIndexes[0]);
+	maxCornerPos.y = std::min<int>(maxCornerPos.y, maxFillIndexes[1]);
+	maxCornerPos.z = std::min<int>(maxCornerPos.z, maxFillIndexes[2]);
+
+	//half cell diagonal
+	CCVector3 boxHalfDimensions = params.dimensions / 2;
+	CCVector3 maxHalfDist = boxHalfDimensions;
+	if (params.axes)
+	{
+		PointCoordinateType halfDiag = static_cast<PointCoordinateType>(cs * sqrt(3.0)/2.0);
+		maxHalfDist += CCVector3(halfDiag, halfDiag, halfDiag);
+	}
+
+	//binary shift for cell code truncation
+	unsigned char bitDec = GET_BIT_SHIFT(params.level);
+
+	for (int i=minCornerPos.x; i<=maxCornerPos.x; ++i)
+	{
+		for (int j=minCornerPos.y; j<=maxCornerPos.y; ++j)
+		{
+			for (int k=minCornerPos.z; k<=maxCornerPos.z; ++k)
+			{
+				//additional inclusion test
+				if (params.axes)
+				{
+					CCVector3 cellCenter = m_dimMin + CCVector3(static_cast<PointCoordinateType>(i + 0.5),
+																static_cast<PointCoordinateType>(j + 0.5),
+																static_cast<PointCoordinateType>(k + 0.5)) * cs;
+
+					//project the cell center in the box C.S.
+					CCVector3 Q = cellCenter - params.center;
+					Q = CCVector3(	params.axes[0].dot(Q),
+									params.axes[1].dot(Q),
+									params.axes[2].dot(Q) );
+
+					//rough inclusion test
+					if (	fabs(Q.x) > maxHalfDist.x
+						||	fabs(Q.y) > maxHalfDist.y
+						||	fabs(Q.z) > maxHalfDist.z )
+					{
+						//skip this cell
+						continue;
+					}
+				}
+
+				//test if this cell exists
+				Tuple3i cellPos(i, j, k);
+				OctreeCellCodeType truncatedCellCode = generateTruncatedCellCode(cellPos, params.level);
+				unsigned cellIndex = getCellIndex(truncatedCellCode,bitDec);
+
+				//if yes, we can test the corresponding points
+				if (cellIndex < m_numberOfProjectedPoints)
+				{
+					//we look for the first index in 'm_thePointsAndTheirCellCodes' corresponding to this cell
+					cellsContainer::const_iterator p = m_thePointsAndTheirCellCodes.begin()+cellIndex;
+					OctreeCellCodeType searchCode = (p->theCode >> bitDec);
+
+					//while the (partial) cell code matches this cell
+					for ( ; (p != m_thePointsAndTheirCellCodes.end()) && ((p->theCode >> bitDec) == searchCode); ++p)
+					{
+						const CCVector3* P = m_theAssociatedCloud->getPoint(p->theIndex);
+						CCVector3 Q = *P - params.center;
+
+						if (params.axes)
+						{
+							//project the point in the box C.S.
+							Q = CCVector3(	params.axes[0].dot(Q),
+											params.axes[1].dot(Q),
+											params.axes[2].dot(Q) );
+						}
+
+						//we keep the points that fall inside the box
+						if (	fabs(Q.x) <= boxHalfDimensions.x
+							&&	fabs(Q.y) <= boxHalfDimensions.y
+							&&	fabs(Q.z) <= boxHalfDimensions.z )
+						{
+							params.neighbours.push_back(PointDescriptor(P, p->theIndex, 0));
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return params.neighbours.size();
 }
 
 size_t DgmOctree::getPointsInCylindricalNeighbourhood(CylindricalNeighbourhood& params) const
@@ -2987,7 +3160,7 @@ bool DgmOctree::getCellIndexes(unsigned char level, cellIndexesContainer& vec) c
 bool DgmOctree::getPointsInCellByCellIndex(	ReferenceCloud* cloud,
 											unsigned cellIndex,
 											unsigned char level,
-											bool clearOutputCloud/*=true*/) const
+											bool clearOutputCloud/* = true*/) const
 {
 	assert(cloud && cloud->getAssociatedCloud() == m_theAssociatedCloud);
 
@@ -3536,15 +3709,21 @@ int DgmOctree::extractCCs(const cellCodesContainer& cellCodes, unsigned char lev
 
 /*** Octree-based cloud traversal mechanism ***/
 
-DgmOctree::octreeCell::octreeCell(DgmOctree* _parentOctree)
+DgmOctree::octreeCell::octreeCell(const DgmOctree* _parentOctree)
 	: parentOctree(_parentOctree)
 	, level(0)
 	, truncatedCode(0)
 	, index(0)
 	, points(0)
 {
-	assert(parentOctree && parentOctree->m_theAssociatedCloud);
-	points = new ReferenceCloud(parentOctree->m_theAssociatedCloud);
+	if (parentOctree && parentOctree->m_theAssociatedCloud)
+	{
+		points = new ReferenceCloud(parentOctree->m_theAssociatedCloud);
+	}
+	else
+	{
+		assert(false);
+	}
 }
 
 DgmOctree::octreeCell::octreeCell(const octreeCell& cell)
@@ -3569,6 +3748,7 @@ DgmOctree::octreeCell::~octreeCell()
 #include <QtCore>
 #include <QApplication>
 #include <QtConcurrentMap>
+#include <QThreadPool>
 
 /*** FOR THE MULTI THREADING WRAPPER ***/
 struct octreeCellDesc
@@ -3633,12 +3813,13 @@ void LaunchOctreeCellFunc_MT(const octreeCellDesc& desc)
 
 #endif
 
-unsigned DgmOctree::executeFunctionForAllCellsAtLevel(unsigned char level,
+unsigned DgmOctree::executeFunctionForAllCellsAtLevel(	unsigned char level,
 														octreeCellFunc func,
 														void** additionalParameters,
 														bool multiThread/*=false*/,
 														GenericProgressCallback* progressCb/*=0*/,
-														const char* functionTitle/*=0*/)
+														const char* functionTitle/*=0*/,
+														int maxThreadCount/*=0*/)
 {
 	if (m_thePointsAndTheirCellCodes.empty())
 		return 0;
@@ -3831,6 +4012,11 @@ unsigned DgmOctree::executeFunctionForAllCellsAtLevel(unsigned char level,
 		s_binarySearchCount = 0.0;
 #endif
 
+		if (maxThreadCount == 0)
+		{
+			maxThreadCount = QThread::idealThreadCount();
+		}
+		QThreadPool::globalInstance()->setMaxThreadCount(maxThreadCount);
 		QtConcurrent::blockingMap(cells, LaunchOctreeCellFunc_MT);
 
 #ifdef COMPUTE_NN_SEARCH_STATISTICS
@@ -3879,9 +4065,10 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 	void** additionalParameters,
 	unsigned minNumberOfPointsPerCell,
 	unsigned maxNumberOfPointsPerCell,
-	bool multiThread/*=true*/,
+	bool multiThread/* = true*/,
 	GenericProgressCallback* progressCb/*=0*/,
-	const char* functionTitle/*=0*/)
+	const char* functionTitle/*=0*/,
+	int maxThreadCount/*=0*/)
 {
 	if (m_thePointsAndTheirCellCodes.empty())
 		return 0;
@@ -4112,7 +4299,9 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 			}
 			//*/
 			for (unsigned i = 0; i < elements; ++i)
+			{
 				cell.points->addPointIndex((startingElement++)->theIndex);
+			}
 
 			//call user method on current cell
 			result = (*func)(cell, additionalParameters,
@@ -4218,11 +4407,11 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 									++elements;
 
 								//and we must stop point collection here
-								keepGoing=false;
+								keepGoing = false;
 
 #ifdef ENABLE_DOWN_TOP_TRAVERSAL_MT
 								//in this case, the next cell won't be the first sub-cell!
-								firstSubCell=false;
+								firstSubCell = false;
 #endif
 								break;
 							}
@@ -4275,7 +4464,7 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 								//we 'add' the point to the cell descriptor
 								++elements;
 								//and we can continue collecting points
-								keepGoing=true;
+								keepGoing = true;
 							}
 
 							//as this cell and the next one share the same parent,
@@ -4286,13 +4475,13 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 						{
 							//as this cell and the next one have differnt parents,
 							//the next cell is the first sub-cell!
-							firstSubCell=true;
+							firstSubCell = true;
 						}
 					}
 					else
 					{
 						//at the ceiling level, all cells are considered as 'frist' sub-cells
-						firstSubCell=true;
+						firstSubCell = true;
 					}
 
 					//we must stop point collection here
@@ -4327,8 +4516,8 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 		}
 
 		//statistics
-		double mean = static_cast<double>(popSum)/static_cast<double>(cells.size());
-		double stddev = sqrt(static_cast<double>(popSum2-popSum*popSum))/static_cast<double>(cells.size());
+		double mean = static_cast<double>(popSum) / cells.size();
+		double stddev = sqrt(static_cast<double>(popSum2 - popSum*popSum)) / cells.size();
 
 		//static wrap
 		s_octree_MT = this;
@@ -4361,6 +4550,11 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 		s_binarySearchCount = 0.0;
 #endif
 
+		if (maxThreadCount == 0)
+		{
+			maxThreadCount = QThread::idealThreadCount();
+		}
+		QThreadPool::globalInstance()->setMaxThreadCount(maxThreadCount);
 		QtConcurrent::blockingMap(cells, LaunchOctreeCellFunc_MT);
 
 #ifdef COMPUTE_NN_SEARCH_STATISTICS
@@ -4397,4 +4591,203 @@ unsigned DgmOctree::executeFunctionForAllCellsStartingAtLevel(unsigned char star
 		return static_cast<unsigned>(cells.size());
 	}
 #endif
+}
+
+bool DgmOctree::rayCast(const CCVector3& rayAxis,
+						const CCVector3& rayOrigin,
+						double maxRadiusOrFov,
+						bool isFOV,
+						RayCastProcess process,
+						std::vector<PointDescriptor>& output) const
+{
+	if (m_thePointsAndTheirCellCodes.empty())
+	{
+		//nothing to do
+		assert(false);
+		return false;
+	}
+
+	CCVector3 margin(0, 0, 0);
+	double maxSqRadius = 0;
+	if (!isFOV)
+	{
+		margin = CCVector3(1, 1, 1) * static_cast<PointCoordinateType>(maxRadiusOrFov);
+		maxSqRadius = maxRadiusOrFov*maxRadiusOrFov;
+	}
+
+	//first test with the total bounding box
+	Ray<PointCoordinateType> ray(rayAxis, rayOrigin);
+	if (!AABB<PointCoordinateType>(m_dimMin - margin, m_dimMax + margin).intersects(ray))
+	{
+		//no intersection
+		output.clear();
+		return true;
+	}
+
+	//no need to go too deep
+	const unsigned char maxLevel = findBestLevelForAGivenPopulationPerCell(10);
+
+	//starting level of subdivision
+	unsigned char level = 1;
+	//binary shift for cell code truncation at current level
+	unsigned char currentBitDec = GET_BIT_SHIFT(level);
+	//current cell code
+	OctreeCellCodeType currentCode = INVALID_CELL_CODE;
+	//whether the current cell should be skipped or not
+	bool skipThisCell = false;
+	//smallest FOV (i.e. nearest point)
+	double smallestOrderDist = -1.0;
+
+#ifdef _DEBUG
+	m_theAssociatedCloud->enableScalarField();
+#endif
+
+	//ray with origin expressed in the local coordinate system!
+	Ray<PointCoordinateType> rayLocal(rayAxis, rayOrigin - m_dimMin);
+
+	//let's sweep through the octree
+	for (cellsContainer::const_iterator it = m_thePointsAndTheirCellCodes.begin(); it != m_thePointsAndTheirCellCodes.end(); ++it)
+	{
+		OctreeCellCodeType truncatedCode = (it->theCode >> currentBitDec);
+		
+		//new cell?
+		if (truncatedCode != (currentCode >> currentBitDec))
+		{
+			//look for the biggest 'parent' cell that englobes this cell and the previous one (if any)
+			while (level > 1)
+			{
+				unsigned char bitDec = GET_BIT_SHIFT(level-1);
+				if ((it->theCode >> bitDec) == (currentCode >> bitDec))
+				{
+					//same parent cell, we can stop here
+					break;
+				}
+				--level;
+			}
+
+			currentCode = it->theCode;
+
+			//now try to go deeper with the new cell
+			while (level < maxLevel)
+			{
+				Tuple3i cellPos;
+				getCellPos(it->theCode, level, cellPos, false);
+
+				//first test with the total bounding box
+				const PointCoordinateType& halfCellSize = getCellSize(level) / 2;
+				CCVector3 cellCenter(	(2* cellPos.x + 1) * halfCellSize,
+										(2* cellPos.y + 1) * halfCellSize,
+										(2* cellPos.z + 1) * halfCellSize);
+
+				CCVector3 halfCell = CCVector3(halfCellSize, halfCellSize, halfCellSize);
+
+				if (isFOV)
+				{
+					double radialSqDist, sqDistToOrigin;
+					rayLocal.squareDistances(cellCenter, radialSqDist, sqDistToOrigin);
+
+					double dx = sqrt(sqDistToOrigin);
+					double dy = std::max<double>(0, sqrt(radialSqDist) - SQRT_3 * halfCellSize);
+					double fov_rad = atan2(dy, dx);
+
+					skipThisCell = (fov_rad > maxRadiusOrFov);
+				}
+				else
+				{
+					skipThisCell = !AABB<PointCoordinateType>(	cellCenter - halfCell - margin,
+																cellCenter + halfCell + margin).intersects(rayLocal);
+				}
+
+				if (skipThisCell)
+					break;
+				else
+					++level;
+			}
+			currentBitDec = GET_BIT_SHIFT(level);
+		}
+
+#ifdef _DEBUG
+		m_theAssociatedCloud->setPointScalarValue(it->theIndex, level);
+#endif
+
+		if (!skipThisCell)
+		{
+			//test the point
+			const CCVector3* P = m_theAssociatedCloud->getPoint(it->theIndex);
+
+			double radialSqDist = ray.radialSquareDistance(*P);
+			double orderDist = -1.0;
+			bool isElligible = false;
+
+			if (isFOV)
+			{
+				double sqDist = ray.squareDistanceToOrigin(*P);
+				double fov_rad = atan2(sqrt(radialSqDist), sqrt(sqDist));
+				isElligible = (fov_rad <= maxRadiusOrFov);
+				orderDist = fov_rad;
+#ifdef _DEBUG
+				//m_theAssociatedCloud->setPointScalarValue(it->theIndex, fov_rad);
+				//m_theAssociatedCloud->setPointScalarValue(it->theIndex, sqrt(sqDist));
+#endif
+			}
+			else
+			{
+				isElligible = (radialSqDist <= maxSqRadius);
+#ifdef _DEBUG
+				//m_theAssociatedCloud->setPointScalarValue(it->theIndex, sqrt(radialSqDist));
+#endif
+			}
+
+			if (isElligible)
+			{
+				try
+				{
+					switch (process)
+					{
+					case RC_NEAREST_POINT:
+
+						if (orderDist < 0)
+						{
+							//to give better chances to points that are closer to the viewer)
+							double sqDist = ray.squareDistanceToOrigin(*P);
+							orderDist = sqrt(radialSqDist * sqDist);
+						}
+					
+						//keep only the 'nearest' point
+						if (output.empty())
+						{
+							output.resize(1, PointDescriptor(P, it->theIndex, radialSqDist));
+							smallestOrderDist = orderDist;
+						}
+						else
+						{
+							if (orderDist < smallestOrderDist)
+							{
+								output.back() = PointDescriptor(P, it->theIndex, radialSqDist);
+								smallestOrderDist = orderDist;
+							}
+						}
+						break;
+
+					case RC_CLOSE_POINTS:
+					 
+						//store all the points that are close enough to the ray
+						output.push_back(PointDescriptor(P, it->theIndex, radialSqDist));
+						break;
+
+					default:
+						assert(false);
+						return false;
+					}
+				}
+				catch (const std::bad_alloc&)
+				{
+					//not enough memory
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
 }

@@ -49,6 +49,7 @@
 //Qt
 #include <QThread>
 #include <QElapsedTimer>
+#include <QSharedPointer>
 
 //system
 #include <assert.h>
@@ -102,9 +103,11 @@ protected:
 		timer.start();
 
 		//first we need an octree
-		ccOctree* originalOctree = m_cloud.getOctree();
-		ccOctree* octree = originalOctree ? originalOctree : m_cloud.computeOctree(0/*progressCallback*/,false);
-		if (!octree)
+		//DGM: we don't use the cloud's octree (if any)
+		//as we don't know when it will be deleted!
+		//(the user can do it anytime for instance)
+		QSharedPointer<ccOctree> octree(new ccOctree(&m_cloud));
+		if (octree->build(0/*progressCallback*/) <= 0)
 		{
 			//not enough memory
 			ccLog::Warning(QString("[LoD] Failed to compute octree on cloud '%1' (not enough memory)").arg(m_cloud.getName()));
@@ -121,10 +124,6 @@ protected:
 			ccLog::Warning(QString("[LoD] Failed to compute LOD structure on cloud '%1' (not enough memory)").arg(m_cloud.getName()));
 			lod.setState(ccPointCloud::LodStruct::BROKEN);
 			flags->release();
-			if (octree != originalOctree)
-			{
-				delete octree;
-			}
 			return;
 		}
 
@@ -136,8 +135,6 @@ protected:
 			ccLog::Warning(QString("[LoD] Failed to compute LOD structure on cloud '%1' (not enough memory)").arg(m_cloud.getName()));
 			lod.setState(ccPointCloud::LodStruct::BROKEN);
 			flags->release();
-			if (octree != originalOctree)
-				delete octree;
 			return;
 		}
 
@@ -269,9 +266,6 @@ protected:
 
 		flags->release();
 		flags = 0;
-
-		if (octree != originalOctree)
-			delete octree;
 
 		ccLog::Print(QString("[LoD] Acceleration structure ready for cloud '%1' (max level: %2 / duration: %3 s.)").arg(m_cloud.getName()).arg(static_cast<int>(lod.maxLevel())-1).arg(timer.elapsed() / 1000.0,0,'f',1));
 	}
@@ -977,7 +971,7 @@ const ccPointCloud& ccPointCloud::append(ccPointCloud* addedCloud, unsigned poin
 			{
 				try
 				{
-					//copy the grid date
+					//copy the grid data
 					Grid::Shared grid(new Grid(*otherGrid));
 					{
 						//then update the indexes
@@ -1124,6 +1118,15 @@ void ccPointCloud::unallocateColors()
 
 		//We should update the VBOs to gain some free space in VRAM
 		releaseVBOs();
+	}
+
+	//remove the grid colors as well!
+	for (size_t i=0; i<m_grids.size(); ++i)
+	{
+		if (m_grids[i])
+		{
+			m_grids[i]->colors.clear();
+		}
 	}
 
 	showColors(false);
@@ -1505,6 +1508,30 @@ bool ccPointCloud::convertNormalToRGB()
 	return true;
 }
 
+bool ccPointCloud::convertRGBToGreyScale()
+{
+	if (!hasColors())
+	{
+		return false;
+	}
+	assert(m_rgbColors);
+
+	unsigned count = size();
+	for (unsigned i=0; i<count; ++i)
+	{
+		ColorCompType* rgb = m_rgbColors->getValue(i);
+		//conversion from RGB to grey scale (see https://en.wikipedia.org/wiki/Luma_%28video%29)
+		double luminance = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+		unsigned char g = static_cast<unsigned char>( std::max(std::min(luminance, 255.0), 0.0) );
+		rgb[0] = rgb[1] = rgb[2] = g;
+	}
+
+	//We must update the VBOs
+	releaseVBOs();
+
+	return true;
+}
+
 bool ccPointCloud::convertNormalToDipDirSFs(ccScalarField* dipSF, ccScalarField* dipDirSF)
 {
 	if (!dipSF && !dipDirSF)
@@ -1599,7 +1626,7 @@ bool ccPointCloud::setRGBColorByBanding(unsigned char dim, int freq)
 {
 	if (freq == 0 || dim > 2) //X=0, Y=1, Z=2
 	{
-		ccLog::Error("[ccPointCloud::setRGBColorByBanding] Invalid paramter!");
+		ccLog::Warning("[ccPointCloud::setRGBColorByBanding] Invalid paramter!");
 		return false;
 	}
 
@@ -1698,6 +1725,16 @@ bool ccPointCloud::setRGBColor(const ccColor::Rgb& col)
 	assert(m_rgbColors);
 	m_rgbColors->fill(col.rgb);
 
+	//update the grid colors as well!
+	for (size_t i=0; i<m_grids.size(); ++i)
+	{
+		if (m_grids[i] && !m_grids[i]->colors.empty())
+		{
+			std::fill(m_grids[i]->colors.begin(), m_grids[i]->colors.end(), col);
+		}
+	}
+
+
 	//We must update the VBOs
 	releaseVBOs();
 
@@ -1721,7 +1758,9 @@ void ccPointCloud::applyRigidTransformation(const ccGLMatrix& trans)
 
 	unsigned count = size();
 	for (unsigned i=0; i<count; i++)
+	{
 		trans.apply(*point(i));
+	}
 
 	//we must also take care of the normals!
 	if (hasNormals())
@@ -1771,6 +1810,22 @@ void ccPointCloud::applyRigidTransformation(const ccGLMatrix& trans)
 				*_theNormIndex = ccNormalVectors::GetNormIndex(new_n.u);
 				m_normals->forwardIterator();
 			}
+		}
+	}
+
+	//and the scan grids!
+	if (!m_grids.empty())
+	{
+		ccGLMatrixd transd(trans.data());
+
+		for (size_t i=0; i<m_grids.size(); ++i)
+		{
+			Grid::Shared grid = m_grids[i];
+			if (!grid)
+			{
+				continue;
+			}
+			grid->sensorPosition = transd * grid->sensorPosition;
 		}
 	}
 
@@ -1829,7 +1884,7 @@ void ccPointCloud::scale(PointCoordinateType fx, PointCoordinateType fy, PointCo
 
 	//refreshBB();
 	{
-		//--> instead, we update BBox directly! (faster)
+		//--> instead, we update the bounding box directly! (faster)
 		PointCoordinateType* bbMin = m_points->getMin();
 		PointCoordinateType* bbMax = m_points->getMax();
 		CCVector3 f(fx,fy,fz);
@@ -1880,6 +1935,50 @@ void ccPointCloud::scale(PointCoordinateType fx, PointCoordinateType fy, PointCo
 		for (size_t i=0; i<kdtrees.size(); ++i)
 		{
 			removeChild(kdtrees[i]);
+		}
+	}
+
+	//update the grids as well
+	{
+		for (size_t i=0; i<m_grids.size(); ++i)
+		{
+			if (m_grids[i])
+			{
+				//update scan translation
+				CCVector3d T = m_grids[i]->sensorPosition.getTranslationAsVec3D();
+				T.x *= fx;
+				T.y *= fy;
+				T.z *= fz;
+				m_grids[i]->sensorPosition.setTranslation(T);
+			}
+		}
+	}
+
+	//updates the sensors
+	{
+		for (size_t i=0; i<m_children.size(); ++i)
+		{
+			ccHObject* child = m_children[i];
+			if (child && child->isKindOf(CC_TYPES::SENSOR))
+			{
+				ccSensor* sensor = static_cast<ccSensor*>(child);
+
+				ccGLMatrix scaleTrans;
+				scaleTrans.toIdentity();
+				scaleTrans.data()[ 0] = fx;
+				scaleTrans.data()[ 5] = fy;
+				scaleTrans.data()[10] = fz;
+				sensor->applyGLTransformation(scaleTrans);
+
+				//update the graphic scale, etc.
+				PointCoordinateType meanScale = (fx + fy + fz)/3;
+				//sensor->setGraphicScale(sensor->getGraphicScale() * meanScale);
+				if (sensor->isA(CC_TYPES::GBL_SENSOR))
+				{
+					ccGBLSensor* gblSensor = static_cast<ccGBLSensor*>(sensor);
+					gblSensor->setSensorRange(gblSensor->getSensorRange() * meanScale);
+				}
+			}
 		}
 	}
 
@@ -3256,7 +3355,9 @@ bool ccPointCloud::interpolateColorsFrom(	ccGenericPointCloud* otherCloud,
 		{
 			ccLog::Warning("[ccPointCloud::interpolateColorsFrom] Not enough memory!");
 			if (!hadColors)
+			{
 				unallocateColors();
+			}
 			return false;
 		}
 
@@ -3305,11 +3406,10 @@ void ccPointCloud::unrollOnCylinder(PointCoordinateType radius,
 
 	unsigned numberOfPoints = size();
 
-	CCLib::NormalizedProgress* nprogress = 0;
+	CCLib::NormalizedProgress nprogress(progressCb, numberOfPoints);
 	if (progressCb)
 	{
 		progressCb->reset();
-		nprogress = new CCLib::NormalizedProgress(progressCb,numberOfPoints);
 		progressCb->setMethodTitle("Unroll (cylinder)");
 		progressCb->setInfo(qPrintable(QString("Number of points = %1").arg(numberOfPoints)));
 		progressCb->start();
@@ -3359,14 +3459,18 @@ void ccPointCloud::unrollOnCylinder(PointCoordinateType radius,
 		}
 
 		//process canceled by user?
-		if (nprogress && !nprogress->oneStep())
+		if (progressCb && !nprogress.oneStep())
+		{
 			break;
+		}
 	}
 
 	refreshBB(); //calls notifyGeometryUpdate + releaseVBOs
 
 	if (progressCb)
+	{
 		progressCb->stop();
+	}
 }
 
 void ccPointCloud::unrollOnCone(PointCoordinateType baseRadius,
@@ -3587,7 +3691,7 @@ bool ccPointCloud::toFile_MeOnly(QFile& out) const
 				return WriteError();
 			//height
 			uint32_t h = static_cast<uint32_t>(g->h);
-			if (out.write((const char*)&h,4) < 0)
+			if (out.write((const char*)&h, 4) < 0)
 				return WriteError();
 
 			//sensor matrix
@@ -3599,8 +3703,22 @@ bool ccPointCloud::toFile_MeOnly(QFile& out) const
 			for (uint32_t j=0; j<w*h; ++j, ++_index)
 			{
 				int32_t index = static_cast<int32_t>(*_index);
-				if (out.write((const char*)&index,4) < 0)
+				if (out.write((const char*)&index, 4) < 0)
 					return WriteError();
+			}
+
+			//grid colors
+			bool hasColors = (g->colors.size() == g->indexes.size());
+			if (out.write((const char*)&hasColors, 1) < 0)
+				return WriteError();
+			
+			if (hasColors)
+			{
+				for (uint32_t j=0; j<g->colors.size(); ++j)
+				{
+					if (out.write((const char*)g->colors[j].rgb, 3) < 0)
+						return WriteError();
+				}
 			}
 		}
 	}
@@ -3635,7 +3753,9 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 			result = ccSerializationHelper::GenericArrayFromFile(*m_points,in,dataVersion);
 		}
 		if (!result)
+		{
 			return false;
+		}
 
 #ifdef _DEBUG
 		//test: look for NaN values
@@ -3811,6 +3931,29 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 						g->minValidIndex = g->maxValidIndex = index;
 					}
 					++g->validCount;
+				}
+			}
+
+			//grid colors
+			bool hasColors = false;
+			if (in.read((char*)&hasColors, 1) < 0)
+				return ReadError();
+			
+			if (hasColors)
+			{
+				try
+				{
+					g->colors.resize(g->indexes.size());
+				}
+				catch (const std::bad_alloc&)
+				{
+					return MemoryError();
+				}
+
+				for (uint32_t j=0; j<g->colors.size(); ++j)
+				{
+					if (in.read((char*)g->colors[j].rgb, 3) < 0)
+						return ReadError();
 				}
 			}
 

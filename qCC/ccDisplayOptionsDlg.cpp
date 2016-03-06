@@ -27,11 +27,11 @@
 //Default 'min cloud size' for LoD  when VBOs are activated
 static const double s_defaultMaxVBOCloudSizeM = 50.0;
 
-ccDisplayOptionsDlg::ccDisplayOptionsDlg(QWidget* parent) : QDialog(parent), Ui::DisplayOptionsDlg()
+ccDisplayOptionsDlg::ccDisplayOptionsDlg(QWidget* parent)
+	: QDialog(parent, Qt::Tool)
+	, Ui::DisplayOptionsDlg()
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 
 	connect(ambientColorButton,              SIGNAL(clicked()),         this, SLOT(changeLightAmbientColor()));
 	connect(diffuseColorButton,              SIGNAL(clicked()),         this, SLOT(changeLightDiffuseColor()));
@@ -65,6 +65,8 @@ ccDisplayOptionsDlg::ccDisplayOptionsDlg(QWidget* parent) : QDialog(parent), Ui:
 	connect(zoomSpeedDoubleSpinBox,          SIGNAL(valueChanged(double)), this, SLOT(changeZoomSpeed(double)));
 	connect(maxCloudSizeDoubleSpinBox,       SIGNAL(valueChanged(double)), this, SLOT(changeMaxCloudSize(double)));
 	connect(maxMeshSizeDoubleSpinBox,        SIGNAL(valueChanged(double)), this, SLOT(changeMaxMeshSize(double)));
+
+	connect(autoComputeOctreeComboBox,       SIGNAL(currentIndexChanged(int)), this, SLOT(changeAutoComputeOctreeOption(int)));
 
 	connect(okButton,                        SIGNAL(clicked()),         this, SLOT(doAccept()));
 	connect(applyButton,                     SIGNAL(clicked()),         this, SLOT(apply()));
@@ -149,6 +151,8 @@ void ccDisplayOptionsDlg::refresh()
 	labelMarkerSizeSpinBox->setValue(parameters.labelMarkerSize);
 
 	zoomSpeedDoubleSpinBox->setValue(parameters.zoomSpeed);
+
+	autoComputeOctreeComboBox->setCurrentIndex(parameters.autoComputeOctree);
 
 	update();
 }
@@ -435,6 +439,12 @@ void ccDisplayOptionsDlg::changeNumberPrecision(int val)
 void ccDisplayOptionsDlg::changeZoomSpeed(double val)
 {
 	parameters.zoomSpeed = val;
+}
+
+void ccDisplayOptionsDlg::changeAutoComputeOctreeOption(int index)
+{
+	assert(index >= 0 && index < 3);
+	parameters.autoComputeOctree = static_cast<ccGui::ParamStruct::ComputeOctreeForPicking>(index);
 }
 
 void ccDisplayOptionsDlg::changeLabelOpacity(int val)

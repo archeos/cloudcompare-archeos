@@ -95,7 +95,9 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 	//open ASCII file for reading
 	QFile file(filename);
 	if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+	{
 		return CC_FERR_READING;
+	}
 
 	QTextStream inFile(&file);
 
@@ -105,6 +107,16 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 	CC_FILE_ERROR result = CC_FERR_NO_LOAD;
 	ScalarType minIntensity = 0;
 	ScalarType maxIntensity = 0;
+
+	//progress dialog
+	ccProgressDialog pdlg(true, parameters.parentWidget);
+	pdlg.setMethodTitle("Loading PTX file");
+	pdlg.setAutoClose(false);
+
+	//progress dialog (for normals computation)
+	ccProgressDialog normalsProgressDlg(true, parameters.parentWidget);
+	normalsProgressDlg.setAutoClose(false);
+
 	for (unsigned cloudIndex = 0; result == CC_FERR_NO_ERROR || result == CC_FERR_NO_LOAD; cloudIndex++)
 	{
 		unsigned width = 0, height = 0;
@@ -245,21 +257,19 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 
 		//read points
 		{
-			//progress dialog
-			ccProgressDialog pdlg(true);
-			CCLib::NormalizedProgress nprogress(&pdlg,gridSize);
-			pdlg.setMethodTitle("Loading PTX file");
+			CCLib::NormalizedProgress nprogress(&pdlg, gridSize);
 			pdlg.setInfo(qPrintable(QString("Number of cells: %1").arg(gridSize)));
 			pdlg.start();
 
 			bool firstPoint = true;
 			bool hasColors = false;
 			bool loadColors = false;
-			int* _indexGrid = hasIndexGrid ? &(grid->indexes[0]) : 0;
+			bool loadGridColors = false;
+			size_t gridIndex = 0;
 
 			for (unsigned j=0; j<height; ++j)
 			{
-				for (unsigned i=0; i<width; ++i, ++_indexGrid)
+				for (unsigned i=0; i<width; ++i, ++gridIndex)
 				{
 					QString line = inFile.readLine();
 					QStringList tokens = line.split(" ",QString::SkipEmptyParts);
@@ -271,7 +281,22 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 						{
 							loadColors = cloud->reserveTheRGBTable();
 							if (!loadColors)
+							{
 								ccLog::Warning("[PTX] Not enough memory to load RGB colors!");
+							}
+							else if (hasIndexGrid)
+							{
+								//we also load the colors into the grid (as invalid/missing points can have colors!)
+								try
+								{
+									grid->colors.resize(gridSize, ccColor::Rgb(0, 0, 0));
+									loadGridColors = true;
+								}
+								catch (const std::bad_alloc&)
+								{
+									ccLog::Warning("[PTX] Not enough memory to load the grid colors");
+								}
+							}
 						}
 					}
 					if ((hasColors && tokens.size() != 7) || (!hasColors && tokens.size() != 4))
@@ -297,7 +322,8 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 					}
 
 					//we skip "empty" cells
-					if (CCVector3d::fromArray(values).norm2() != 0)
+					bool pointIsValid = (CCVector3d::fromArray(values).norm2() != 0);
+					if (pointIsValid)
 					{
 						const double* Pd = values;
 						//first point: check for 'big' coordinates
@@ -317,7 +343,9 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 
 						//update index grid
 						if (hasIndexGrid)
-							*_indexGrid = static_cast<int>(cloud->size()); // = index (default value = -1, means no point)
+						{
+							grid->indexes[gridIndex] = static_cast<int>(cloud->size()); // = index (default value = -1, means no point)
+						}
 
 						//add point
 						cloud->addPoint(CCVector3(	static_cast<PointCoordinateType>(Pd[0] + PshiftCloud.x),
@@ -326,30 +354,41 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 
 						//add intensity
 						if (intensitySF)
-							intensitySF->addElement(static_cast<ScalarType>(values[3]));
-
-						//color
-						if (loadColors)
 						{
-							ColorCompType rgb[3];
-							for (int c=0; c<3; ++c)
+							intensitySF->addElement(static_cast<ScalarType>(values[3]));
+						}
+					}
+
+					//color
+					if (loadColors && (pointIsValid || loadGridColors))
+					{
+						ccColor::Rgb color;
+						for (int c=0; c<3; ++c)
+						{
+							bool ok;
+							unsigned temp = tokens[4+c].toUInt(&ok);
+							ok &= (temp <= 255);
+							if (ok)
 							{
-								bool ok;
-								unsigned temp = tokens[4+c].toUInt(&ok);
-								ok &= (temp <= static_cast<unsigned>(ccColor::MAX));
-								if (ok)
-								{
-									rgb[c] = static_cast<ColorCompType>(temp);
-								}
-								else
-								{
-									result = CC_FERR_MALFORMED_FILE;
-									//early stop
-									j = height;
-									break;
-								}
+								color.rgb[c] = static_cast<unsigned char>(temp);
 							}
-							cloud->addRGBColor(rgb);
+							else
+							{
+								result = CC_FERR_MALFORMED_FILE;
+								//early stop
+								j = height;
+								break;
+							}
+						}
+
+						if (pointIsValid)
+						{
+							cloud->addRGBColor(color.rgb);
+						}
+						if (loadGridColors)
+						{
+							assert(!grid->colors.empty());
+							grid->colors[gridIndex] = color;
 						}
 					}
 
@@ -432,8 +471,7 @@ CC_FILE_ERROR PTXFilter::loadFile(	QString filename,
 				//by default we don't compute normals without asking the user
 				if (parameters.autoComputeNormals)
 				{
-					ccProgressDialog pdlg(true);
-					cloud->computeNormalsWithGrids(LS, 2, true, &pdlg);
+					cloud->computeNormalsWithGrids(LS, 2, true, &normalsProgressDlg);
 				}
 			}
 

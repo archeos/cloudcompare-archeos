@@ -38,6 +38,7 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QByteArray>
+#include <QFlags>
 //#define THREADED_GL_WIDGET
 #ifdef THREADED_GL_WIDGET
 #include <QThread>
@@ -45,8 +46,9 @@
 #include <QWaitCondition>
 #include <QAtomicInt>
 #endif
+
 //system
-#include <set>
+#include <unordered_set>
 #include <list>
 
 //! OpenGL picking buffer size (= max hits number per 'OpenGL' selection pass)
@@ -80,12 +82,35 @@ public:
 						DEFAULT_PICKING,
 	};
 
-	//! Interaction mode (with the mouse!)
-	enum INTERACTION_MODE { TRANSFORM_CAMERA,
-							TRANSFORM_ENTITY,
-							SEGMENT_ENTITY,
-							PAN_ONLY,
+	//! Interaction flags (mostly with the mouse)
+	enum INTERACTION_FLAG {
+
+		//no interaction
+		INTERACT_NONE = 0,
+
+		//camera interactions
+		INTERACT_ROTATE          =  1,
+		INTERACT_PAN             =  2,
+		INTERACT_ZOOM_CAMERA     =  4,
+		INTERACT_2D_ITEMS        =  8, //labels, etc.
+		INTERACT_CLICKABLE_ITEMS = 16, //hot zone
+
+		//options / modifiers
+		INTERACT_TRANSFORM_ENTITIES = 64,
+		
+		//signals
+		INTERACT_SIG_RB_CLICKED  = 128,      //right button clicked
+		INTERACT_SIG_LB_CLICKED  = 256,      //left button clicked
+		INTERACT_SIG_MOUSE_MOVED = 512,      //mouse moved (only if a button is clicked)
+		INTERACT_SIG_BUTTON_RELEASED = 1024, //mouse button released
+		INTERACT_SEND_ALL_SIGNALS = INTERACT_SIG_RB_CLICKED | INTERACT_SIG_LB_CLICKED | INTERACT_SIG_MOUSE_MOVED | INTERACT_SIG_BUTTON_RELEASED,
 	};
+	Q_DECLARE_FLAGS(INTERACTION_FLAGS, INTERACTION_FLAG)
+
+	//Default interaction modes (with the mouse!)
+	static INTERACTION_FLAGS PAN_ONLY();
+	static INTERACTION_FLAGS TRANSFORM_CAMERA();
+	static INTERACTION_FLAGS TRANSFORM_ENTITIES();
 
 	//! Default message positions on screen
 	enum MessagePosition {  LOWER_LEFT_MESSAGE,
@@ -140,7 +165,8 @@ public:
 	virtual void setupProjectiveViewport(const ccGLMatrixd& cameraMatrix, float fov_deg = 0.0f, float ar = 1.0f, bool viewerBasedPerspective = true, bool bubbleViewMode = false);
 	virtual unsigned getTextureID(const QImage& image);
 	virtual unsigned getTextureID( ccMaterial::CShared mtl);
-	virtual QWidget* asWidget() { return this; }
+	inline virtual QWidget* asWidget() { return this; }
+	inline virtual QSize getScreenSize() const { return size(); }
 
 	//! Displays a status message in the bottom-left corner
 	/** WARNING: currently, 'append' is not supported for SCREEN_CENTER_MESSAGE
@@ -290,14 +316,8 @@ public:
 	**/
 	virtual const void setBaseViewMat(ccGLMatrixd& mat);
 
-	//! Returns the current (OpenGL) view matrix as a double array
-	/** Warning: different from 'view' matrix returned by getBaseViewMat.
-	**/
-	virtual const double* getModelViewMatd();
-	//! Returns the current (OpenGL) projection matrix as a double array
-	virtual const double* getProjectionMatd();
-	//! Returns the current viewport (OpenGL int[4] array)
-	virtual void getViewportArray(int vp[/*4*/]);
+	//! Returns the current OpenGL camera parameters
+	virtual void getGLCameraParameters(ccGLCameraParameters& params);
 
 	//! Sets camera to a predefined view (top, bottom, etc.)
 	virtual void setView(CC_VIEW_ORIENTATION orientation, bool redraw = true);
@@ -305,8 +325,10 @@ public:
 	//! Sets camera to a custom view (forward and up directions must be specified)
 	virtual void setCustomView(const CCVector3d& forward, const CCVector3d& up, bool forceRedraw = true);
 
-	//! Sets current interaction mode
-	virtual void setInteractionMode(INTERACTION_MODE mode);
+	//! Sets current interaction flags
+	virtual void setInteractionMode(INTERACTION_FLAGS flags);
+	//! Returns the current interaction flags
+	inline virtual INTERACTION_FLAGS getInteractionMode() const { return m_interactionFlags; }
 
 	//! Sets current picking mode
 	/** Picking can be applied to entities (default), points, triangles, etc.)
@@ -403,9 +425,6 @@ public:
 	virtual bool areShadersEnabled() const;
 	virtual bool areGLFiltersEnabled() const;
 
-	//! Enables "embedded icons"
-	virtual void enableEmbeddedIcons(bool state);
-
 	//! Returns the actual pixel size on screen (taking zoom or perspective parameters into account)
 	/** In perspective mode, this value is approximate.
 	**/
@@ -458,6 +477,14 @@ public:
 	//! Whether display parameters are overidden for this window
 	bool hasOverridenDisplayParameters() const { return m_overridenDisplayParametersEnabled; }
 
+	//! Default picking radius value
+	static const int DefaultPickRadius = 5;
+
+	//! Sets picking radius
+	inline void setPickingRadius(int radius) { m_pickRadius = radius; }
+	//! Returns the current picking radius
+	inline int getPickingRadius() const { return m_pickRadius; }
+
 	//! Sets whether overlay entities (scale, tetrahedron, etc.) should be displayed or not
 	void displayOverlayEntities(bool state) { m_displayOverlayEntities = state; }
 
@@ -486,6 +513,11 @@ public:
 	//! Returns unique ID
 	inline int getUniqueID() const { return m_uniqueID; }
 
+	//! Returns whether the display has an active FBO
+	inline bool hasFBO() const { return (m_fbo != 0); }
+
+public: //LOD
+
 	//! Returns whether LOD is enabled on this display or not
 	inline bool isLODEnabled() const { return m_LODEnabled; }
 
@@ -493,6 +525,8 @@ public:
 	/** \return success
 	**/
 	bool setLODEnabled(bool state, bool autoDisable = false);
+
+public: //fullscreen
 
 	//! Toggles (exclusive) full-screen mode
 	void toggleExclusiveFullScreen(bool state);
@@ -518,7 +552,8 @@ public: //stereo mode
 		//! Glass/HMD type
 		enum GlassType {	RED_BLUE = 1,
 							RED_CYAN = 2,
-							NVIDIA_VISION = 3
+							NVIDIA_VISION = 3,
+							OCULUS = 4
 		};
 
 		//! Whether stereo-mode is 'analgyph' or real stereo mode
@@ -565,7 +600,7 @@ protected slots:
 	void stopFrameRateTest();
 
 	//! Reacts to the itemPickedFast signal
-	void onItemPickedFast(int entityID, int subEntityID, int x, int y);
+	void onItemPickedFast(ccHObject* pickedEntity, int pickedItemIndex, int x, int y);
 
 	//! Checks for scheduled redraw
 	void checkScheduledRedraw();
@@ -573,25 +608,25 @@ protected slots:
 signals:
 
 	//! Signal emitted when an entity is selected in the 3D view
-	void entitySelectionChanged(int uniqueID);
+	void entitySelectionChanged(ccHObject*);
 	//! Signal emitted when multiple entities are selected in the 3D view
-	void entitiesSelectionChanged(std::set<int> entIDs);
+	void entitiesSelectionChanged(std::unordered_set<int> entIDs);
 
 	//! Signal emitted when a point (or a triangle) is picked
-	/** \param entityID entity unique ID
+	/** \param entity 'picked' entity
 		\param subEntityID point or triangle index in entity
 		\param x mouse cursor x position
 		\param y mouse cursor y position
 	**/
-	void itemPicked(int entityID, unsigned subEntityID, int x, int y);
+	void itemPicked(ccHObject* entity, unsigned subEntityID, int x, int y);
 
 	//! Signal emitted when an item is picked (FAST_PICKING mode only)
-	/** \param entityID entity unique ID
+	/** \param entity entity
 		\param subEntityID point or triangle index in entity
 		\param x mouse cursor x position
 		\param y mouse cursor y position
 	**/
-	void itemPickedFast(int entityID, int subEntityID, int x, int y);
+	void itemPickedFast(ccHObject* entity, int subEntityID, int x, int y);
 
 	//! Signal emitted when fast picking is finished (FAST_PICKING mode only)
 	void fastPickingFinished();
@@ -632,26 +667,28 @@ signals:
 	void rotation(const ccGLMatrixd& rotMat);
 
 	//! Signal emitted when the left mouse button is cliked on the window
-	/** Arguments correspond to the clicked point coordinates (x,y) in
-		pixels and relatively to the window center.
+	/** See INTERACT_SIG_LB_CLICKED.
+		Arguments correspond to the clicked point coordinates (x,y) in
+		pixels and relatively to the window corner!
 	**/
 	void leftButtonClicked(int, int);
 
 	//! Signal emitted when the right mouse button is cliked on the window
-	/** Arguments correspond to the clicked point coordinates (x,y) in
-		pixels and relatively to the window center.
+	/** See INTERACT_SIG_RB_CLICKED.
+		Arguments correspond to the clicked point coordinates (x,y) in
+		pixels and relatively to the window corner!
 	**/
 	void rightButtonClicked(int, int);
 
 	//! Signal emitted when the mouse is moved
-	/** SEGMENT_ENTITY mode only with either a button pressed or m_alwaysUseFBO=true! (too slow otherwise)
-		Two first arguments correspond to the current cursor coordinates (x,y)
-		in pixels and relatively to the window center.
+	/** See INTERACT_SIG_MOUSE_MOVED.
+		The two first arguments correspond to the current cursor coordinates (x,y)
+		relatively to the window corner!
 	**/
 	void mouseMoved(int, int, Qt::MouseButtons);
 
 	//! Signal emitted when a mouse button is released (cursor on the window)
-	/** SEGMENT_ENTITY mode only!
+	/** See INTERACT_SIG_BUTTON_RELEASED.
 	**/
 	void buttonReleased();
 
@@ -701,8 +738,8 @@ protected: //rendering
 			, drawBackground(true)
 			, clearDepthLayer(true)
 			, clearColorLayer(true)
-			, useFBO(false)
 			, draw3DPass(true)
+			, useFBO(false)
 			, draw3DCross(false)
 			, drawForeground(true)
 		{}
@@ -743,6 +780,16 @@ protected: //rendering
 	void drawForeground(CC_DRAW_CONTEXT& context, RenderingParams& params);
 
 protected: //other methods
+
+	//! Returns the current (OpenGL) view matrix
+	/** Warning: may be different from the 'view' matrix returned by getBaseViewMat.
+		Will call automatically updateModelViewMatrix if necessary.
+	**/
+	virtual const ccGLMatrixd& getModelViewMatrix();
+	//! Returns the current (OpenGL) projection matrix
+	/** Will call automatically updateProjectionMatrix if necessary.
+	**/
+	virtual const ccGLMatrixd& getProjectionMatrix();
 
 	//! Processes the clickable items
 	/** \return true if an item has been clicked
@@ -841,13 +888,17 @@ protected: //other methods
 							int _centerX = 0,
 							int _centerY = 0,
 							int _pickWidth = 5,
-							int _pickHeight = 5)
+							int _pickHeight = 5,
+							bool _pickInSceneDB = true,
+							bool _pickInLocalDB = true)
 			: mode(_mode)
 			, centerX(_centerX)
 			, centerY(_centerY)
 			, pickWidth(_pickWidth)
 			, pickHeight(_pickHeight)
 			, flags(0)
+			, pickInSceneDB(_pickInSceneDB)
+			, pickInLocalDB(_pickInLocalDB)
 		{}
 
 		PICKING_MODE mode;
@@ -856,6 +907,8 @@ protected: //other methods
 		int pickWidth;
 		int pickHeight;
 		unsigned short flags;
+		bool pickInSceneDB;
+		bool pickInLocalDB;
 	};
 
 	//! Starts picking process
@@ -872,7 +925,10 @@ protected: //other methods
 	void startCPUBasedPointPicking(const PickingParameters& params);
 
 	//! Processes the picking process result and sends the corresponding signal
-	void processPickingResult(const PickingParameters& params, int selectedID, int subSelectedID, const std::set<int>* selectedIDs = 0);
+	void processPickingResult(	const PickingParameters& params,
+								ccHObject* pickedEntity,
+								int pickedItemIndex,
+								const std::unordered_set<int>* selectedIDs = 0);
 	
 	//! Updates currently active items list (m_activeItems)
 	/** The items must be currently displayed in this context
@@ -927,6 +983,13 @@ protected: //other methods
 	**/
 	void cancelScheduledRedraw();
 
+	//! Sets the OpenGL viewport (shortut)
+	inline void setGLViewport(int x, int y, int w, int h) { setGLViewport(QRect(x, y, w, h)); }
+	//! Sets the OpenGL viewport
+	void setGLViewport(const QRect& rect);
+	//! Returns the current (OpenGL) viewport
+	inline const QRect& getGLViewport() const { return m_glViewport; }
+
 protected: //OpenGL Extensions
 
 	//! Loads OpenGL extensions
@@ -971,10 +1034,8 @@ protected: //members
 	//! Whether the projection matrix is valid (or need to be recomputed)
 	bool m_validProjectionMatrix;
 
-	//! GL context width
-	int m_glWidth;
-	//! GL context height
-	int m_glHeight;
+	//! GL viewport
+	QRect m_glViewport;
 
 	//! Whether L.O.D. (level of detail) is enabled or not
 	bool m_LODEnabled;
@@ -988,8 +1049,8 @@ protected: //members
 	bool m_mouseButtonPressed;
 	//! Whether this 3D window can be closed by the user or not
 	bool m_unclosable;
-	//! Current intercation mode (with mouse)
-	INTERACTION_MODE m_interactionMode;
+	//! Current intercation flags
+	INTERACTION_FLAGS m_interactionFlags;
 	//! Current picking mode
 	PICKING_MODE m_pickingMode;
 	//! Whether picking mode is locked or not
@@ -1046,11 +1107,6 @@ protected: //members
 	//! Whether custom light is enabled or not
 	bool m_customLightEnabled;
 
-	//! Whether embedded icons (point size, etc.) are enabled or not
-	bool m_embeddedIconsEnabled;
-	//! Hot zone (= where embedded icons lie) is activated (= mouse over)
-	bool m_hotZoneActivated;
-
 	//! Clickable item
 	struct ClickableItem
 	{
@@ -1069,6 +1125,9 @@ protected: //members
 	};
 	//! Currently displayed clickable items
 	std::vector<ClickableItem> m_clickableItems;
+
+	//! Whether clickable items are visible (= mouse over) or not
+	bool m_clickableItemsVisible;
 
 	//! Currently active shader
 	ccShader* m_activeShader;
@@ -1175,10 +1234,15 @@ protected: //members
 	//! Debug traces visibility
 	bool m_showDebugTraces;
 
+	//! Picking radius (pixels)
+	int m_pickRadius;
+
 private:
 
 	//! Returns shaders path
 	static QString getShadersPath();
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(ccGLWindow::INTERACTION_FLAGS);
 
 #endif

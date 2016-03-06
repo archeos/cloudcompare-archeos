@@ -229,7 +229,8 @@ int DistanceComputationTools::computeCloud2CloudDistance(	GenericIndexedCloudPer
 															additionalParameters,
 															params.multiThread,
 															progressCb,
-															"Cloud-Cloud Distance") == 0)
+															"Cloud-Cloud Distance",
+															params.maxThreadCount) == 0)
 	{
 		//something went wrong
 		result = -2;
@@ -1159,9 +1160,6 @@ void cloudMeshDistCellFunc_MT(const DgmOctree::IndexAndCode& desc)
 		Yk.forwardIterator();
 	}
 
-	CCVector3 nearestPoint;
-	CCVector3* _nearestPoint = s_params_MT.CPSet ? &nearestPoint : 0;
-
 	//let's find the nearest triangles for each point in the neighborhood 'Yk'
 	ScalarType maxRadius = 0;
 	for (int dist = 0; remainingPoints != 0 && dist <= maxIntDist; ++dist, maxRadius += static_cast<ScalarType>(cellLength))
@@ -1414,7 +1412,6 @@ int DistanceComputationTools::computeCloud2MeshDistanceWithOctree(	OctreeAndMesh
 		std::vector<unsigned> trianglesToTest;
 		size_t trianglesToTestCount = 0;
 		size_t trianglesToTestCapacity = 0;
-		const ScalarType normalSign = static_cast<ScalarType>(params.flipNormals ? -1.0 : 1.0);
 		unsigned numberOfTriangles = mesh->size();
 
 		//acceleration structure
@@ -1430,9 +1427,6 @@ int DistanceComputationTools::computeCloud2MeshDistanceWithOctree(	OctreeAndMesh
 
 		//min distance array ('persistent' version to save some memory)
 		std::vector<ScalarType> minDists;
-
-		CCVector3 nearestPoint;
-		CCVector3* _nearestPoint = params.CPSet ? &nearestPoint : 0;
 
 		//maximal neighbors search distance (if maxSearchDist is defined)
 		int maxNeighbourhoodLength = 0; 
@@ -1687,6 +1681,12 @@ int DistanceComputationTools::computeCloud2MeshDistanceWithOctree(	OctreeAndMesh
 		//for (unsigned i=0; i<numberOfCells; ++i)
 		//	cloudMeshDistCellFunc_MT(cellsDescs[i]);
 
+		int maxThreadCount = params.maxThreadCount;
+		if (maxThreadCount == 0)
+		{
+			maxThreadCount = QThread::idealThreadCount();
+		}
+		QThreadPool::globalInstance()->setMaxThreadCount(maxThreadCount);
 		QtConcurrent::blockingMap(cellsDescs, cloudMeshDistCellFunc_MT);
 
 		s_octree_MT = 0;

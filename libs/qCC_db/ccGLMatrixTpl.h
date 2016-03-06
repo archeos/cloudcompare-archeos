@@ -705,6 +705,18 @@ public:
 	**/
 	inline Vector3Tpl<T> getColumnAsVec3D(unsigned index) const { return Vector3Tpl<T>::fromArray(getColumn(index)); }
 
+	//! Sets the content of a given column
+	/** \param index column index (between 0 and 3)
+		\param v new column values
+	**/
+	inline void setColumn(unsigned index, const Vector3Tpl<T>& v) { T* col = m_mat+(index<<2); col[0] = v.x; col[1] = v.y; col[2] = v.z; }
+
+	//! Sets the content of a given column
+	/** \param index column index (between 0 and 3)
+		\param v new column values
+	**/
+	inline void setColumn(unsigned index, const Tuple4Tpl<T>& v) { T* col = m_mat+(index<<2); col[0] = v.x; col[1] = v.y; col[2] = v.z; col[3] = v.w; }
+
 	//! Multiplication by a matrix operator
 	ccGLMatrixTpl<T> operator * (const ccGLMatrixTpl<T>& mat) const
 	{
@@ -725,6 +737,11 @@ public:
 	inline Vector3Tpl<float> operator * (const Vector3Tpl<float>& vec) const { return Vector3Tpl<float>(applyX(vec),applyY(vec),applyZ(vec)); }
 	//! Multiplication by a vector operator (double version)
 	inline Vector3Tpl<double> operator * (const Vector3Tpl<double>& vec) const { return Vector3Tpl<double>(applyX(vec),applyY(vec),applyZ(vec)); }
+
+	//! Multiplication by a 4D vector operator (float version)
+	inline Tuple4Tpl<float> operator * (const Tuple4Tpl<float>& vec) const { return Tuple4Tpl<float>(applyX(vec),applyY(vec),applyZ(vec),applyW(vec)); }
+	//! Multiplication by a 4D vector operator (double version)
+	inline Tuple4Tpl<double> operator * (const Tuple4Tpl<double>& vec) const { return Tuple4Tpl<double>(applyX(vec),applyY(vec),applyZ(vec),applyW(vec)); }
 
 	//! (in place) Addition operator
 	ccGLMatrixTpl<T>& operator += (const ccGLMatrixTpl<T>& mat)
@@ -791,6 +808,15 @@ public:
 	**/
 	inline void apply(Vector3Tpl<double>& vec) const	{ vec = (*this)*vec; }
 
+	//! Applies transformation to a 4D vector (in place) - float version
+	/** Input vector is directly modified after calling this method
+	**/
+	inline void apply(Tuple4Tpl<float>& vec) const	{ vec = (*this)*vec; }
+	//! Applies transformation to a 3D vector (in place) - double version
+	/** Input vector is directly modified after calling this method
+	**/
+	inline void apply(Tuple4Tpl<double>& vec) const	{ vec = (*this)*vec; }
+
 	//! Get the resulting transformation along X dimension (float version)
 	inline float applyX(const Vector3Tpl<float>& vec) const
 	{
@@ -842,14 +868,82 @@ public:
 				+ static_cast<double>(CC_MAT_R34);
 	}
 
+	//! Get the resulting transformation along X dimension (float version)
+	inline float applyX(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R11) * vec.x
+				+ static_cast<float>(CC_MAT_R12) * vec.y
+				+ static_cast<float>(CC_MAT_R13) * vec.z
+				+ static_cast<float>(CC_MAT_R14) * vec.w;
+	}
+	//! Get the resulting transformation along X dimension (double version)
+	inline double applyX(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R11) * vec.x
+				+ static_cast<double>(CC_MAT_R12) * vec.y
+				+ static_cast<double>(CC_MAT_R13) * vec.z
+				+ static_cast<double>(CC_MAT_R14) * vec.w;
+	}
+
+	//! Get the resulting transformation along Y dimension (float version)
+	inline float applyY(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R21) * vec.x
+				+ static_cast<float>(CC_MAT_R22) * vec.y
+				+ static_cast<float>(CC_MAT_R23) * vec.z
+				+ static_cast<float>(CC_MAT_R24) * vec.w;
+	}
+	//! Get the resulting transformation along Y dimension (double version)
+	inline double applyY(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R21) * vec.x
+				+ static_cast<double>(CC_MAT_R22) * vec.y
+				+ static_cast<double>(CC_MAT_R23) * vec.z
+				+ static_cast<double>(CC_MAT_R24) * vec.w;
+	}
+
+	//! Get the resulting transformation along Z dimension (float version)
+	inline float applyZ(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R31) * vec.x
+				+ static_cast<float>(CC_MAT_R32) * vec.y
+				+ static_cast<float>(CC_MAT_R33) * vec.z
+				+ static_cast<float>(CC_MAT_R34) * vec.w;
+	}
+	//! Get the resulting transformation along Z dimension (double version)
+	inline double applyZ(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R31) * vec.x
+				+ static_cast<double>(CC_MAT_R32) * vec.y
+				+ static_cast<double>(CC_MAT_R33) * vec.z
+				+ static_cast<double>(CC_MAT_R34) * vec.w;
+	}
+
+	//! Get the resulting transformation along the 4th dimension (float version)
+	inline float applyW(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R41) * vec.x
+				+ static_cast<float>(CC_MAT_R42) * vec.y
+				+ static_cast<float>(CC_MAT_R43) * vec.z
+				+ static_cast<float>(CC_MAT_R44) * vec.w;
+	}
+	//! Get the resulting transformation along the 4th dimension (double version)
+	inline double applyW(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R41) * vec.x
+				+ static_cast<double>(CC_MAT_R42) * vec.y
+				+ static_cast<double>(CC_MAT_R43) * vec.z
+				+ static_cast<double>(CC_MAT_R44) * vec.w;
+	}
+
 	//! Applies rotation only to a 3D vector (in place) - float version
 	/** Input vector is directly modified after calling this method
 	**/
 	inline void applyRotation(Vector3Tpl<float>& vec) const
 	{
-		register float vx = vec.x;
-		register float vy = vec.y;
-		register float vz = vec.z;
+		float vx = vec.x;
+		float vy = vec.y;
+		float vz = vec.z;
 
 		vec.x =   static_cast<float>(CC_MAT_R11) * vx
 				+ static_cast<float>(CC_MAT_R12) * vy
@@ -868,9 +962,9 @@ public:
 	**/
 	inline void applyRotation(Vector3Tpl<double>& vec) const
 	{
-		register double vx = vec.x;
-		register double vy = vec.y;
-		register double vz = vec.z;
+		double vx = vec.x;
+		double vy = vec.y;
+		double vz = vec.z;
 
 		vec.x =   static_cast<double>(CC_MAT_R11) * vx
 				+ static_cast<double>(CC_MAT_R12) * vy
@@ -890,9 +984,9 @@ public:
 	**/
 	inline void applyRotation(float vec[3]) const
 	{
-		register float vx = vec[0];
-		register float vy = vec[1];
-		register float vz = vec[2];
+		float vx = vec[0];
+		float vy = vec[1];
+		float vz = vec[2];
 
 		vec[0] =  static_cast<float>(CC_MAT_R11) * vx
 				+ static_cast<float>(CC_MAT_R12) * vy
@@ -911,9 +1005,9 @@ public:
 	**/
 	inline void applyRotation(double vec[3]) const
 	{
-		register double vx = vec[0];
-		register double vy = vec[1];
-		register double vz = vec[2];
+		double vx = vec[0];
+		double vy = vec[1];
+		double vz = vec[2];
 
 		vec[0] =  static_cast<double>(CC_MAT_R11) * vx
 				+ static_cast<double>(CC_MAT_R12) * vy

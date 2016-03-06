@@ -73,7 +73,6 @@ ccSectionExtractionTool::ccSectionExtractionTool(QWidget* parent)
 	, m_editedPolyVertices(0)
 {
 	setupUi(this);
-	setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
 
 	connect(undoToolButton,						SIGNAL(clicked()),					this,	SLOT(undo()));
 	connect(validToolButton,					SIGNAL(clicked()),					this,	SLOT(apply()));
@@ -155,17 +154,15 @@ bool ccSectionExtractionTool::linkWith(ccGLWindow* win)
 	ccGLWindow* oldWin = m_associatedWin;
 
 	if (!ccOverlayDialog::linkWith(win))
+	{
 		return false;
+	}
 
 	selectPolyline(0);
 
 	if (oldWin)
 	{
-		disconnect(m_associatedWin, SIGNAL(leftButtonClicked(int,int)), this, SLOT(addPointToPolyline(int,int)));
-		disconnect(m_associatedWin, SIGNAL(rightButtonClicked(int,int)), this, SLOT(closePolyLine(int,int)));
-		disconnect(m_associatedWin, SIGNAL(mouseMoved(int,int,Qt::MouseButtons)), this, SLOT(updatePolyLine(int,int,Qt::MouseButtons)));
-		disconnect(m_associatedWin, SIGNAL(buttonReleased()), this, SLOT(closeRectangle()));
-		disconnect(m_associatedWin, SIGNAL(entitySelectionChanged(int)), this, SLOT(entitySelected(int)));
+		m_associatedWin->disconnect(this);
 
 		//restore sections original display
 		{
@@ -195,14 +192,18 @@ bool ccSectionExtractionTool::linkWith(ccGLWindow* win)
 		}
 
 		if (m_editedPoly)
+		{
 			m_editedPoly->setDisplay_recursive(0);
+		}
 
 		//auto-close formerly associated window
 		if (MainWindow::TheInstance())
 		{
 			QMdiSubWindow* subWindow = MainWindow::TheInstance()->getMDISubWindow(oldWin);
 			if (subWindow)
+			{
 				subWindow->close();
+			}
 		}
 	}
 	
@@ -212,7 +213,7 @@ bool ccSectionExtractionTool::linkWith(ccGLWindow* win)
 		connect(m_associatedWin, SIGNAL(rightButtonClicked(int,int)), this, SLOT(closePolyLine(int,int)));
 		connect(m_associatedWin, SIGNAL(mouseMoved(int,int,Qt::MouseButtons)), this, SLOT(updatePolyLine(int,int,Qt::MouseButtons)));
 		connect(m_associatedWin, SIGNAL(buttonReleased()), this, SLOT(closeRectangle()));
-		connect(m_associatedWin, SIGNAL(entitySelectionChanged(int)), this, SLOT(entitySelected(int)));
+		connect(m_associatedWin, SIGNAL(entitySelectionChanged(ccHObject*)), this, SLOT(entitySelected(ccHObject*)));
 
 		//import sections in current display
 		{
@@ -238,16 +239,23 @@ bool ccSectionExtractionTool::linkWith(ccGLWindow* win)
 					cloud.originalDisplay = cloud.entity->getDisplay();
 					cloud.entity->setDisplay(m_associatedWin);
 					if (!cloud.isInDB)
+					{
 						m_associatedWin->addToOwnDB(cloud.entity);
+					}
 				}
 			}
 		}
 
 		if (m_editedPoly)
+		{
 			m_editedPoly->setDisplay_recursive(m_associatedWin);
+		}
 
 		//update view direction
 		setVertDimension(vertAxisComboBox->currentIndex());
+
+		//section extraction only works in orthoraphic mode!
+		m_associatedWin->setPerspectiveState(false, true);
 	}
 
 	return true;
@@ -334,13 +342,18 @@ void ccSectionExtractionTool::deleteSelectedPolyline()
 	}
 }
 
-void ccSectionExtractionTool::entitySelected(int uniqueID)
+void ccSectionExtractionTool::entitySelected(ccHObject* entity)
 {
-	//look if this unique ID corresponds to an active polyline
+	if (!entity)
+	{
+		return;
+	}
+	
+	//look if this selected entity corresponds to an active polyline
 	for (SectionPool::iterator it = m_sections.begin(); it != m_sections.end(); ++it)
 	{
 		Section& section = *it;
-		if (section.entity && section.entity->getUniqueID() == uniqueID)
+		if (section.entity == entity)
 		{
 			selectPolyline(&section);
 			break;
@@ -515,7 +528,7 @@ void ccSectionExtractionTool::stop(bool accepted)
 
 	if (m_associatedWin)
 	{
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
 		m_associatedWin->setPickingMode(ccGLWindow::DEFAULT_PICKING);
 		m_associatedWin->setUnclosable(false);
 	}
@@ -556,12 +569,10 @@ bool ccSectionExtractionTool::addPolyline(ccPolyline* inputPoly, bool alreadyInD
 	if (inputPoly->is2DMode())
 	{
 		//viewing parameters (for conversion from 2D to 3D)
-		const double* MM = m_associatedWin->getModelViewMatd(); //viewMat
-		const double* MP = m_associatedWin->getProjectionMatd(); //projMat
-		const GLdouble half_w = static_cast<GLdouble>(m_associatedWin->width())/2;
-		const GLdouble half_h = static_cast<GLdouble>(m_associatedWin->height())/2;
-		int VP[4];
-		m_associatedWin->getViewportArray(VP);
+		ccGLCameraParameters camera;
+		m_associatedWin->getGLCameraParameters(camera);
+		const double half_w = camera.viewport[2] / 2.0;
+		const double half_h = camera.viewport[3] / 2.0;
 
 		//working dimension
 		int vertDim = vertAxisComboBox->currentIndex();
@@ -577,21 +588,21 @@ bool ccSectionExtractionTool::addPolyline(ccPolyline* inputPoly, bool alreadyInD
 		//duplicate polyline
 		ccPolyline* duplicatePoly = new ccPolyline(0);
 		ccPointCloud* duplicateVertices = 0;
-		if (duplicatePoly->initWith(duplicateVertices,*inputPoly))
+		if (duplicatePoly->initWith(duplicateVertices, *inputPoly))
 		{
 			assert(duplicateVertices);
 			for (unsigned i=0; i<duplicateVertices->size(); ++i)
 			{
 				CCVector3& P = const_cast<CCVector3&>(*duplicateVertices->getPoint(i));
-				GLdouble xp,yp,zp;
-				gluUnProject(half_w+P.x,half_h+P.y,0/*P.z*/,MM,MP,VP,&xp,&yp,&zp);
-				P.x = static_cast<PointCoordinateType>(xp);
-				P.y = static_cast<PointCoordinateType>(yp);
-				P.z = static_cast<PointCoordinateType>(zp);
+				CCVector3d Pd(half_w + P.x, half_h + P.y, 0/*P.z*/);
+				CCVector3d Q3D;
+				camera.unproject(Pd, Q3D);
+				P = CCVector3::fromArray(Q3D.u);
 				P.u[vertDim] = defaultZ;
 			}
 
 			duplicateVertices->invalidateBoundingBox();
+			duplicateVertices->setEnabled(false);
 			duplicatePoly->set2DMode(false);
 			duplicatePoly->setDisplay_recursive(inputPoly->getDisplay());
 			duplicatePoly->setName(inputPoly->getName());
@@ -679,27 +690,9 @@ bool ccSectionExtractionTool::addCloud(ccGenericPointCloud* inputCloud, bool alr
 	return true;
 }
 
-//CCVector3 ccSectionExtractionTool::project2Dto3D(int x, int y) const
-//{
-//	//get current display parameters
-//	const double* MM = m_associatedWin->getModelViewMatd(); //viewMat
-//	const double* MP = m_associatedWin->getProjectionMatd(); //projMat
-//	const GLdouble half_w = static_cast<GLdouble>(m_associatedWin->width())/2;
-//	const GLdouble half_h = static_cast<GLdouble>(m_associatedWin->height())/2;
-//	int VP[4];
-//	m_associatedWin->getViewportArray(VP);
-//
-//	GLdouble xp,yp,zp;
-//	gluUnProject(half_w+x,half_h+y,0/*z*/,MM,MP,VP,&xp,&yp,&zp);
-//
-//	return CCVector3(	static_cast<PointCoordinateType>(xp),
-//						static_cast<PointCoordinateType>(yp),
-//						static_cast<PointCoordinateType>(zp) );
-//}
-
 void ccSectionExtractionTool::updatePolyLine(int x, int y, Qt::MouseButtons buttons)
 {
-	if (!m_associatedWin)
+	if (!m_associatedWin || !m_associatedWin->hasFBO()) //we need fast rendering (with FBO) for live update of the polyline!
 		return;
 
 	//process not started yet?
@@ -713,22 +706,28 @@ void ccSectionExtractionTool::updatePolyLine(int x, int y, Qt::MouseButtons butt
 	if (vertCount < 2)
 		return;
 	
-	CCVector3 P = CCVector3(static_cast<PointCoordinateType>(x),
-							static_cast<PointCoordinateType>(y),
+	CCVector3 P = CCVector3(static_cast<PointCoordinateType>(x - m_associatedWin->width()/2),
+							static_cast<PointCoordinateType>(m_associatedWin->height()/2 - y),
 							0);
 
 	//we replace last point by the current one
 	CCVector3* lastP = const_cast<CCVector3*>(m_editedPolyVertices->getPointPersistentPtr(vertCount-1));
 	*lastP = P;
 
-	if (m_associatedWin)
-		m_associatedWin->redraw(true, false);
+	m_associatedWin->redraw(true, false);
 }
 
 void ccSectionExtractionTool::addPointToPolyline(int x, int y)
 {
 	if ((m_state & STARTED) == 0)
+	{
 		return;
+	}
+	if (!m_associatedWin)
+	{
+		assert(false);
+		return;
+	}
 
 	if (!m_editedPoly)
 	{
@@ -747,15 +746,14 @@ void ccSectionExtractionTool::addPointToPolyline(int x, int y)
 			m_editedPoly->setGlobalShift(cloud->getGlobalShift());
 		}
 		m_editedPoly->addChild(m_editedPolyVertices);
-		if (m_associatedWin)
-			m_associatedWin->addToOwnDB(m_editedPoly);
+		m_associatedWin->addToOwnDB(m_editedPoly);
 	}
 
 	unsigned vertCount = m_editedPolyVertices->size();
 
 	//clicked point (2D)
-	CCVector3 P = CCVector3(static_cast<PointCoordinateType>(x),
-							static_cast<PointCoordinateType>(y),
+	CCVector3 P = CCVector3(static_cast<PointCoordinateType>(x - m_associatedWin->width()/2),
+							static_cast<PointCoordinateType>(m_associatedWin->height()/2 - y),
 							0);
 
 	//start new polyline?
@@ -805,8 +803,7 @@ void ccSectionExtractionTool::addPointToPolyline(int x, int y)
 		m_editedPoly->showArrow(true,vertCount-1,defaultArrowSize);
 	}
 
-	if (m_associatedWin)
-		m_associatedWin->redraw(true, false);
+	m_associatedWin->redraw(true, false);
 }
 
 void ccSectionExtractionTool::closePolyLine(int, int)
@@ -851,7 +848,9 @@ void ccSectionExtractionTool::closePolyLine(int, int)
 	m_state &= (~RUNNING);
 
 	if (m_associatedWin)
+	{
 		m_associatedWin->redraw(true, false);
+	}
 }
 
 void ccSectionExtractionTool::cancelCurrentPolyline()
@@ -891,8 +890,8 @@ void ccSectionExtractionTool::enableSectionEditingMode(bool state)
 			m_editedPoly->clear();
 			m_editedPolyVertices->clear();
 		}
-		m_associatedWin->setInteractionMode(ccGLWindow::PAN_ONLY);
-		m_associatedWin->displayNewMessage(QString(),ccGLWindow::UPPER_CENTER_MESSAGE,false,0,ccGLWindow::MANUAL_SEGMENTATION_MESSAGE);
+		m_associatedWin->setInteractionMode(ccGLWindow::PAN_ONLY());
+		m_associatedWin->displayNewMessage(QString(), ccGLWindow::UPPER_CENTER_MESSAGE, false, 0, ccGLWindow::MANUAL_SEGMENTATION_MESSAGE);
 		m_associatedWin->setPickingMode(ccGLWindow::ENTITY_PICKING); //to be able to select polylines!
 	}
 	else
@@ -906,7 +905,7 @@ void ccSectionExtractionTool::enableSectionEditingMode(bool state)
 		m_state = STARTED;
 		
 		m_associatedWin->setPickingMode(ccGLWindow::NO_PICKING);
-		m_associatedWin->setInteractionMode(ccGLWindow::SEGMENT_ENTITY);
+		m_associatedWin->setInteractionMode(ccGLWindow::INTERACT_SEND_ALL_SIGNALS);
 		m_associatedWin->displayNewMessage("Section edition mode",ccGLWindow::UPPER_CENTER_MESSAGE,false,3600,ccGLWindow::MANUAL_SEGMENTATION_MESSAGE);
 		m_associatedWin->displayNewMessage("Left click: add section points / Right click: stop",ccGLWindow::UPPER_CENTER_MESSAGE,true,3600,ccGLWindow::MANUAL_SEGMENTATION_MESSAGE);
 	}
@@ -1623,27 +1622,28 @@ void ccSectionExtractionTool::unfoldPoints()
 				//longitudinal 'distance'
 				PointCoordinateType dotprod = s.u.dot(AP2D);
 
-				PointCoordinateType dist = 0;
+				PointCoordinateType squareDist = 0;
 				if (dotprod < 0)
 				{
 					//dist to nearest vertex
-					dist = AP2D.norm();
+					squareDist = AP2D.norm2();
 				}
 				else if (dotprod > s.d)
 				{
 					//dist to nearest vertex
-					dist = (P2D - s.B).norm();
+					squareDist = (P2D - s.B).norm2();
 				}
 				else
 				{
 					//orthogonal distance
-					dist = (AP2D - s.u*dotprod).norm2();
+					squareDist = (AP2D - s.u*dotprod).norm2();
 				}
-				if (dist <= maxSquareDistToPolyline)
+				
+				if (squareDist <= maxSquareDistToPolyline)
 				{
-					if (closestSegment < 0 || dist < minSquareDist)
+					if (closestSegment < 0 || squareDist < minSquareDist)
 					{
-						minSquareDist = dist;
+						minSquareDist = squareDist;
 						closestSegment = static_cast<int>(j);
 					}
 				}
@@ -1699,7 +1699,7 @@ void ccSectionExtractionTool::unfoldPoints()
 			assert(unfoldedCloud->size() == unfoldedPoints.size());
 			CCVector3 C = box.minCorner();
 			C.u[vertDim] = 0;
-			box.minCorner().u[xDim]; //we start at the bounding-box limit
+			C.u[xDim]    = box.minCorner().u[xDim]; //we start at the bounding-box limit
 			for (unsigned i=0; i<unfoldedCloud->size(); ++i)
 			{
 				//update the points positions

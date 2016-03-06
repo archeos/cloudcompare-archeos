@@ -133,10 +133,11 @@ protected:
 class PoissonReconParamDlg : public QDialog, public Ui::PoissonReconParamDialog
 {
 public:
-	explicit PoissonReconParamDlg(QWidget* parent = 0) : QDialog(parent), Ui::PoissonReconParamDialog()
+	explicit PoissonReconParamDlg(QWidget* parent = 0)
+		: QDialog(parent, Qt::Tool)
+		, Ui::PoissonReconParamDialog()
 	{
 		setupUi(this);
-		setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 	}
 };
 
@@ -274,7 +275,7 @@ void qPoissonRecon::doAction()
 		m_app->dispToConsole(QString("[PoissonRecon] Job started (level %1)").arg(s_params.depth),ccMainAppInterface::STD_CONSOLE_MESSAGE);
 
 		//progress dialog (Qtconcurrent::run can't be canceled!)
-		QProgressDialog pDlg("Initialization",QString(),0,0,m_app->getMainWindow());
+		QProgressDialog pDlg("Initialization", QString(), 0, 0, m_app->getMainWindow());
 		pDlg.setWindowTitle("Poisson Reconstruction");
 		pDlg.show();
 		//QApplication::processEvents();

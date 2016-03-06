@@ -483,11 +483,10 @@ void ccMesh::transformTriNormals(const ccGLMatrix& trans)
     //we must take care of the triangle normals!
 	if (m_triNormals && (!getParent() || !getParent()->isKindOf(CC_TYPES::MESH)))
     {
-        bool recoded = false;
-
 		unsigned numTriNormals = m_triNormals->currentSize();
 
 #if 0 //no use to use memory for this!
+      bool recoded = false;
 
         //if there are more triangle normals than the size of the compressed
 		//normals array, we recompress the array instead of recompressing each normal
@@ -565,29 +564,31 @@ bool ccMesh::laplacianSmooth(	unsigned nbIteration,
 	}
 
 	//compute the number of edges to which belong each vertex
-	unsigned* edgesCount = new unsigned[vertCount];
-	if (!edgesCount)
+	std::vector<unsigned> edgesCount;
+	try
+	{
+		edgesCount.resize(vertCount, 0);
+	}
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		verticesDisplacement->release();
 		return false;
 	}
-	memset(edgesCount, 0, sizeof(unsigned)*vertCount);
+
 	placeIteratorAtBegining();
 	for(unsigned j=0; j<faceCount; j++)
 	{
 		const CCLib::VerticesIndexes* tri = getNextTriangleVertIndexes();
-		edgesCount[tri->i1]+=2;
-		edgesCount[tri->i2]+=2;
-		edgesCount[tri->i3]+=2;
+		edgesCount[tri->i1] += 2;
+		edgesCount[tri->i2] += 2;
+		edgesCount[tri->i3] += 2;
 	}
 
 	//progress dialog
-	CCLib::NormalizedProgress* nProgress = 0;
+	CCLib::NormalizedProgress nProgress(progressCb, nbIteration);
 	if (progressCb)
 	{
-		unsigned totalSteps = nbIteration;
-		nProgress = new CCLib::NormalizedProgress(progressCb,totalSteps);
 		progressCb->setMethodTitle("Laplacian smooth");
 		progressCb->setInfo(qPrintable(QString("Iterations: %1\nVertices: %2\nFaces: %3").arg(nbIteration).arg(vertCount).arg(faceCount)));
 		progressCb->start();
@@ -620,7 +621,7 @@ bool ccMesh::laplacianSmooth(	unsigned nbIteration,
 			(*dC) -= dAC+dBC;
 		}
 
-		if (nProgress && !nProgress->oneStep())
+		if (!nProgress.oneStep())
 		{
 			//cancelled by user
 			break;
@@ -633,7 +634,7 @@ bool ccMesh::laplacianSmooth(	unsigned nbIteration,
 			//this is a "persistent" pointer and we know what type of cloud is behind ;)
 			CCVector3* P = const_cast<CCVector3*>(m_associatedCloud->getPointPersistentPtr(i));
 			const CCVector3* d = (const CCVector3*)verticesDisplacement->getValue(i);
-			(*P) += (*d)*(factor/static_cast<PointCoordinateType>(edgesCount[i]));
+			(*P) += (*d) * (factor / edgesCount[i]);
 		}
 	}
 
@@ -645,14 +646,6 @@ bool ccMesh::laplacianSmooth(	unsigned nbIteration,
 	if (verticesDisplacement)
 		verticesDisplacement->release();
 	verticesDisplacement = 0;
-
-	if (edgesCount)
-		delete[] edgesCount;
-	edgesCount = 0;
-
-	if (nProgress)
-		delete nProgress;
-	nProgress = 0;
 
 	return true;
 }

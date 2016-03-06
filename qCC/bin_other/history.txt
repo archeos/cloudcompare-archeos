@@ -1,7 +1,13 @@
 *** CloudCompare versions history ***
 
-v2.7.beta ??/??/201?
+v2.6.3.beta ??/??/2016
 - New features:
+
+	* Polyline tracing/picking tool:
+		- accessible via a dedicated icon in the main tool bar ('Trace a polyline by point picking')
+		- allows to pick points on all the visible clouds in the active 3D view to define one or more 3D polylines
+		- allows to generate a tight contour polyline by automatically picking several points between each vertex ('oversampling')
+
 	* 2.5D volume calculation tool:
 		- Tools > Volume > Compute 2.5D volume
 		- can compute the volume of a single cloud (relatively to a constant height) or between two clouds
@@ -17,6 +23,8 @@ v2.7.beta ??/??/201?
 		- (the 3D view is forced to exclusive full-screen mode)
 		- shaders (EDL, etc.) are supported
 
+	* New method: Edit > Colors > Convert to grey scale
+
 - Enhancements:
 	* Point-pair based alignment tool:
 		- the tool 3D view now has the same viewport/camera parameters as the source 3D view
@@ -26,9 +34,77 @@ v2.7.beta ??/??/201?
 			(very useful to unwrap a cloud that has not a cylinder shape)
 		- the tool now keeps the active GL filter active (if any)
 
+	* qPoissonRecon now uses PoissonRecon V8.0 (https://github.com/mkazhdan/PoissonRecon)
+
+	* qAnimation: the plugin has been fixed and can now output mp4 videos
+
+	* Point sampling (on a mesh): maximum density is now 100 M. per square units
+
+	* Sensors:
+		- Sensors (camera, TLS) are now properly updated when their associated cloud is scaled
+		- principal point added to Camera sensor parameters
+		- differentiation of the vertical and horizontal focal lengths for Camera sensors
+
+	* Command line mode:
+		- new option '-ORIENT_NORMS_MST' (+ number of neighbors): to (re)orient the normals of the loaded clouds with a Minimum Spanning Tree
+
+	* SF Arithmetic tool:
+		- a constant value can now be used instead of a second scalar field
+		- the first scalar field (SF1) can now be updated directly (instead of creating a new SF)
+		- division by zero is now properly handled
+
+	* Structured point clouds:
+		- the sensor position of associated scans is now properly updated when the cloud is rotated
+
+	* M3C2 plugin:
+		- new option to output the scalar fields (distance, confidence, etc.) on the original core point entity
+			(i.e. either the original cloud or the subsampled version).
+		- the user can now set the maximum number of threads/core to use
+
+	* CANUPO plugin:
+		- the statistics (Training mode) now takes the actual boundary into account (and not the default one)
+		- bug fix: the classes (labels) could be inversed in some cases
+		- the user can now set the maximum number of threads/core to use
+
+	* Distance computation tool:
+		- the user can now set the maximum number of threads/core to use
+
+	* Rasterize tool:
+		- the Rasterize tool can now compute Hillshade
+		- the 'interpolate' option can now be used with the 'average height' projection. In this case
+			only the coordinates of the original point are kept (the point which is the closest to the cell center)
+			and the height is replaced by the average cell height.
+
+	* Align tool:
+		- the user can now set the max RMS for sphere detection
+
+	* the FARO I/O plugin now relies on the 5.5.3 FARO LS SDK
+
+	* The DP I/O plugin can now export DP files
+		- either to save original DP files
+		- or to convert other structured clouds (FARO or PTX for now) to the DP format
+
+	* File I/O
+		- E57: big coordinates are now properly handled (Global Shift & Scale mechanism)
+		- Smarter progress dialogs
+
 - Bug fixes:
 	* The 'Edit > Colors > Convert to Scalar Field' method was returning invalid scalar fields
 	* The 'ADD_HEADER' and 'ADD_PTS_COUNT' options of the command line mode were causing an infinite loop
+	* The point-pair based alignment tool could sometimes fail (especially when there were at least 4 picked
+		points almost all in a plane)
+	* CC 2.6.2 would crash when loading older BIN files containing primitive cylinders
+	* FARO files: the sensor position associated to each grid/scan structure was wrong. This could lead to
+		a wrong orientation when computing normals.
+	* The rasterize tool was placing the points at the lower-left corners of the cells when exporting the grid
+		as a cloud (instead of the centers of the cells)
+	* The window picking slots were not properly disconnect after each session of the manual segmentation tool
+		(at least) causing an increasing slow down each time the tool is restarted
+	* Polylines vertices could be dragged and dropped or deleted (potentially causing a crash)
+	* For clouds with a number of points that is exactly a multiple of 65536, the last 65536 points were not displayed
+	* OpenGL warning removed when rendering a 3D view to a file (or as an animation with the qAnimation plugin)
+	* Command line mode: the mesh obtained with the -DELAUNAY command could only be saved as a BIN file
+	* Rasterize: applying the tool a second time on a cloud already generated with the rasterize tool could make CC crash
 
 v2.6.2 10/08/2015
 - New features:

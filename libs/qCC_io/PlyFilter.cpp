@@ -1244,7 +1244,7 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, LoadPa
 
 	/* NORMALS (X,Y,Z) */
 
-	unsigned numberOfNormals=0;
+	unsigned numberOfNormals = 0;
 
 	assert(nxIndex == 0 || (nxIndex != nyIndex && nxIndex != nzIndex));
 	assert(nyIndex == 0 || (nyIndex != nxIndex && nyIndex != nzIndex));
@@ -1516,7 +1516,7 @@ CC_FILE_ERROR PlyFilter::loadFile(QString filename, ccHObject& container, LoadPa
 		}
 	}
 
-	ccProgressDialog pDlg(false);
+	ccProgressDialog pDlg(false, parameters.parentWidget);
 	if (parameters.alwaysDisplayLoadDialog)
 	{
 		pDlg.setInfo("Loading in progress...");

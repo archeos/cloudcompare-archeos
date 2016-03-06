@@ -31,8 +31,6 @@ ccGraphicalTransformationTool::ccGraphicalTransformationTool(QWidget* parent)
 {
 	setupUi(this);
 
-	setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
-
 	connect(pauseButton,	SIGNAL(toggled(bool)),	this, SLOT(pause(bool)));
 	connect(okButton,		SIGNAL(clicked()),		this, SLOT(apply()));
 	connect(razButton,		SIGNAL(clicked()),		this, SLOT(reset()));
@@ -79,13 +77,13 @@ void ccGraphicalTransformationTool::pause(bool state)
 
 	if (state)
 	{
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
 		m_associatedWin->displayNewMessage("Transformation [PAUSED]",ccGLWindow::UPPER_CENTER_MESSAGE,false,3600,ccGLWindow::MANUAL_TRANSFORMATION_MESSAGE);
 		m_associatedWin->displayNewMessage("Unpause to transform again",ccGLWindow::UPPER_CENTER_MESSAGE,true,3600,ccGLWindow::MANUAL_TRANSFORMATION_MESSAGE);
 	}
 	else
 	{
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_ENTITY);
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_ENTITIES());
 		m_associatedWin->displayNewMessage("[Rotation/Translation mode]",ccGLWindow::UPPER_CENTER_MESSAGE,false,3600,ccGLWindow::MANUAL_TRANSFORMATION_MESSAGE);
 	}
 
@@ -170,7 +168,9 @@ unsigned ccGraphicalTransformationTool::getNumberOfValidEntities() const
 bool ccGraphicalTransformationTool::linkWith(ccGLWindow* win)
 {
 	if (!ccOverlayDialog::linkWith(win))
+	{
 		return false;
+	}
 	
 	assert(!win || m_toTransform.getChildrenNumber() == 0);
 	m_toTransform.setDisplay(win);
@@ -194,7 +194,7 @@ bool ccGraphicalTransformationTool::start()
 	m_rotationCenter = CCVector3d::fromArray(m_toTransform.getBB_recursive().getCenter().u); //m_rotation center == selected entities center
 
 	//activate "moving mode" in associated GL window
-	m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_ENTITY);
+	m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_ENTITIES());
 	m_associatedWin->setPickingMode(ccGLWindow::NO_PICKING);
 	//the user must not close this window!
 	m_associatedWin->setUnclosable(true);
@@ -212,11 +212,10 @@ void ccGraphicalTransformationTool::stop(bool state)
 	if (m_associatedWin)
 	{
 		//deactivate "moving mode" in associated GL window
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
 		m_associatedWin->setPickingMode(ccGLWindow::DEFAULT_PICKING);
 		m_associatedWin->setUnclosable(false);
-		disconnect(m_associatedWin, SIGNAL(rotation(const ccGLMatrixd&)),	this, SLOT(glRotate(const ccGLMatrixd&)));
-		disconnect(m_associatedWin, SIGNAL(translation(const CCVector3d&)),	this, SLOT(glTranslate(const CCVector3d&)));
+		m_associatedWin->disconnect(this);
 		m_associatedWin->displayNewMessage("[Rotation/Translation mode OFF]",ccGLWindow::UPPER_CENTER_MESSAGE,false,2,ccGLWindow::MANUAL_TRANSFORMATION_MESSAGE);
 		m_associatedWin->redraw(true, false);
 	}
@@ -239,7 +238,7 @@ void ccGraphicalTransformationTool::glTranslate(const CCVector3d& realT)
 
 void ccGraphicalTransformationTool::glRotate(const ccGLMatrixd& rotMat)
 {
-	switch(rotComboBox->currentIndex())
+	switch (rotComboBox->currentIndex())
 	{
 	case 0: //XYZ
 		m_rotation = rotMat * m_rotation;
@@ -278,7 +277,7 @@ void ccGraphicalTransformationTool::updateAllGLTransformations()
 {
 	//we recompute global GL transformation matrix
 	ccGLMatrixd newTrans = m_rotation;
-	newTrans += m_rotationCenter + m_translation - m_rotation*m_rotationCenter;
+	newTrans += m_rotationCenter + m_translation - m_rotation * m_rotationCenter;
 
 	ccGLMatrix newTransf(newTrans.data());
 	for (unsigned i=0; i<m_toTransform.getChildrenNumber(); ++i)

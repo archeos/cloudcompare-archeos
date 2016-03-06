@@ -34,21 +34,11 @@ if (CC_PLUGIN_CUSTOM_UI_LIST)
 	list( APPEND ui_list ${CC_PLUGIN_CUSTOM_UI_LIST} )
 endif()
 
-if ( USE_QT5 )
-	qt5_wrap_ui( generated_ui_list ${ui_list} )
-	qt5_add_resources( generated_qrc_list ${qrc_list} )
-else()
-	# find Qt mocable files (do this AFTER including custom header and source files ;) 
-	find_mocable_files( mocable_list ${header_list} )
-	qt4_wrap_cpp( moc_list ${mocable_list} )
-	qt4_wrap_ui( generated_ui_list ${ui_list} )
-	qt4_add_resources( generated_qrc_list ${qrc_list} )
-endif()
+
+qt_wrap_ui( generated_ui_list ${ui_list} )
+qt_add_resources( generated_qrc_list ${qrc_list} )
 
 add_library( ${PROJECT_NAME} SHARED ${header_list} ${source_list} ${moc_list} ${generated_ui_list} ${generated_qrc_list})
-
-# Default preprocessors
-set_default_cc_preproc( ${PROJECT_NAME} )
 
 # Add custom default prepocessor definitions
 set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS USE_GLEW GLEW_STATIC )
@@ -69,7 +59,6 @@ target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_IO_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_GL_LIB )
-target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
 
 if ( USE_QT5 )
 	qt5_use_modules(${PROJECT_NAME} Core Gui Widgets OpenGL Concurrent)

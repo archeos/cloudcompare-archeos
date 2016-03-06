@@ -186,6 +186,7 @@ ccHObject* ccHObject::New(CC_CLASS_ENUM objectType, const char* name/*=0*/)
 	case CC_TYPES::TORUS:
 		return new ccTorus(name);
 	case CC_TYPES::CYLINDER:
+	case CC_TYPES::OLD_CYLINDER_ID:
 		return new ccCylinder(name);
 	case CC_TYPES::BOX:
 		return new ccBox(name);
@@ -396,23 +397,27 @@ ccHObject* ccHObject::find(unsigned uniqueID)
 unsigned ccHObject::filterChildren(	Container& filteredChildren,
 									bool recursive/*=false*/,
 									CC_CLASS_ENUM filter/*=CC_TYPES::OBJECT*/,
-									bool strict/*=false*/) const
+									bool strict/*=false*/,
+									ccGenericGLDisplay* inDisplay/*=0*/) const
 {
 	for (Container::const_iterator it = m_children.begin(); it != m_children.end(); ++it)
 	{
 		if (	(!strict && (*it)->isKindOf(filter))
-			||	( strict && (*it)->isA(filter)) )
+			||	( strict && (*it)->isA(filter)))
 		{
-			//warning: we have to handle unicity as a sibling may be in the same container as its parent!
-			if (std::find(filteredChildren.begin(),filteredChildren.end(),*it) == filteredChildren.end()) //not yet in output vector?
+			if (!inDisplay || (*it)->getDisplay() == inDisplay)
 			{
-				filteredChildren.push_back(*it);
+				//warning: we have to handle unicity as a sibling may be in the same container as its parent!
+				if (std::find(filteredChildren.begin(), filteredChildren.end(), *it) == filteredChildren.end()) //not yet in output vector?
+				{
+					filteredChildren.push_back(*it);
+				}
 			}
 		}
 
 		if (recursive)
 		{
-			(*it)->filterChildren(filteredChildren, true, filter, strict);
+			(*it)->filterChildren(filteredChildren, true, filter, strict, inDisplay);
 		}
 	}
 
@@ -621,20 +626,17 @@ void ccHObject::drawNameIn3D(CC_DRAW_CONTEXT& context)
 		ccGLMatrix trans;
 		getAbsoluteGLTransformation(trans);
 
-		const double* MM = context._win->getModelViewMatd(); //viewMat
-		const double* MP = context._win->getProjectionMatd(); //projMat
-		int VP[4];
-		context._win->getViewportArray(VP);
+		ccGLCameraParameters camera;
+		context._win->getGLCameraParameters(camera);
 
-		GLdouble xp,yp,zp;
 		CCVector3 C = bBox.getCenter();
-		trans.apply(C);
-		gluProject(C.x,C.y,C.z,MM,MP,VP,&xp,&yp,&zp);
+		CCVector3d Q2D;
+		camera.project(C, Q2D);
 
 		QFont font = context._win->getTextDisplayFont(); //takes rendering zoom into account!
 		context._win->displayText(	getName(),
-									static_cast<int>(xp),
-									static_cast<int>(yp),
+									static_cast<int>(Q2D.x),
+									static_cast<int>(Q2D.y),
 									ccGenericGLDisplay::ALIGN_HMIDDLE | ccGenericGLDisplay::ALIGN_VMIDDLE,
 									0.75f,
 									0,
@@ -910,6 +912,11 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags, bool omitChild
 	if (!ccObject::fromFile(in, dataVersion, flags))
 		return false;
 
+#ifdef _DEBUG
+	char buffer[1024];
+	strcpy(buffer, qPrintable(getName()));
+#endif
+
 	//read own data
 	if (!fromFile_MeOnly(in, dataVersion, flags))
 		return false;
@@ -974,7 +981,7 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags, bool omitChild
 			}
 			else
 			{
-				delete child;
+				//delete child; //we can't do this as the object might be invalid
 				return false;
 			}
 		}
@@ -984,7 +991,7 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags, bool omitChild
 		}
 	}
 
-	//write current selection behavior (dataVersion>=23)
+	//read the selection behavior (dataVersion>=23)
 	if (dataVersion >= 23)
 	{
 		if (in.read((char*)&m_selectionBehavior,sizeof(SelectionBehavior)) < 0)

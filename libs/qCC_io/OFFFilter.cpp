@@ -32,7 +32,6 @@
 #include <ccLog.h>
 #include <ccMesh.h>
 #include <ccPointCloud.h>
-#include <ccProgressDialog.h>
 #include <ccNormalVectors.h>
 #include <ccOctree.h>
 
@@ -160,8 +159,6 @@ CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, LoadPa
 		//end of file already?!
 		if (currentLine.isNull())
 			return CC_FERR_MALFORMED_FILE;
-
-		while (currentLine.startsWith("#") || currentLine.isEmpty());
 
 		//read the number of vertices/faces
 		tokens = currentLine.split(QRegExp("\\s+"),QString::SkipEmptyParts);

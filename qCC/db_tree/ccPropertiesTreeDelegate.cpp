@@ -861,17 +861,22 @@ void ccPropertiesTreeDelegate::fillWithCameraSensor(ccCameraSensor* _obj)
 	const ccCameraSensor::IntrinsicParameters& params = _obj->getIntrinsicParameters();
 
 	//Focal
-	appendRow( ITEM("Focal (pix)"), ITEM(QString::number(params.focal_pix)) );
+	appendRow( ITEM("Vert. focal"), ITEM(QString::number(params.vertFocal_pix) + " pix." ) );
 
 	//Array size
 	appendRow( ITEM("Array size"), ITEM(QString("%1 x %2").arg(params.arrayWidth).arg(params.arrayHeight)) );
+
+	//Principal point
+	appendRow( ITEM("Principal point"), ITEM(QString("(%1 ; %2)").arg(params.principal_point[0]).arg(params.principal_point[1])) );
 	
 	//Pixel size
 	if (params.pixelSize_mm[0] != 0 || params.pixelSize_mm[1] != 0)
+	{
 		appendRow( ITEM("Pixel size"), ITEM(QString("%1 x %2").arg(params.pixelSize_mm[0]).arg(params.pixelSize_mm[1])) );
+	}
 
 	//Field of view
-	appendRow( ITEM("F.o.v. (deg.)"), ITEM(QString::number(params.vFOV_rad * CC_RAD_TO_DEG)) );
+	appendRow( ITEM("Field of view"), ITEM(QString::number(params.vFOV_rad * CC_RAD_TO_DEG) + " deg.") );
 
 	//Skewness
 	appendRow( ITEM("Skew"), ITEM(QString::number(params.skew)) );
@@ -1020,7 +1025,7 @@ QWidget* ccPropertiesTreeDelegate::createEditor(QWidget *parent,
 	case OBJECT_COLOR_RAMP_STEPS:
 		{
 			QSpinBox *spinBox = new QSpinBox(parent);
-			spinBox->setRange(ccColorScale::MIN_STEPS,ccColorScale::MAX_STEPS);
+			spinBox->setRange(ccColorScale::MIN_STEPS, ccColorScale::MAX_STEPS);
 			spinBox->setSingleStep(4);
 
 			connect(spinBox, SIGNAL(valueChanged(int)), this, SLOT(colorRampStepsChanged(int)));

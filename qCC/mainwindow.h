@@ -56,6 +56,7 @@ class ccComparisonDlg;
 class ccGraphicalSegmentationTool;
 class ccSectionExtractionTool;
 class ccGraphicalTransformationTool;
+class ccTracePolylineTool;
 class ccClippingBoxTool;
 class ccPluginInterface;
 class ccStdPluginInterface;
@@ -303,6 +304,7 @@ protected slots:
 	//menu action
 	void doActionSetUniqueColor();
 	void doActionColorize();
+	void doActionRGBToGreyScale();
 	void doActionSetColor(bool colorize);
 	void doActionSetColorGradient();
 	void doActionInterpolateColors();
@@ -351,7 +353,7 @@ protected slots:
 	// Picking opeations
 	void enablePickingOperation(ccGLWindow* win, QString message);
 	void cancelPreviousPickingOperation(bool aborted);
-	void processPickedPoint(int, unsigned, int, int);
+	void processPickedPoint(ccHObject*, unsigned, int, int);
 
 	// For rotation center picking
 	void doPickRotationCenter();
@@ -431,6 +433,10 @@ protected slots:
 	//Graphical segmentation
 	void activateSegmentationMode();
 	void deactivateSegmentationMode(bool);
+
+    //Polyline tracing
+    void activateTracePolylineMode();
+    void deactivateTracePolylineMode(bool);
 
 	//Section extraction
 	void activateSectionExtractionMode();
@@ -653,6 +659,8 @@ protected:
 	ccCameraParamEditDlg* m_cpeDlg;
 	//! Graphical segmentation dialog
 	ccGraphicalSegmentationTool* m_gsTool;
+    //! Polyline tracing tool
+    ccTracePolylineTool * m_tplTool;
 	//! Section extraction dialog
 	ccSectionExtractionTool* m_seTool;
 	//! Graphical transformation dialog

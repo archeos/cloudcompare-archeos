@@ -50,16 +50,14 @@
 static const QString s_stepDurationKey("StepDurationSec");
 
 qAnimationDlg::qAnimationDlg( std::vector<VideoStepItem>& videoSteps, ccGLWindow* view3d, QWidget* parent)
-	: QDialog(parent)
+	: QDialog(parent, Qt::Tool)
 	, Ui::AnimationDialog()
 	, m_videoSteps(videoSteps)
 	, m_view3d(view3d)
 {
 	setupUi(this);
 
-	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
-
-	for ( size_t i=0; i<m_videoSteps.size(); ++i )
+	for (size_t i=0; i<m_videoSteps.size(); ++i)
 	{
 		const cc2DViewportObject* viewport1 = m_videoSteps[i].interpolator.view1();
 		const cc2DViewportObject* viewport2 = m_videoSteps[i].interpolator.view2();
@@ -326,7 +324,7 @@ void qAnimationDlg::render()
 	}
 
 	int bitrate = bitrateSpinBox->value();
-	int gop = 12;
+	int gop = fpsSpinBox->value();
 	QVideoEncoder encoder(outputFilename, m_view3d->width(), m_view3d->height(), bitrate, gop, static_cast<unsigned>(fpsSpinBox->value()));
 	QString errorString;
 	if (!encoder.open(&errorString))
@@ -350,7 +348,6 @@ void qAnimationDlg::render()
 
 			//render to image
 			QImage image = m_view3d->renderToImage(1.0 , true, false, true );
-			++frameIndex;
 
 			if (image.isNull())
 			{
@@ -360,9 +357,9 @@ void qAnimationDlg::render()
 			}
 
 #ifdef QFFMPEG_SUPPORT
-			if (!encoder.encodeImage(image, &errorString))
+			if (!encoder.encodeImage(image, frameIndex, &errorString))
 			{
-				QMessageBox::critical(this, "Error", QString("Failed to encode frame #%1: %2").arg(frameIndex).arg(errorString));
+				QMessageBox::critical(this, "Error", QString("Failed to encode frame #%1: %2").arg(frameIndex+1).arg(errorString));
 				success = false;
 				break;
 			}
@@ -371,11 +368,12 @@ void qAnimationDlg::render()
 			QString fullPath = QDir(outputFilename).filePath(filename);
 			if (!image.save(fullPath))
 			{
-				QMessageBox::critical(this, "Error", QString("Failed to save frame #%1").arg(frameIndex));
+				QMessageBox::critical(this, "Error", QString("Failed to save frame #%1").arg(frameIndex+1));
 				success = false;
 				break;
 			}
 #endif
+			++frameIndex;
 			progressDialog.setValue(frameIndex);
 			QApplication::processEvents();
 			if (progressDialog.wasCanceled())

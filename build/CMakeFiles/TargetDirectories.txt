@@ -1,9 +1,0 @@
-/home/monumentum/package/cc-upstream/build/CC/CMakeFiles/CC_CORE_LIB.dir
-/home/monumentum/package/cc-upstream/build/libs/CCFbo/CMakeFiles/CC_FBO_LIB.dir
-/home/monumentum/package/cc-upstream/build/qCC/CMakeFiles/CloudCompare.dir
-/home/monumentum/package/cc-upstream/build/libs/Glew/CMakeFiles/GLEW_LIB.dir
-/home/monumentum/package/cc-upstream/build/libs/qCC_db/CMakeFiles/QCC_DB_LIB.dir
-/home/monumentum/package/cc-upstream/build/libs/qCC_glWindow/CMakeFiles/QCC_GL_LIB.dir
-/home/monumentum/package/cc-upstream/build/libs/qCC_io/CMakeFiles/QCC_IO_LIB.dir
-/home/monumentum/package/cc-upstream/build/ccViewer/CMakeFiles/ccViewer.dir
-/home/monumentum/package/cc-upstream/build/CC/triangle/CMakeFiles/triangle.dir

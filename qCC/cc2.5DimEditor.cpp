@@ -130,9 +130,9 @@ void cc2Point5DimEditor::create2DView(QFrame* parentFrame)
 		params.colorScaleUseShader = false;
 		m_window->setDisplayParameters(params,true);
 		m_window->setPerspectiveState(false,true);
-		m_window->setInteractionMode(ccGLWindow::PAN_ONLY);
-		m_window->displayOverlayEntities(true);
+		m_window->setInteractionMode(ccGLWindow::INTERACT_PAN | ccGLWindow::INTERACT_ZOOM_CAMERA | ccGLWindow::INTERACT_CLICKABLE_ITEMS);
 		m_window->setPickingMode(ccGLWindow::NO_PICKING);
+		m_window->displayOverlayEntities(true);
 		
 		//add window to the input frame (if any)
 		if (parentFrame)
@@ -420,13 +420,32 @@ bool cc2Point5DimEditor::RasterGrid::fillWith(	ccGenericPointCloud* cloud,
 			{
 				aCell->minHeight = P->u[Z];
 				if (projectionType == PROJ_MINIMUM_VALUE)
+				{
 					aCell->pointIndex = n;
+				}
 			}
 			else if (P->u[Z] > aCell->maxHeight)
 			{
 				aCell->maxHeight = P->u[Z];
 				if (projectionType == PROJ_MAXIMUM_VALUE)
+				{
 					aCell->pointIndex = n;
+				}
+			}
+
+			if (projectionType == PROJ_AVERAGE_VALUE)
+			{
+				//we keep track of the point which is the closest to the cell center
+				CCVector2d C((i+0.5) * gridStep, (j+0.5) * gridStep);
+				const CCVector3* Q = cloud->getPoint(aCell->pointIndex);
+				CCVector3d relativePosQ = CCVector3d::fromArray(Q->u) - minCorner;
+
+				double distToP = (C-CCVector2d(relativePos.u[X], relativePos.u[Y])).norm2();
+				double distToQ = (C-CCVector2d(relativePosQ.u[X], relativePosQ.u[Y])).norm2();
+				if (distToP < distToQ)
+				{
+					aCell->pointIndex = n;
+				}
 			}
 		}
 		else
@@ -502,7 +521,7 @@ bool cc2Point5DimEditor::RasterGrid::fillWith(	ccGenericPointCloud* cloud,
 			if (scalarFields[k])
 			{
 				double* _gridSF = scalarFields[k];
-				for (unsigned j=0;j<height;++j)
+				for (unsigned j=0; j<height; ++j)
 				{
 					RasterCell* cell = data[j];
 					for (unsigned i=0; i<width; ++i,++cell,++_gridSF)
@@ -789,7 +808,8 @@ void cc2Point5DimEditor::RasterGrid::fillEmptyGridCells(cc2Point5DimEditor::Empt
 
 ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<ExportableFields>& exportedFields,
 														bool interpolateSF,
-														bool resampleInputCloud,
+														bool resampleInputCloudXY,
+														bool resampleInputCloudZ,
 														ccGenericPointCloud* inputCloud,
 														bool fillEmptyCells,
 														double emptyCellsHeight) const
@@ -805,7 +825,7 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 	}
 
 	ccPointCloud* cloudGrid = 0;
-	if (resampleInputCloud)
+	if (resampleInputCloudXY)
 	{
 		CCLib::ReferenceCloud refCloud(inputCloud);
 		if (refCloud.reserve(m_grid.nonEmptyCellCount))
@@ -823,8 +843,31 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 			}
 
 			assert(refCloud.size() != 0);
-			cloudGrid = inputCloud->isA(CC_TYPES::POINT_CLOUD) ? static_cast<ccPointCloud*>(inputCloud)->partialClone(&refCloud) : ccPointCloud::From(&refCloud,inputCloud);
+			cloudGrid = inputCloud->isA(CC_TYPES::POINT_CLOUD) ? static_cast<ccPointCloud*>(inputCloud)->partialClone(&refCloud) : ccPointCloud::From(&refCloud, inputCloud);
+			if (!cloudGrid)
+			{
+				ccLog::Error("[Rasterize] Not enough memory");
+				return 0;
+			}
 			cloudGrid->setPointSize(0); //to avoid display issues
+
+			if (!resampleInputCloudZ)
+			{
+				//we have to use the grid height instead of the original point Z coordinate!
+				unsigned pointIndex = 0;
+				for (unsigned j=0; j<m_grid.height; ++j)
+				{
+					for (unsigned i=0; i<m_grid.width; ++i)
+					{
+						const RasterCell& cell = m_grid.data[j][i];
+						if (cell.nbPoints) //non empty cell
+						{
+							const_cast<CCVector3*>(cloudGrid->getPoint(pointIndex))->z = static_cast<PointCoordinateType>(cell.h);
+							++pointIndex;
+						}
+					}
+				}
+			}
 
 			//even if we have already resampled the original cloud we may have to create new points and/or scalar fields
 			//if (!interpolateSF && !fillEmptyCells)
@@ -846,7 +889,7 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 	std::vector<CCLib::ScalarField*> exportedSFs;
 	if (!exportedFields.empty())
 	{
-		exportedSFs.resize(exportedFields.size(),0);
+		exportedSFs.resize(exportedFields.size(), 0);
 		for (size_t i=0; i<exportedFields.size(); ++i)
 		{
 			int sfIndex = -1;
@@ -859,7 +902,18 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 			case PER_CELL_AVG_HEIGHT:
 			case PER_CELL_HEIGHT_STD_DEV:
 			case PER_CELL_HEIGHT_RANGE:
-				sfIndex = cloudGrid->addScalarField(qPrintable(GetDefaultFieldName(exportedFields[i])));
+				{
+					QString sfName = GetDefaultFieldName(exportedFields[i]);
+					sfIndex = cloudGrid->getScalarFieldIndexByName(qPrintable(sfName));
+					if (sfIndex >= 0)
+					{
+						ccLog::Warning(QString("[Rasterize] Scalar field '%1' already exists. It will be overwritten.").arg(sfName));
+					}
+					else
+					{
+						sfIndex = cloudGrid->addScalarField(qPrintable(sfName));
+					}
+				}
 				break;
 			default:
 				assert(false);
@@ -878,7 +932,7 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 
 	//the resampled cloud already contains the points corresponding to 'filled' cells so we will only
 	//need to add the empty ones (if requested)
-	if ((!resampleInputCloud || fillEmptyCells) && !cloudGrid->reserve(pointsCount))
+	if ((!resampleInputCloudXY || fillEmptyCells) && !cloudGrid->reserve(pointsCount))
 	{
 		ccLog::Warning("[Rasterize] Not enough memory!");
 		delete cloudGrid;
@@ -895,8 +949,8 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 	ccBBox box = getCustomBBox();
 	assert(box.isValid());
 
-	//we work with doubles as grid step can be much smaller than the cloud coordinates!
-	double Py = box.minCorner().u[Y];
+	//we work with doubles as the grid step can be much smaller than the cloud coordinates!
+	double Py = box.minCorner().u[Y] + m_grid.gridStep / 2;
 
 	//as the 'non empty cells points' are already in the cloud
 	//we must take care of where we put the scalar fields values!
@@ -905,14 +959,14 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 	for (unsigned j=0; j<m_grid.height; ++j)
 	{
 		const RasterCell* aCell = m_grid.data[j];
-		double Px = box.minCorner().u[X];
+		double Px = box.minCorner().u[X] + m_grid.gridStep / 2;
 		for (unsigned i=0; i<m_grid.width; ++i,++aCell)
 		{
 			if (aCell->h == aCell->h) //valid cell
 			{
 				//if we haven't resampled the original cloud, we must add the point
 				//corresponding to this non-empty cell
-				if (!resampleInputCloud || aCell->nbPoints == 0)
+				if (!resampleInputCloudXY || aCell->nbPoints == 0)
 				{
 					CCVector3 Pf(	static_cast<PointCoordinateType>(Px),
 									static_cast<PointCoordinateType>(Py),
@@ -927,6 +981,11 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 				for (size_t i=0; i<exportedSFs.size(); ++i)
 				{
 					CCLib::ScalarField* sf = exportedSFs[i];
+					if (!sf)
+					{
+						continue;
+					}
+
 					ScalarType sVal = NAN_VALUE;
 					switch (exportedFields[i])
 					{
@@ -955,8 +1014,8 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 						assert(false);
 						break;
 					}
-					if (resampleInputCloud)
-						sf->setValue(nonEmptyCellIndex,sVal);
+					if (resampleInputCloudXY)
+						sf->setValue(nonEmptyCellIndex, sVal);
 					else
 						sf->addElement(sVal);
 				}
@@ -1011,7 +1070,7 @@ ccPointCloud* cc2Point5DimEditor::convertGridToCloud(	const std::vector<Exportab
 	}
 
 	//take care of former scalar fields
-	if (!resampleInputCloud)
+	if (!resampleInputCloudXY)
 	{
 		if (interpolateSF && inputCloud && inputCloud->isA(CC_TYPES::POINT_CLOUD))
 		{

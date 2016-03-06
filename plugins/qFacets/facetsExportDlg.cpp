@@ -24,13 +24,11 @@
 #include <assert.h>
 
 FacetsExportDlg::FacetsExportDlg(IOMode mode, QWidget* parent)
-	: QDialog(parent)
+	: QDialog(parent, Qt::Tool)
 	, Ui::FacetsExportDlg()
 	, m_mode(mode)
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool);
 
 	connect(browseToolButton, SIGNAL(clicked()), this, SLOT(browseDestination()));
 }
@@ -52,7 +50,7 @@ void FacetsExportDlg::browseDestination()
 	}
 
 	//open file saving dialog
-	QString outputFilename = QFileDialog::getSaveFileName(0,"Select destination",destinationPathLineEdit->text(),saveFileFilter);
+	QString outputFilename = QFileDialog::getSaveFileName(0, "Select destination", destinationPathLineEdit->text(), saveFileFilter);
 
 	if (outputFilename.isEmpty())
 		return;

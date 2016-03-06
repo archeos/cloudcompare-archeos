@@ -74,8 +74,10 @@ public:
 	/**         STRUCTURES        **/
 	/*******************************/
 
-	//Max octree subdivision level
-	//Number of bits used to code cells position: 3*MAX_OCTREE_LEVEL
+	//! Max octree subdivision level
+	/** Number of bits used to code the cells position: 3*MAX_OCTREE_LEVEL
+		\warning Never pass a 'constant initializer' by reference
+	**/
 #ifdef OCTREE_CODES_64_BITS
 	static const int MAX_OCTREE_LEVEL = 21;
 #else
@@ -83,7 +85,8 @@ public:
 #endif
 
 	//! Type of the code of an octree cell
-	/** Warning: 3 bits per level are required.
+	/** \warning 3 bits per level are required.
+		\warning Never pass a 'constant initializer' by reference
 	**/
 #ifdef OCTREE_CODES_64_BITS
 	typedef unsigned long long OctreeCellCodeType; //max 21 levels (but twice more memory!)
@@ -92,9 +95,13 @@ public:
 #endif
 
 	//! Max octree length at last level of subdivision (number of cells)
-	static const int MAX_OCTREE_LENGTH = OCTREE_LENGTH(MAX_OCTREE_LEVEL)-1;
+	/** \warning Never pass a 'constant initializer' by reference
+	**/
+	static const int MAX_OCTREE_LENGTH = OCTREE_LENGTH(MAX_OCTREE_LEVEL) - 1;
 
 	//! Invalid cell code
+	/** \warning Never pass a 'constant initializer' by reference
+	**/
 	static const OctreeCellCodeType INVALID_CELL_CODE = (~(OctreeCellCodeType)0);
 
 	//! Octree cell codes container
@@ -380,7 +387,7 @@ public:
 		ReferenceCloud* points;
 
 		//! Default constructor
-		explicit octreeCell(DgmOctree* parentOctree);
+		explicit octreeCell(const DgmOctree* parentOctree);
 
 		//! Default destructor
 		virtual ~octreeCell();
@@ -472,7 +479,7 @@ public:
 		\param level the level of subdivision
 		\return the lowest cell position along X,Y and Z for a given level of subdivision
 	**/
-	inline const int* getMinFillIndexes(unsigned char level) const { return m_fillIndexes+6*level; }
+	inline const int* getMinFillIndexes(unsigned char level) const { return m_fillIndexes + 6*level; }
 
 	//! Returns the highest cell positions in the octree along all dimensions and for a given level of subdivision
 	/** For example, at a level	n, the octree length is 2^n cells along each
@@ -481,7 +488,7 @@ public:
 		\param level the level of subdivision
 		\return the highest cell position along X,Y and Z for a given level of subdivision
 	**/
-	inline const int* getMaxFillIndexes(unsigned char level) const { return getMinFillIndexes(level)+3; }
+	inline const int* getMaxFillIndexes(unsigned char level) const { return m_fillIndexes + 6*level + 3; }
 
 	//! Returns the octree cells length for a given level of subdivision
 	/** As the octree is cubical, cells are cubical.
@@ -620,6 +627,8 @@ public:
 												double radius,
 												bool sortValues = true) const;
 
+public: //extraction of points inside geometrical volumes (sphere, cylinder, box, etc.)
+
 	//deprecated
 	//int getPointsInSphericalNeighbourhood(const CCVector3& sphereCenter, PointCoordinateType radius, NeighboursSet& neighbours) const;
 
@@ -648,11 +657,11 @@ public:
 		PointCoordinateType radius;
 		//! Cylinder (half) length
 		PointCoordinateType maxHalfLength;
-		//! Neighbour points falling inside the sphere
+		//! Neighbour points falling inside the cylinder
 		NeighboursSet neighbours;
 		//! subdivision level at which to apply the extraction process
 		unsigned char level;
-		//! Whether to look in both directions or only 
+		//! Whether to look in both directions or only along the positive direction (i.e. half cylinder)
 		bool onlyPositiveDir;
 
 		//! Default constructor
@@ -707,7 +716,38 @@ public:
 	**/
 	size_t getPointsInCylindricalNeighbourhoodProgressive(ProgressiveCylindricalNeighbourhood& params) const;
 
-	/***** CELLS POSITION HANDLING *****/
+	//! Input/output parameters structure for getPointsInBoxNeighbourhood
+	struct BoxNeighbourhood
+	{
+		//! Box center
+		CCVector3 center;
+		//! Box axes (optional)
+		CCVector3* axes;
+		//! Box dimensions
+		CCVector3 dimensions;
+		//! Neighbour points falling inside the box
+		NeighboursSet neighbours;
+		//! subdivision level at which to apply the extraction process
+		unsigned char level;
+
+		//! Default constructor
+		BoxNeighbourhood()
+			: center(0,0,0)
+			, axes(0)
+			, dimensions(0,0,0)
+			, level(0)
+		{}
+	};
+
+	//! Returns the points falling inside a box
+	/** \warning the 'squareDistd' field of each neighbour in the NeighboursSet
+		structure is not used/set
+		\return the number of extracted points
+	**/
+	size_t getPointsInBoxNeighbourhood(BoxNeighbourhood& params) const;
+
+
+public:	/***** CELLS POSITION HANDLING *****/
 
 	//! Generates the truncated cell code of a cell given its position at a given level of subdivision
 	/** For a given level of subdivision (lets call it N), the cell position
@@ -1015,6 +1055,7 @@ public:
 		\param multiThread whether to use parallel processing or not
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
 		\param functionTitle function title
+		\param maxThreadCount the maximum number of threads to use (0 = all). Ignored if 'multiThread' is false.
 		\return the number of processed cells (or 0 is something went wrong)
 	**/
 	unsigned executeFunctionForAllCellsStartingAtLevel(	unsigned char startingLevel,
@@ -1024,7 +1065,8 @@ public:
 														unsigned maxNumberOfPointsPerCell,
 														bool multiThread = true,
 														GenericProgressCallback* progressCb = 0,
-														const char* functionTitle = 0);
+														const char* functionTitle = 0,
+														int maxThreadCount = 0);
 
 	//! Method to apply automatically a specific function to each cell of the octree
 	/** The function to apply should be of the form DgmOctree::octreeCellFunc. In this case
@@ -1038,6 +1080,7 @@ public:
 		\param multiThread whether to use parallel processing or not
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
 		\param functionTitle function title
+		\param maxThreadCount the maximum number of threads to use (0 = all). Ignored if 'multiThread' is false.
 		\return the number of processed cells (or 0 is something went wrong)
 	**/
 	unsigned executeFunctionForAllCellsAtLevel(	unsigned char level,
@@ -1045,7 +1088,19 @@ public:
 												void** additionalParameters,
 												bool multiThread = false,
 												GenericProgressCallback* progressCb = 0,
-												const char* functionTitle = 0);
+												const char* functionTitle = 0,
+												int maxThreadCount = 0);
+
+	//! Ray casting processes
+	enum RayCastProcess { RC_NEAREST_POINT, RC_CLOSE_POINTS };
+
+	//! Ray casting algorithm
+	bool rayCast(	const CCVector3& rayAxis,
+					const CCVector3& rayOrigin,
+					double maxRadiusOrFov,
+					bool isFOV, //whether the previous parameter is a radius (distance) or a FOV (in radians)
+					RayCastProcess process,
+					std::vector<PointDescriptor>& output) const;
 
 	//! Returns the associated cloud
 	inline GenericIndexedCloudPersist* associatedCloud() const

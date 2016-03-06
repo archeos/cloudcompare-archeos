@@ -1,2 +1,0 @@
-/usr/bin/ar cr libCC_FBO_LIB.a  CMakeFiles/CC_FBO_LIB.dir/src/ccFBOUtils.cpp.o CMakeFiles/CC_FBO_LIB.dir/src/ccShader.cpp.o CMakeFiles/CC_FBO_LIB.dir/src/ccFrameBufferObject.cpp.o CMakeFiles/CC_FBO_LIB.dir/src/ccBilateralFilter.cpp.o
-/usr/bin/ranlib libCC_FBO_LIB.a

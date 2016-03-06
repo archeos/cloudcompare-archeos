@@ -21,8 +21,11 @@
 #include <Neighbourhood.h>
 #include <DistanceComputationTools.h>
 
+//Local
 #include "ccOctree.h"
 #include "ccSensor.h"
+#include "ccGenericGLDisplay.h"
+#include "ccProgressDialog.h"
 
 ccGenericPointCloud::ccGenericPointCloud(QString name)
 	: ccShiftedObject(name)
@@ -302,4 +305,130 @@ void ccGenericPointCloud::importParametersFrom(const ccGenericPointCloud* cloud)
 	setPointSize(cloud->getPointSize());
 	//meta-data
 	setMetaData(cloud->metaData());
+}
+
+#ifdef _DEBUG
+//for tests
+#include "ccPointCloud.h"
+#include <ScalarField.h>
+#endif
+
+bool ccGenericPointCloud::pointPicking(	const CCVector2d& clickPos,
+										const ccGLCameraParameters& camera,
+										int& nearestPointIndex,
+										double& nearestSquareDist,
+										double pickWidth/*=2.0*/,
+										double pickHeight/*=2.0*/,
+										bool autoComputeOctree/*=false*/)
+{
+	//can we use the octree to accelerate the point picking process?
+	if (pickWidth == pickHeight)
+	{
+		ccOctree* octree = getOctree();
+		if (!octree && autoComputeOctree)
+		{
+			ccProgressDialog pDlg(false, getDisplay() ? getDisplay()->asWidget() : 0);
+			octree = computeOctree(&pDlg);
+		}
+
+		if (octree)
+		{
+			//we can now use the octree to do faster point picking
+#ifdef _DEBUG
+			CCLib::ScalarField* sf = 0;
+			if (getClassID() == CC_TYPES::POINT_CLOUD)
+			{
+				ccPointCloud* pc = static_cast<ccPointCloud*>(this);
+				int sfIdx = pc->getScalarFieldIndexByName("octree_picking");
+				if (sfIdx < 0)
+				{
+					sfIdx = pc->addScalarField("octree_picking");
+				}
+				if (sfIdx >= 0)
+				{
+					pc->setCurrentScalarField(sfIdx);
+					pc->setCurrentDisplayedScalarField(sfIdx);
+					pc->showSF(true);
+					sf = pc->getScalarField(sfIdx);
+				}
+			}
+#endif
+			ccOctree::PointDescriptor point;
+			if (octree->pointPicking(clickPos, camera, point, pickWidth))
+			{
+	#ifdef _DEBUG
+				if (sf)
+				{
+					sf->computeMinAndMax();
+					if (getDisplay())
+						getDisplay()->redraw();
+				}
+	#endif
+				if (point.point)
+				{
+					nearestPointIndex = point.pointIndex;
+					nearestSquareDist = point.squareDistd;
+					return true;
+				}
+				else
+				{
+					//nothing found
+					return false;
+				}
+			}
+			else
+			{
+				ccLog::Warning("[Point picking] Failed to use the octree. We'll fall back to the slow process...");
+			}
+		}
+	}
+
+	//otherwise we go 'brute force' (works quite well in fact?!)
+	nearestPointIndex = -1;
+	nearestSquareDist = -1.0;
+	{
+		//back project the clicked point in 3D
+		CCVector3d clickPosd(clickPos.x, clickPos.y, 0);
+		CCVector3d X(0,0,0);
+		if (!camera.unproject(clickPosd, X))
+		{
+			return false;
+		}
+
+		ccGLMatrix trans;
+		bool noGLTrans = !getAbsoluteGLTransformation(trans);
+
+#if defined(_OPENMP)
+#pragma omp parallel for
+#endif
+		for (int i=0; i<static_cast<int>(size()); ++i)
+		{
+			const CCVector3* P = getPoint(i);
+
+			CCVector3d Q2D;
+			if (noGLTrans)
+			{
+				camera.project(*P, Q2D);
+			}
+			else
+			{
+				CCVector3 P3D = *P;
+				trans.apply(P3D);
+				camera.project(P3D, Q2D);
+			}
+
+			if (	fabs(Q2D.x-clickPos.x) <= pickWidth
+				&&	fabs(Q2D.y-clickPos.y) <= pickHeight)
+			{
+				double squareDist = CCVector3d(X.x-P->x, X.y-P->y, X.z-P->z).norm2d();
+				if (nearestPointIndex < 0 || squareDist < nearestSquareDist)
+				{
+					nearestSquareDist = squareDist;
+					nearestPointIndex = static_cast<int>(i);
+				}
+			}
+		}
+	}
+
+	return (nearestPointIndex >= 0);
 }

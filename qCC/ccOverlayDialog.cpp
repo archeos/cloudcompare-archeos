@@ -32,7 +32,7 @@
 #include <assert.h>
 
 ccOverlayDialog::ccOverlayDialog(QWidget* parent/*=0*/)
-	: QDialog(parent)
+	: QDialog(parent, Qt::FramelessWindowHint | Qt::Tool)
 	, m_associatedWin(0)
 	, m_processing(false)
 {
@@ -51,13 +51,15 @@ bool ccOverlayDialog::linkWith(ccGLWindow* win)
 		return false;
 	}
 
+	//same dialog? nothing to do
+	if (m_associatedWin == win)
+	{
+		return true;
+	}
+		
 	if (m_associatedWin)
 	{
-		//same dialog? nothing to do
-		if (m_associatedWin == win)
-			return true;
-		
-		//otherwise, we automatically detach it
+		//we automatically detach the former dialog
 		{
 			QWidgetList topWidgets = QApplication::topLevelWidgets();
 			foreach(QWidget* widget,topWidgets)
@@ -65,7 +67,7 @@ bool ccOverlayDialog::linkWith(ccGLWindow* win)
 				widget->removeEventFilter(this);
 			}
 		}
-		disconnect(m_associatedWin, SIGNAL(destroyed(QObject*)), this, SLOT(onLinkedWindowDeletion(QObject*)));
+		m_associatedWin->disconnect(this);
 		m_associatedWin = 0;
 	}
 

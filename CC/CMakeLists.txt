@@ -15,13 +15,7 @@ project( CC_DUMMY_PROJECT )
 # CGAL takes precedence over triangle
 if (COMPILE_CC_CORE_LIB_WITH_CGAL)
 	SET(COMPILE_CC_CORE_LIB_WITH_TRIANGLE OFF)
-	FIND_PACKAGE(CGAL QUIET COMPONENTS Core ) # implies findGMP
-	if(CGAL_FOUND)
-		include( ${CGAL_USE_FILE} )
-		include_directories(${CGAL_INCLUDE_DIR})
-	else()
-		Message(STATUS "Could not find CGAL")
-	endif()
+	include (CGALSupport.cmake)
 endif()
 
 # else CC_CORE_LIB only relies on 'triangle' library...
@@ -33,8 +27,6 @@ endif()
 if (COMPILE_CC_CORE_LIB_WITH_QT)
 	include( ../CMakeExternalLibs.cmake )
 endif()
-
-
 
 project( CC_CORE_LIB )
 
@@ -83,9 +75,6 @@ endif()
 # Load advanced scripts
 include( ../CMakeInclude.cmake )
 
-# Default preprocessors
-set_default_cc_preproc( ${PROJECT_NAME} )
-
 if ( COMPILE_CC_CORE_LIB_SHARED )
 	if (WIN32)
 		set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_USE_AS_DLL )
@@ -99,6 +88,11 @@ if ( COMPILE_CC_CORE_LIB_SHARED )
 			install_shared( CC_CORE_LIB ${dest} 1 )
 		endforeach()
 	endif()
+endif()
+
+#For MSVC
+if (WIN32)
+	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS )
 endif()
 
 cmake_policy(POP)

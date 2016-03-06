@@ -55,15 +55,13 @@
 #include <assert.h>
 
 ccVolumeCalcTool::ccVolumeCalcTool(ccGenericPointCloud* cloud1, ccGenericPointCloud* cloud2, QWidget* parent/*=0*/)
-	: QDialog(parent)
+	: QDialog(parent, Qt::WindowMaximizeButtonHint)
 	, cc2Point5DimEditor()
 	, Ui::VolumeCalcDialog()
 	, m_cloud1(cloud1)
 	, m_cloud2(cloud2)
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 
 	connect(buttonBox,						SIGNAL(accepted()),					this,	SLOT(saveSettingsAndAccept()));
 	connect(buttonBox,						SIGNAL(rejected()),					this,	SLOT(reject()));
@@ -128,7 +126,7 @@ ccVolumeCalcTool::ccVolumeCalcTool(ccGenericPointCloud* cloud1, ccGenericPointCl
 		ccGui::ParamStruct params = m_window->getDisplayParameters();
 		params.colorScaleShowHistogram = false;
 		params.displayedNumPrecision = precisionSpinBox->value();
-		m_window->setDisplayParameters(params);
+		m_window->setDisplayParameters(params, true);
 	}
 
 	loadSettings();
@@ -149,7 +147,7 @@ void ccVolumeCalcTool::setDisplayedNumberPrecision(int precision)
 	{
 		ccGui::ParamStruct params = m_window->getDisplayParameters();
 		params.displayedNumPrecision = precision;
-		m_window->setDisplayParameters(params);
+		m_window->setDisplayParameters(params, true);
 		m_window->redraw(true, false);
 	}
 
@@ -355,6 +353,7 @@ void ccVolumeCalcTool::updateGridAndDisplay()
 			//we only compute the default 'height' layer
 			exportedFields.push_back(PER_CELL_HEIGHT);
 			m_rasterCloud = cc2Point5DimEditor::convertGridToCloud(	exportedFields,
+																	false,
 																	false,
 																	false,
 																	0,
@@ -688,7 +687,7 @@ bool ccVolumeCalcTool::updateGrid()
 		repotInfo.matchingPrecent = static_cast<float>(m_grid.validCellCount * 100) / cellCount;
 		repotInfo.groundNonMatchingPercent = static_cast<float>(groundNonMatchingCount * 100) / cellCount;
 		repotInfo.ceilNonMatchingPercent = static_cast<float>(ceilNonMatchingCount * 100) / cellCount;
-		float cellArea = (m_grid.gridStep * m_grid.gridStep);
+		float cellArea = static_cast<float>(m_grid.gridStep * m_grid.gridStep);
 		repotInfo.volume *= cellArea;
 		repotInfo.surface *= cellArea;
 

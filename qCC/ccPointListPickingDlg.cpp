@@ -60,7 +60,6 @@ ccPointListPickingDlg::ccPointListPickingDlg(QWidget* parent)
 	, m_orderedLabelsContainer(0)
 {
 	setupUi(this);
-	setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
 
 	exportToolButton->setPopupMode(QToolButton::MenuButtonPopup);
 	QMenu* menu = new QMenu(exportToolButton);
@@ -177,7 +176,10 @@ void ccPointListPickingDlg::cancelAndExit()
 	if (m_orderedLabelsContainer)
 	{
 		//Restore previous state
-		dbRoot->removeElements(m_toBeAdded);
+		if (!m_toBeAdded.empty())
+		{
+			dbRoot->removeElements(m_toBeAdded);
+		}
 
 		for (size_t j=0; j<m_toBeDeleted.size(); ++j)
 		{
@@ -289,7 +291,7 @@ void ccPointListPickingDlg::exportToNewPolyline()
 
 void ccPointListPickingDlg::applyAndExit()
 {
-	if (m_associatedCloud)
+	if (m_associatedCloud && !m_toBeDeleted.empty())
 	{
 		//apply modifications
 		MainWindow::TheInstance()->db()->removeElements(m_toBeDeleted); //no need to redraw as they should already be invisible
@@ -435,7 +437,7 @@ void ccPointListPickingDlg::exportToASCII(ExportFormat format)
 	}
 
 	//starting index
-	int startIndex = startIndexSpinBox->value();
+	unsigned startIndex = static_cast<unsigned>(std::max(0, startIndexSpinBox->value()));
 
 	for (unsigned i=0; i<count; ++i)
 	{
@@ -444,7 +446,7 @@ void ccPointListPickingDlg::exportToASCII(ExportFormat format)
 		const CCVector3* P = PP.cloud->getPoint(PP.index);
 
 		if (format == PLP_ASCII_EXPORT_IXYZ)
-			fprintf(fp,"%i,",i+startIndex);
+			fprintf(fp,"%u,",i+startIndex);
 		else if (format == PLP_ASCII_EXPORT_LXYZ)
 			fprintf(fp,"%s,",qPrintable(labels[i]->getName()));
 
@@ -518,10 +520,9 @@ void ccPointListPickingDlg::processPickedPoint(ccPointCloud* cloud, unsigned poi
 	if (display)
 	{
 		newLabel->setDisplay(display);
-		int vp[4];
-		display->getViewportArray(vp);
-		newLabel->setPosition(	static_cast<float>(x+20)/static_cast<float>(vp[2]-vp[0]),
-								static_cast<float>(y+20)/static_cast<float>(vp[3]-vp[1]) );
+		QSize size = display->getScreenSize();
+		newLabel->setPosition(	static_cast<float>(x+20) / size.width(),
+								static_cast<float>(y+20) / size.height() );
 	}
 
 	//add default container if necessary

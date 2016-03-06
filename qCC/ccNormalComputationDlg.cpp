@@ -29,14 +29,12 @@
 #include <assert.h>
 
 ccNormalComputationDlg::ccNormalComputationDlg(SelectionMode selectionMode, QWidget* parent/*=0*/)
-	: QDialog(parent)
+	: QDialog(parent, Qt::Tool)
 	, Ui::NormalComputationDlg()
 	, m_cloud(0)
 	, m_selectionMode(selectionMode)
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 
 	//by default, the 'auto' button is hidden (as long as setCloud is not called)
 	autoRadiusToolButton->setVisible(false);
@@ -226,7 +224,7 @@ void ccNormalComputationDlg::autoEstimateRadius()
 
 	if (!m_cloud->getOctree())
 	{
-		ccProgressDialog pDlg(true,this);
+		ccProgressDialog pDlg(true, this);
 		if (!m_cloud->computeOctree(&pDlg))
 		{
 			ccLog::Error(QString("Could not compute octree for cloud '%1'").arg(m_cloud->getName()));

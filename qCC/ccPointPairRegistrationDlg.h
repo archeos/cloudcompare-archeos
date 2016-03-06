@@ -93,8 +93,11 @@ protected slots:
 	//! Slot called when a "delete" button is pushed
 	void onDelButtonPushed();
 
-	void processPickedItem(int, unsigned, int, int);
-	void invalidate();
+	void processPickedItem(ccHObject*, unsigned, int, int);
+
+	//! Updates the registration info and buttons states
+	void updateAlignInfo();
+
 	void apply();
 	void align();
 	void reset();
@@ -110,9 +113,6 @@ protected:
 
 	//! Clears the RMS rows
 	void clearRMSColumns();
-
-	//! Automatically updates registration info
-	void autoUpdateAlignInfo();
 
 	//! Adds a point to one of the table (ref./aligned)
 	void addPointToTable(QTableWidget* tableWidget, int rowIndex, const CCVector3d& P, QString pointLabel);

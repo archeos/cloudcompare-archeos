@@ -99,7 +99,7 @@ void ccCameraParamEditDlg::makeFrameless()
 void ccCameraParamEditDlg::iThetaValueChanged(int val)
 {
 	thetaSpinBox->blockSignals(true);
-	thetaSpinBox->setValue(static_cast<double>(val)/10);
+	thetaSpinBox->setValue(val / 10.0);
 	thetaSpinBox->blockSignals(false);
 
 	reflectParamChange();
@@ -108,7 +108,7 @@ void ccCameraParamEditDlg::iThetaValueChanged(int val)
 void ccCameraParamEditDlg::iPsiValueChanged(int val)
 {
 	psiSpinBox->blockSignals(true);
-	psiSpinBox->setValue(static_cast<double>(val)/10);
+	psiSpinBox->setValue(val / 10.0);
 	psiSpinBox->blockSignals(false);
 
 	reflectParamChange();
@@ -117,7 +117,7 @@ void ccCameraParamEditDlg::iPsiValueChanged(int val)
 void ccCameraParamEditDlg::iPhiValueChanged(int val)
 {
 	phiSpinBox->blockSignals(true);
-	phiSpinBox->setValue(static_cast<double>(val)/10);
+	phiSpinBox->setValue(val / 10.0);
 	phiSpinBox->blockSignals(false);
 
 	reflectParamChange();
@@ -126,7 +126,7 @@ void ccCameraParamEditDlg::iPhiValueChanged(int val)
 void ccCameraParamEditDlg::dThetaValueChanged(double val)
 {
 	thetaSlider->blockSignals(true);
-	thetaSlider->setValue(static_cast<int>(val*10.0));
+	thetaSlider->setValue(val * 10.0);
 	thetaSlider->blockSignals(false);
 	reflectParamChange();
 }
@@ -134,7 +134,7 @@ void ccCameraParamEditDlg::dThetaValueChanged(double val)
 void ccCameraParamEditDlg::dPsiValueChanged(double val)
 {
 	psiSlider->blockSignals(true);
-	psiSlider->setValue(static_cast<int>(val*10.0));
+	psiSlider->setValue(val * 10.0);
 	psiSlider->blockSignals(false);
 	reflectParamChange();
 }
@@ -142,7 +142,7 @@ void ccCameraParamEditDlg::dPsiValueChanged(double val)
 void ccCameraParamEditDlg::dPhiValueChanged(double val)
 {
 	phiSlider->blockSignals(true);
-	phiSlider->setValue(static_cast<int>(val*10.0));
+	phiSlider->setValue(val * 10.0);
 	phiSlider->blockSignals(false);
 	reflectParamChange();
 }
@@ -167,9 +167,10 @@ void ccCameraParamEditDlg::pivotChanged()
 		return;
 
 	m_associatedWin->blockSignals(true);
-	m_associatedWin->setPivotPoint(CCVector3d(	rcxDoubleSpinBox->value(),
-		rcyDoubleSpinBox->value(),
-		rczDoubleSpinBox->value() ));
+	m_associatedWin->setPivotPoint(
+		CCVector3d(	rcxDoubleSpinBox->value(),
+					rcyDoubleSpinBox->value(),
+					rczDoubleSpinBox->value() ));
 	m_associatedWin->blockSignals(false);
 
 	m_associatedWin->redraw();
@@ -189,7 +190,7 @@ void ccCameraParamEditDlg::zNearSliderMoved(int i)
 	if (!m_associatedWin)
 		return;
 
-	double zNearCoef = SliderPosToZNearCoef(i,zNearHorizontalSlider->maximum());
+	double zNearCoef = SliderPosToZNearCoef(i, zNearHorizontalSlider->maximum());
 	m_associatedWin->setZNearCoef(zNearCoef);
 	m_associatedWin->redraw();
 }
@@ -201,7 +202,7 @@ void ccCameraParamEditDlg::pushCurrentMatrix()
 
 	ccGLMatrixd mat = m_associatedWin->getBaseViewMat();
 
-	std::pair<PushedMatricesMapType::iterator,bool> ret;
+	std::pair<PushedMatricesMapType::iterator, bool> ret;
 	ret = pushedMatrices.insert(PushedMatricesMapElement(m_associatedWin,mat));
 	if (ret.second == false) //already exists
 		ret.first->second = mat;
@@ -227,25 +228,24 @@ void ccCameraParamEditDlg::pickPointAsPivot()
 	if (m_associatedWin)
 	{
 		m_associatedWin->setPickingMode(ccGLWindow::POINT_OR_TRIANGLE_PICKING);
-		connect(m_associatedWin, SIGNAL(itemPicked(int, unsigned, int, int)), this, SLOT(processPickedItem(int, unsigned, int, int)));
+		connect(m_associatedWin, SIGNAL(itemPicked(ccHObject*, unsigned, int, int)), this, SLOT(processPickedItem(ccHObject*, unsigned, int, int)));
 	}
 }
 
-void ccCameraParamEditDlg::processPickedItem(int entityID, unsigned itemIndex, int x, int y)
+void ccCameraParamEditDlg::processPickedItem(ccHObject* entity, unsigned itemIndex, int x, int y)
 {
 	if (!m_associatedWin)
+	{
+		assert(false);
 		return;
-
-	ccHObject* obj = 0;
-	ccHObject* db = m_associatedWin->getSceneDB();
-	if (db)
-		obj = db->find(entityID);
-	if (obj)
+	}
+	
+	if (entity)
 	{
 		CCVector3 P;
-		if (obj->isKindOf(CC_TYPES::POINT_CLOUD))
+		if (entity->isKindOf(CC_TYPES::POINT_CLOUD))
 		{
-			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(obj);
+			ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(entity);
 			if (!cloud)
 			{
 				assert(false);
@@ -253,16 +253,16 @@ void ccCameraParamEditDlg::processPickedItem(int entityID, unsigned itemIndex, i
 			}
 			P = *cloud->getPoint(itemIndex);
 		}
-		else if (obj->isKindOf(CC_TYPES::MESH))
+		else if (entity->isKindOf(CC_TYPES::MESH))
 		{
-			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(obj);
+			ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(entity);
 			if (!mesh)
 			{
 				assert(false);
 				return;
 			}
 			CCLib::GenericTriangle* tri = mesh->_getTriangle(itemIndex);
-			P = m_associatedWin->backprojectPointOnTriangle(CCVector2i(x,y),*tri->_getA(),*tri->_getB(),*tri->_getC());
+			P = m_associatedWin->backprojectPointOnTriangle(CCVector2i(x,y), *tri->_getA(), *tri->_getB(), *tri->_getC());
 		}
 		else
 		{
@@ -276,7 +276,7 @@ void ccCameraParamEditDlg::processPickedItem(int entityID, unsigned itemIndex, i
 	}
 
 	m_associatedWin->setPickingMode(ccGLWindow::DEFAULT_PICKING);
-	disconnect(m_associatedWin, SIGNAL(itemPicked(int, unsigned, int, int)), this, SLOT(processPickedItem(int, unsigned, int, int)));
+	disconnect(m_associatedWin, SIGNAL(itemPicked(ccHObject*, unsigned, int, int)), this, SLOT(processPickedItem(ccHObject*, unsigned, int, int)));
 }
 
 void ccCameraParamEditDlg::setView(CC_VIEW_ORIENTATION orientation)
@@ -356,11 +356,13 @@ bool ccCameraParamEditDlg::linkWith(ccGLWindow* win)
 	ccGLWindow* oldWin = m_associatedWin;
 
 	if (!ccOverlayDialog::linkWith(win))
+	{
 		return false;
+	}
 
 	if (oldWin)
 	{
-		m_associatedWin->disconnect(this);
+		oldWin->disconnect(this);
 	}
 
 	if (m_associatedWin)

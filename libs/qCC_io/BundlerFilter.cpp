@@ -91,7 +91,7 @@ bool BundlerFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive)
 
 CC_FILE_ERROR BundlerFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
-	return loadFileExtended(filename,container,parameters);
+	return loadFileExtended(filename, container, parameters);
 }
 
 //ortho-rectified image related information
@@ -228,7 +228,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	//Read Bundler '.out' file
 	{
 		//progress dialog
-		ccProgressDialog pdlg(true); //cancel available
+		ccProgressDialog pdlg(true, parameters.parentWidget); //cancel available
 		CCLib::NormalizedProgress nprogress(&pdlg,camCount + (importKeypoints || orthoRectifyImages || generateColoredDTM ? ptsCount : 0));
 		pdlg.setMethodTitle("Open Bundler file");
 		pdlg.setInfo(qPrintable(QString("Cameras: %1\nPoints: %2").arg(camCount).arg(ptsCount)));
@@ -608,7 +608,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	}
 
 	//let's try to open the image corresponding to each camera
-	ccProgressDialog ipdlg(true); //cancel available
+	ccProgressDialog ipdlg(true, parameters.parentWidget); //cancel available
 	CCLib::NormalizedProgress inprogress(&ipdlg,camCount);
 	ipdlg.setMethodTitle("Open & process images");
 	ipdlg.setInfo(qPrintable(QString("Images: %1").arg(camCount)));
@@ -624,7 +624,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	CCLib::SimpleCloud* mntSamples = 0;
 	if (generateColoredDTM)
 	{
-		ccProgressDialog toDlg(true); //cancel available
+		ccProgressDialog toDlg(true, parameters.parentWidget); //cancel available
 		toDlg.setMethodTitle("Preparing colored DTM");
 		toDlg.start();
 		QApplication::processEvents();
@@ -722,10 +722,13 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 			ccCameraSensor::IntrinsicParameters params;
 			params.arrayWidth = static_cast<int>(image->getW());
 			params.arrayHeight = static_cast<int>(image->getH());
-			//we use an arbitray 'pixel size'
-			params.pixelSize_mm[0] = params.pixelSize_mm[1] = 1.0f / std::max(params.arrayWidth,params.arrayHeight);
-			params.focal_pix = cam.f_pix * scaleFactor;
-			params.vFOV_rad = ccCameraSensor::ComputeFovRadFromFocalPix(cam.f_pix,params.arrayHeight);
+			//we define an arbitrary principal point
+			params.principal_point[0] = params.arrayWidth / 2.0f;
+			params.principal_point[1] = params.arrayHeight / 2.0f;
+			//we use an arbitrary 'pixel size'
+			params.pixelSize_mm[0] = params.pixelSize_mm[1] = 1.0f / std::max(params.arrayWidth, params.arrayHeight);
+			params.vertFocal_pix = cam.f_pix * scaleFactor;
+			params.vFOV_rad = ccCameraSensor::ComputeFovRadFromFocalPix(cam.f_pix, params.arrayHeight);
 
 			//camera position/orientation
 			ccGLMatrix transf(cameras[i].trans.inverse().data());

@@ -93,7 +93,9 @@ typedef int64_t CC_CLASS_ENUM;
 class CC_TYPES
 {
 public:
-	static const CC_CLASS_ENUM OBJECT				=	0;
+
+	//Warning: never pass a 'constant initializer' by reference
+	static const CC_CLASS_ENUM OBJECT = 0;
 	static const CC_CLASS_ENUM HIERARCHY_OBJECT		=	CC_HIERARCH_BIT;
 	static const CC_CLASS_ENUM POINT_CLOUD			=	HIERARCHY_OBJECT	| CC_CLOUD_BIT;
 	static const CC_CLASS_ENUM MESH					=	HIERARCHY_OBJECT	| CC_MESH_BIT;
@@ -113,6 +115,7 @@ public:
 	static const CC_CLASS_ENUM SPHERE				=	PRIMITIVE			| CC_SPHERE_BIT;
 	static const CC_CLASS_ENUM TORUS				=	PRIMITIVE			| CC_TORUS_BIT;
 	static const CC_CLASS_ENUM CONE					=	PRIMITIVE			| CC_CONE_BIT;
+	static const CC_CLASS_ENUM OLD_CYLINDER_ID		=	PRIMITIVE			| CC_CYLINDER_BIT;							//for backward compatibility!
 	static const CC_CLASS_ENUM CYLINDER				=	PRIMITIVE			| CC_CYLINDER_BIT			| CC_CONE_BIT;	//cylinders are cones!
 	static const CC_CLASS_ENUM BOX					=	PRIMITIVE			| CC_BOX_BIT;
 	static const CC_CLASS_ENUM DISH					=	PRIMITIVE			| CC_DISH_BIT;
