@@ -4,9 +4,14 @@ Upstream-Contact: cloudcompare at danielgm.net
 Source: https://github.com/cloudcompare/trunk/ 
 
 Files: *
-Copyright: 2004-2013 EDF R&D / TELECOM ParisTech
+Copyright: 2004-2016 EDF R&D / TELECOM ParisTech
 Author: Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
 License: GPL-2.0+
+
+Files: CC
+Copyright: 2004-2016 EDF R&D / TELECOM ParisTech
+Author: Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
+License: LGPL-2.1
 
 Files: CC/triangle/triangle.*
 Copyright: 1993-2005, Jonathan Richard Shewchuk, jrs at cs.berkeley.edu
@@ -42,9 +47,9 @@ License: GPL-2.0+
 Author: Christian Boucheny (EDF R&D / INRIA)
 Comment: Modification, Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
 
-Files: libs/qxt/*
-Copyright: 2006-2011, the LibQxt project
-License: GPL-2.0+
+Files: libs/qcustomplot/*
+copyright: 2011-2015 Emmanuel Eichhammer
+License: GPL-3.0+
 
 Files: libs/Glew/*
 Copyright: 2002-2007, Milan Ikits <milan ikits[]ieee org>
@@ -104,10 +109,32 @@ License: MIT
  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+Files: qCC/plugins/qAnimation/*
+Copyright: 2015 Ryan Wicks, 2G. Robotics Inc.
+Author: Ryan Wicks 
+License: GPL-2.0+
+
+Files: qCC/plugins/qAnimation/QTFFmpegWrapper/win/*
+Copyright: 2006 Alexander Chemeris
+Author: Alexander Chemeris
+License: BSD
+
 Files: qCC/plugins/qEDL/*
-Copyright: COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)
+Copyright: EDF R&D / TELECOM ParisTech (ENST-TSI)
 Author: Christian Boucheny, (EDF R&D / INRIA)
 License: GPL-2.0+
+
+Files: qCC/plugins/qFacets/*
+Copyright: BRGM
+License: GPL-2.0+
+
+Files: qCC/plugins/qGMMREG/*
+Copyright: Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
+License: GPL-2.0+
+
+Files: qCC/plugins/qGMMREG/GMMREG/*
+Copyright: 2008, Bing Jian and Baba C. Vemuri 
+License: GPL-3.0+
 
 Files: qCC/plugins/qHPR/*
 Copyright: Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
@@ -175,10 +202,10 @@ Files: qCC/plugins/qPoissonRecon/*
 Copyright: Daniel Girardeau-Montaut, daniel dot girardeau at gmail.com
 License: GPL-2.0+
 
-Files: qCC/plugins/qPoissonRecon/PoissonRecon3/Src/*
-Copyright: Copyright 2006, Michael Kazhdan and Matthew Bolitho
+Files: qCC/plugins/qPoissonRecon/PoissonReconLib/Src/*
+Copyright: Copyright 2006-2016, Michael Kazhdan and Matthew Bolitho
 License: BSD
- Copyright (c) 2006, Michael Kazhdan and Matthew Bolitho
+ Copyright (c) 2006-2016, Michael Kazhdan and Matthew Bolitho
  All rights reserved.
  .
  Redistribution and use in source and binary forms, with or without modification,
@@ -233,10 +260,10 @@ Files: qCC/plugins/qSSAO/*
 Copyright: EDF R&D / TELECOM ParisTech (ENST-TSI)
 Author: Christian Boucheny (EDF R&D / INRIA)
 License: GPL-2.0+
-
 Comment: Adapted from Crytek and Inigo Quilez
+
 Files: debian/*
-Copyright: 2013, Romain Janvier <romain.janvier@hotmail.fr>
+Copyright: 2016, Romain Janvier <romain.janvier@hotmail.fr>
 License: GPL-2.0+
 
 License: GPL-2.0+
