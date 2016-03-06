@@ -9,36 +9,30 @@ Subject: Use package directory for libs
  libs/qCC_io/CMakeLists.txt | 2 +-
  4 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/CC/CMakeLists.txt b/CC/CMakeLists.txt
-index 2fbf6b4..d4cacee 100644
 --- a/CC/CMakeLists.txt
 +++ b/CC/CMakeLists.txt
-@@ -56,7 +56,7 @@ endif()
+@@ -82,7 +82,7 @@ if ( COMPILE_CC_CORE_LIB_SHARED )
  
- # Install (shared) library to specified destinations
- if( UNIX )
--	install_shared( CC_CORE_LIB lib 0 ) #default destination: /usr/lib
-+	install_shared( CC_CORE_LIB /usr/lib/cloudcompare 0 ) #default destination: /usr/lib
- else()
- 	foreach( dest ${INSTALL_DESTINATIONS} )
- 		install_shared( CC_CORE_LIB ${dest} 1 )
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index df0f337..ca41f71 100644
+ 	# Install (shared) library to specified destinations
+ 	if( UNIX )
+-		install_shared( CC_CORE_LIB lib 0 ) #default destination: /usr/lib
++        install_shared( CC_CORE_LIB /usr/lib/cloudcompare 0 ) #default destination: /usr/lib
+ 	else()
+ 		foreach( dest ${INSTALL_DESTINATIONS} )
+ 			install_shared( CC_CORE_LIB ${dest} 1 )
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -28,6 +28,7 @@ if ( ${CMAKE_CURRENT_BINARY_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR} )
+@@ -22,6 +22,7 @@ if ( ${CMAKE_CURRENT_BINARY_DIR} STREQUA
  	endif()
  endif()
  
 +SET(CMAKE_INSTALL_RPATH "/usr/lib/cloudcompare")
  
- # Default debug suffix for libraries
- if(MSVC)
-diff --git a/libs/qCC_db/CMakeLists.txt b/libs/qCC_db/CMakeLists.txt
-index 70d388d..53a6d57 100644
+ # Default debug suffix for libraries.  it is ok for linux also
+ # Not sure if it is ok on apple, but enabling by default
 --- a/libs/qCC_db/CMakeLists.txt
 +++ b/libs/qCC_db/CMakeLists.txt
-@@ -52,7 +52,7 @@ endif()
+@@ -33,7 +33,7 @@ endif()
  
  # install (shared) lib to specified destinations
  if( UNIX )
@@ -47,11 +41,9 @@ index 70d388d..53a6d57 100644
  else()
  foreach( dest ${INSTALL_DESTINATIONS} )
  	install_shared( ${PROJECT_NAME} ${dest} 1 )
-diff --git a/libs/qCC_io/CMakeLists.txt b/libs/qCC_io/CMakeLists.txt
-index 265f0ab..a1dd704 100644
 --- a/libs/qCC_io/CMakeLists.txt
 +++ b/libs/qCC_io/CMakeLists.txt
-@@ -67,7 +67,7 @@ endif()
+@@ -48,7 +48,7 @@ endif()
  
  # install (shared) lib to specified destinations
  if( UNIX )

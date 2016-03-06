@@ -1,3 +1,9 @@
+cloudcompare (2.6.3+git20160304-0archeos1) UNRELEASED; urgency=medium
+
+  * Imported Upstream version 2.6.3+git20160304
+
+ -- Romain Janvier <romain.janvier@hotmail.fr>  Sun, 06 Mar 2016 12:25:03 +0100
+
 cloudcompare (2.6.0-archeos2) theodoric; urgency=medium
 
   * Merges Wookey changes in the control file (closes #18)

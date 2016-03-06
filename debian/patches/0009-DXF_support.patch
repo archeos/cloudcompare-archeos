@@ -1,0 +1,140 @@
+From: Romain Janvier <romain.janvier@hotmail.fr>
+Date: Mon, 3 Nov 2014 00:36:31 +0100
+Subject: DXF_support
+
+---
+ contrib/DxfLibSupport.cmake          |  4 ++--
+ libs/qCC_io/DxfFilter.cpp            | 40 ++++++++++++++++++------------------
+ plugins/qSRA/dxfProfilesExporter.cpp |  8 ++++----
+ 3 files changed, 26 insertions(+), 26 deletions(-)
+
+--- a/contrib/DxfLibSupport.cmake
++++ b/contrib/DxfLibSupport.cmake
+@@ -9,7 +9,7 @@ if( ${OPTION_USE_DXF_LIB} )
+ 	if ( NOT DXF_LIB_SRC_DIR )
+ 		message( SEND_ERROR "No DXF lib source dir specified (DXF_LIB_SRC_DIR)" )
+ 	else()
+-		add_subdirectory(contrib/dxflib)
++        # add_subdirectory(contrib/dxflib)
+ 		include_directories( ${DXF_LIB_SRC_DIR} )
+ 	endif()
+ 
+@@ -20,7 +20,7 @@ function( target_link_DXFLIB ) # 2 argum
+ 
+ if( ${OPTION_USE_DXF_LIB} )
+ 
+-	target_link_libraries( ${PROJECT_NAME} DXF_LIB )	
++	target_link_libraries( ${PROJECT_NAME} "-ldxflib" )	
+ 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_DXF_SUPPORT )
+ 
+ endif()
+--- a/libs/qCC_io/DxfFilter.cpp
++++ b/libs/qCC_io/DxfFilter.cpp
+@@ -190,7 +190,7 @@ public:
+ 		{
+ 			if (m_polyVertices->size() == m_polyVertices->capacity())
+ 				m_polyVertices->reserve(m_polyVertices->size()+1);
+-			
++
+ 			m_poly->addPointIndex(m_polyVertices->size());
+ 			m_polyVertices->addPoint(convertPoint(vertex.x,vertex.y,vertex.z));
+ 
+@@ -207,7 +207,7 @@ public:
+ 		{
+ 			P[i] = convertPoint(face.x[i],face.y[i],face.z[i]);
+ 		}
+-		
++
+ 		//create the 'faces' mesh if necessary
+ 		if (!m_faces)
+ 		{
+@@ -321,7 +321,7 @@ public:
+ 			bool firstTime = false;
+ 			if (!triNormsTable)
+ 			{
+-				triNormsTable = new NormsIndexesTableType(); 
++				triNormsTable = new NormsIndexesTableType();
+ 				m_faces->setTriNormsTable(triNormsTable);
+ 				firstTime = true;
+ 			}
+@@ -333,7 +333,7 @@ public:
+ 				ccLog::Error("[DxfImporter] Not enough memory!");
+ 				return;
+ 			}
+-			
++
+ 			CCVector3 N = (P[1]-P[0]).cross(P[2]-P[0]);
+ 			N.normalize();
+ 			triNormsTable->addElement(ccNormalVectors::GetNormIndex(N.u));
+@@ -627,8 +627,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 		QStringList meshLayerNames;
+ 		{
+ 			//default layer
+-			dxf.writeLayer(*dw, 
+-				DL_LayerData("0", 0), 
++			dxf.writeLayer(*dw,
++				DL_LayerData("0", 0),
+ 				DL_Attributes(
+ 				std::string(""),		// leave empty
+ 				DL_Codes::black,		// default color
+@@ -674,8 +674,8 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 		dw->tableEnd();
+ 
+ 		//Writing Various Other Tables
+-		//dxf.writeStyle(*dw); //DXFLIB V2.5
+-		dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
++		dxf.writeStyle(*dw); //DXFLIB V2.5
++		//dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
+ 		dxf.writeView(*dw);
+ 		dxf.writeUcs(*dw);
+ 
+@@ -686,13 +686,13 @@ CC_FILE_ERROR DxfFilter::saveToFile(ccHO
+ 		dw->tableEnd();
+ 
+ 		//Writing Dimension Styles
+-		dxf.writeDimStyle(	*dw, 
+-							/*arrowSize*/1, 
++		dxf.writeDimStyle(	*dw,
++							/*arrowSize*/1,
+ 							/*extensionLineExtension*/1,
+ 							/*extensionLineOffset*/1,
+ 							/*dimensionGap*/1,
+ 							/*dimensionTextSize*/1);
+-	
++
+ 		//Writing Block Records
+ 		dxf.writeBlockRecord(*dw);
+ 		dw->tableEnd();
+@@ -818,7 +818,7 @@ CC_FILE_ERROR DxfFilter::loadFile(QStrin
+ 		result = CC_FERR_THIRD_PARTY_LIB_EXCEPTION;
+ 	}
+ #else
+-	
++
+ 	ccLog::Error("[DXF] Not supported in this version!");
+ 
+ #endif
+--- a/plugins/qSRA/dxfProfilesExporter.cpp
++++ b/plugins/qSRA/dxfProfilesExporter.cpp
+@@ -224,8 +224,8 @@ bool DxfProfilesExporter::SaveVerticalPr
+ 	dw->tableEnd();
+ 
+ 	//Writing Various Other Tables
+-	//dxf.writeStyle(*dw); //DXFLIB V2.5
+-	dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
++	dxf.writeStyle(*dw); //DXFLIB V2.5
++	//dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
+ 	dxf.writeView(*dw);
+ 	dxf.writeUcs(*dw);
+ 
+@@ -719,8 +719,8 @@ bool DxfProfilesExporter::SaveHorizontal
+ 	dw->tableEnd();
+ 
+ 	//Writing Various Other Tables
+-	//dxf.writeStyle(*dw); //DXFLIB V2.5
+-	dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
++	dxf.writeStyle(*dw); //DXFLIB V2.5
++	//dxf.writeStyle(*dw,DL_StyleData("Standard",0,0.0,0.75,0.0,0,2.5,"txt","")); //DXFLIB V3.3
+ 	dxf.writeView(*dw);
+ 	dxf.writeUcs(*dw);
+ 

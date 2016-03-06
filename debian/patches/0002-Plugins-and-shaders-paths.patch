@@ -11,11 +11,9 @@ Subject: Plugins and shaders paths
  qCC/mainwindow.cpp               | 2 +-
  6 files changed, 13 insertions(+), 13 deletions(-)
 
-diff --git a/ccViewer/CMakeLists.txt b/ccViewer/CMakeLists.txt
-index 27c5e10..1fb69ca 100644
 --- a/ccViewer/CMakeLists.txt
 +++ b/ccViewer/CMakeLists.txt
-@@ -116,7 +116,7 @@ if( WIN32 )
+@@ -93,7 +93,7 @@ if( WIN32 )
  endif()
  
  # install program
@@ -24,18 +22,16 @@ index 27c5e10..1fb69ca 100644
  
  # Auxiliary files
  set( auxFiles bin_other/license.txt )
-@@ -154,5 +154,5 @@ endif( APPLE )
+@@ -131,5 +131,5 @@ endif( APPLE )
  if( APPLE )
     install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/../qCC/shaders/ColorRamp/color_ramp.frag DESTINATION ${CCVIEWER_MAC_BASE_DIR}/Contents/Shaders/ColorRamp )
  else()
 -   install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/../qCC/shaders/ColorRamp/color_ramp.frag ${CCVIEWER_DEST_FOLDER} /shaders/ColorRamp )
 +    install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/../qCC/shaders/ColorRamp/color_ramp.frag DESTINATION /usr/share/cloudcompare/shaders/ccViewer/ColorRamp )
  endif()
-diff --git a/ccViewer/ccviewer.cpp b/ccViewer/ccviewer.cpp
-index 52cb41f..c08e1b6 100644
 --- a/ccViewer/ccviewer.cpp
 +++ b/ccViewer/ccviewer.cpp
-@@ -190,7 +190,7 @@ void ccViewer::loadPlugins()
+@@ -198,7 +198,7 @@ void ccViewer::loadPlugins()
  	QString pluginsPath = path + "Plugins/ccViewerPlugins";
  #else
  	//plugins are in bin/plugins
@@ -44,11 +40,9 @@ index 52cb41f..c08e1b6 100644
  #endif
  
  	ccLog::Print(QString("Plugins lookup dir.: %1").arg(pluginsPath));
-diff --git a/libs/qCC_glWindow/ccGLWindow.cpp b/libs/qCC_glWindow/ccGLWindow.cpp
-index a73999f..7f68615 100644
 --- a/libs/qCC_glWindow/ccGLWindow.cpp
 +++ b/libs/qCC_glWindow/ccGLWindow.cpp
-@@ -3935,7 +3935,7 @@ QString ccGLWindow::getShadersPath()
+@@ -5969,7 +5969,7 @@ QString ccGLWindow::getShadersPath()
  	path.remove( "MacOS" );
  	return path + "Shaders";
  #else
@@ -57,11 +51,9 @@ index a73999f..7f68615 100644
  #endif
  }
  
-diff --git a/plugins/CMakePluginTpl.cmake b/plugins/CMakePluginTpl.cmake
-index 9350931..d5114e6 100644
 --- a/plugins/CMakePluginTpl.cmake
 +++ b/plugins/CMakePluginTpl.cmake
-@@ -79,7 +79,7 @@ if( APPLE )
+@@ -68,7 +68,7 @@ if( APPLE )
  	install( TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Plugins/ccPlugins COMPONENT Runtime )
  	set( CLOUDCOMPARE_PLUGINS ${CLOUDCOMPARE_PLUGINS} ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Plugins/ccPlugins/lib${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "CloudCompare plugin list")
  else()
@@ -70,7 +62,7 @@ index 9350931..d5114e6 100644
  endif()
  
  #GL filters and IO plugins also go the the ccViewer 'plugins' sub-folder
-@@ -90,7 +90,7 @@ if( ${OPTION_BUILD_CCVIEWER} )
+@@ -79,7 +79,7 @@ if( ${OPTION_BUILD_CCVIEWER} )
  			install( TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${CCVIEWER_MAC_BASE_DIR}/Contents/Plugins/ccViewerPlugins COMPONENT Runtime )
  			set( CCVIEWER_PLUGINS ${CCVIEWER_PLUGINS} ${CCVIEWER_MAC_BASE_DIR}/Contents/Plugins/ccViewerPlugins/lib${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "ccViewer plugin list")
  		else()
@@ -79,7 +71,7 @@ index 9350931..d5114e6 100644
  		endif()
  	endif()
  
-@@ -108,9 +108,9 @@ if( CC_SHADER_FOLDER )
+@@ -97,9 +97,9 @@ if( CC_SHADER_FOLDER )
  				install( FILES ${filename} DESTINATION ${CCVIEWER_MAC_BASE_DIR}/Contents/Shaders/${CC_SHADER_FOLDER} )
  			endif()
  		else()
@@ -91,11 +83,9 @@ index 9350931..d5114e6 100644
  			endif()
  		endif()
  	endforeach()
-diff --git a/qCC/CMakeLists.txt b/qCC/CMakeLists.txt
-index 24416eb..adc3e53 100644
 --- a/qCC/CMakeLists.txt
 +++ b/qCC/CMakeLists.txt
-@@ -120,7 +120,7 @@ if( WIN32 )
+@@ -102,7 +102,7 @@ if( WIN32 )
  endif()
  
  # install program
@@ -104,7 +94,7 @@ index 24416eb..adc3e53 100644
  
  # Auxiliary files
  # set( auxFiles bin_other/history.txt bin_other/license.txt bin_other/global_shift_list_template.txt )
-@@ -160,9 +160,9 @@ if( APPLE )
+@@ -143,9 +143,9 @@ if( APPLE )
     #install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.frag DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders/Rendering )
     #install( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.vert DESTINATION ${CLOUDCOMPARE_MAC_BASE_DIR}/Contents/Shaders/Rendering )
  else()
@@ -117,11 +107,9 @@ index 24416eb..adc3e53 100644
     #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.frag ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
     #install_ext( FILES ${CMAKE_CURRENT_SOURCE_DIR}/shaders/Rendering/rendering.vert ${CLOUDCOMPARE_DEST_FOLDER} /shaders/Rendering )
  endif()
-diff --git a/qCC/mainwindow.cpp b/qCC/mainwindow.cpp
-index 103fd84..2dd42b3 100644
 --- a/qCC/mainwindow.cpp
 +++ b/qCC/mainwindow.cpp
-@@ -395,7 +395,7 @@ void MainWindow::loadPlugins()
+@@ -399,7 +399,7 @@ void MainWindow::loadPlugins()
  	m_pluginsPath = path + "Plugins/ccPlugins";
  #else
  	//plugins are in bin/plugins

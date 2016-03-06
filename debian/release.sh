@@ -1,32 +1,21 @@
 #!/bin/bash
+distrib=$(dpkg-parsechangelog --show-field Distribution)
+upstream=$(dpkg-parsechangelog --show-field Version | cut -d- -f1)
+packagepart=$(dpkg-parsechangelog --show-field Version | cut -d- -f2)
+derivative=$(echo -n $packagepart | tail -c 1)
+debian=$(echo -n $packagepart | cut -c1)
 
-version=2.6.0
-debversion=0
-ppaversion=1
-
-for d in precise saucy trusty utopic
+for d in trusty willy xenial
 do
-    # Saucy package can be build from 'experimental' branch, with DXF support
-    if [ $d != "precise" ]
-    then
-        git checkout experimental
-    fi
-
     git branch $d
     git checkout $d
-    sed -i -e 's/archeos/'${d}'/g' -e 's/theodoric/'${d}'/g' debian/changelog
-    
-    # Precise do not support libfreenect-dev
-    if [ $d == "precise" ]
-    then
-      sed -i 's/, libfreenect-dev//g' debian/control;
-      sed -i -e '/\-DLIBFREENECT_INCLUDE_DIR=\"\/usr\/include\" \\/d' -e '/\-DLIBFREENECT_LIBRARY_FILE=\"\-lfreenect\" \\/d' -e '/\-DINSTALL_QKINECT_PLUGIN=ON \\/d'  debian/rules;
-    fi
+    sed -i -e 's/archeos/'${d}'/g' -e 's/'distrib'/'${d}'/g' debian/changelog
     
     git commit -am "Release"
     git-buildpackage -S --git-debian-branch=$d
-    dput cloudcompare-$d "../release/cloudcompare_"${version}"-"${debversion}${d}${ppaversion}"_source.changes"
+    dput cloudcompare-$d "../release/cloudcompare_"${upstream}"-"${debian}${d}$derivative"_source.changes"
     git checkout master
     git branch -D $d;
 done
 rm -rf ../release/cloudcompare*
+
