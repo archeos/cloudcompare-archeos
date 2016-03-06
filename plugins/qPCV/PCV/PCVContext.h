@@ -67,7 +67,7 @@ class PCVContext
 
 		void glInit();
 		void drawEntity();
-		void associateToEntity(CCLib::GenericCloud* aCloud, CCLib::GenericMesh* aMesh=NULL);
+		void associateToEntity(CCLib::GenericCloud* cloud, CCLib::GenericMesh* mesh = 0);
 
 		//! Displayed entity (cloud or mesh vertices)
 		CCLib::GenericCloud* m_vertices;
@@ -89,6 +89,8 @@ class PCVContext
 		unsigned m_height;
 
 		//! Model view matrix size (OpenGL)
+		/** \warning Never pass a 'constant initializer' by reference
+		**/
 		static const unsigned OPENGL_MATRIX_SIZE = 16;
 
 		//! Current model view matrix
@@ -97,7 +99,7 @@ class PCVContext
 		//! Depth buffer
 		float* m_snapZ;
 		//! Color buffer
-		uchar* m_snapC;
+		unsigned char* m_snapC;
 
 		//! Whether displayed mesh is closed or not
 		bool m_meshIsClosed;

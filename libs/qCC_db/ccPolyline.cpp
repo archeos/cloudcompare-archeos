@@ -22,18 +22,16 @@
 
 //Local
 #include "ccPointCloud.h"
+#include "ccCone.h"
 
 //CCLib
 #include <Neighbourhood.h>
 #include <PointProjectionTools.h>
 #include <CCMiscTools.h>
 
-//System
-#include <string.h>
-
 ccPolyline::ccPolyline(GenericIndexedCloudPersist* associatedCloud)
 	: Polyline(associatedCloud)
-	, ccHObject("Polyline")
+	, ccShiftedObject("Polyline")
 {
 	set2DMode(false);
 	setForeground(true);
@@ -43,30 +41,48 @@ ccPolyline::ccPolyline(GenericIndexedCloudPersist* associatedCloud)
 	showVertices(false);
 	setVertexMarkerWidth(3);
 	setWidth(0);
+	showArrow(false,0,0);
+
+	ccGenericPointCloud* cloud = dynamic_cast<ccGenericPointCloud*>(associatedCloud);
+	if (cloud)
+	{
+		setGlobalScale(cloud->getGlobalScale());
+		setGlobalShift(cloud->getGlobalShift());
+	}
 }
 
 ccPolyline::ccPolyline(const ccPolyline& poly)
 	: Polyline(0)
-	, ccHObject(poly)
+	, ccShiftedObject(poly)
 {
-	ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(poly.m_theAssociatedCloud);
-	ccPointCloud* clone = cloud ? cloud->partialClone(&poly) : ccPointCloud::From(&poly);
-	if (clone)
-	{
-		if (cloud)
-			clone->setName(cloud->getName()); //as 'partialClone' adds the '.extract' suffix by default
-	}
-	else
-	{
-		//not enough memory?
-		ccLog::Warning("[ccPolyline][copy constructor] Not enough memory!");
-	}
-
-	initWith(clone,poly);
+	ccPointCloud* clone = 0;
+	initWith(clone, poly);
 }
 
-void ccPolyline::initWith(ccPointCloud* vertices, const ccPolyline& poly)
+bool ccPolyline::initWith(ccPointCloud*& vertices, const ccPolyline& poly)
 {
+	bool success = true;
+	if (!vertices)
+	{
+		ccPointCloud* cloud = dynamic_cast<ccPointCloud*>(poly.m_theAssociatedCloud);
+		ccPointCloud* clone = cloud ? cloud->partialClone(&poly) : ccPointCloud::From(&poly);
+		if (clone)
+		{
+			if (cloud)
+				clone->setName(cloud->getName()); //as 'partialClone' adds the '.extract' suffix by default
+			else
+				clone->setGLTransformationHistory(poly.getGLTransformationHistory());
+		}
+		else
+		{
+			//not enough memory?
+			ccLog::Warning("[ccPolyline::initWith] Not enough memory to duplicate vertices!");
+			success = false;
+		}
+
+		vertices = clone;
+	}
+
 	if (vertices)
 	{
 		setAssociatedCloud(vertices);
@@ -74,9 +90,22 @@ void ccPolyline::initWith(ccPointCloud* vertices, const ccPolyline& poly)
 		//vertices->setEnabled(false);
 		assert(m_theAssociatedCloud);
 		if (m_theAssociatedCloud)
-			addPointIndex(0,m_theAssociatedCloud->size());
+		{
+			if (!addPointIndex(0, m_theAssociatedCloud->size()))
+			{
+				ccLog::Warning("[ccPolyline::initWith] Not enough memory");
+				success = false;
+			}
+		}
 	}
 
+	importParametersFrom(poly);
+
+	return success;
+}
+
+void ccPolyline::importParametersFrom(const ccPolyline& poly)
+{
 	setClosed(poly.m_isClosed);
 	set2DMode(poly.m_mode2D);
 	setForeground(poly.m_foreground);
@@ -88,6 +117,11 @@ void ccPolyline::initWith(ccPointCloud* vertices, const ccPolyline& poly)
 	showVertices(poly.verticesShown());
 	setVertexMarkerWidth(poly.getVertexMarkerWidth());
 	setVisible(poly.isVisible());
+	showArrow(m_showArrow,m_arrowIndex,m_arrowLength);
+	setGlobalScale(poly.getGlobalScale());
+	setGlobalShift(poly.getGlobalShift());
+	setGLTransformationHistory(poly.getGLTransformationHistory());
+	setMetaData(poly.metaData());
 }
 
 void ccPolyline::set2DMode(bool state)
@@ -100,11 +134,18 @@ void ccPolyline::setForeground(bool state)
 	m_foreground = state;
 }
 
-ccBBox ccPolyline::getMyOwnBB()
+void ccPolyline::showArrow(bool state, unsigned vertIndex, PointCoordinateType length)
+{
+	m_showArrow = state;
+	m_arrowIndex = vertIndex;
+	m_arrowLength = length;
+}
+
+ccBBox ccPolyline::getOwnBB(bool withGLFeatures/*=false*/)
 {
 	ccBBox emptyBox;
-	getBoundingBox(emptyBox.minCorner().u, emptyBox.maxCorner().u);
-	emptyBox.setValidity(!is2DMode() && size() != 0);
+	getBoundingBox(emptyBox.minCorner(), emptyBox.maxCorner());
+	emptyBox.setValidity(/*!is2DMode() && */size() != 0);
 	return emptyBox;
 }
 
@@ -123,10 +164,13 @@ void ccPolyline::applyGLTransformation(const ccGLMatrix& trans)
 	m_validBB = false;
 }
 
+//unit arrow
+static QSharedPointer<ccCone> c_unitArrow(0);
+
 void ccPolyline::drawMeOnly(CC_DRAW_CONTEXT& context)
 {
 	//no picking enabled on polylines
-	if (MACRO_DrawNames(context))
+	if (MACRO_DrawPointNames(context))
 		return;
 
 	unsigned vertCount = size();
@@ -147,10 +191,18 @@ void ccPolyline::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 	if (draw)
 	{
-		if (colorsShown())
-			glColor3ubv(m_rgbColor);
+		//standard case: list names pushing
+		bool pushName = MACRO_DrawEntityNames(context);
+		if (pushName)
+			glPushName(getUniqueIDForDisplay());
+
+		if (isColorOverriden())
+			ccGL::Color3v(m_tempColor.rgb);
+		else if (colorsShown())
+			ccGL::Color3v(m_rgbColor.rgb);
 
 		//display polyline
+		if (vertCount > 1)
 		{
 			if (m_width != 0)
 			{
@@ -158,12 +210,73 @@ void ccPolyline::drawMeOnly(CC_DRAW_CONTEXT& context)
 				glLineWidth(static_cast<GLfloat>(m_width));
 			}
 
-			glBegin(m_isClosed ? GL_LINE_LOOP : GL_LINE_STRIP);
+			//DGM: we do the 'GL_LINE_LOOP' manually as I have a strange bug
+			//on one on my graphic card with this mode!
+			//glBegin(m_isClosed ? GL_LINE_LOOP : GL_LINE_STRIP);
+			glBegin(GL_LINE_STRIP);
 			for (unsigned i=0; i<vertCount; ++i)
 			{
 				ccGL::Vertex3v(getPoint(i)->u);
 			}
+			if (m_isClosed)
+			{
+				ccGL::Vertex3v(getPoint(0)->u);
+			}
 			glEnd();
+
+			//display arrow
+			if (m_showArrow && m_arrowIndex < vertCount && (m_arrowIndex > 0 || m_isClosed))
+			{
+				const CCVector3* P0 = getPoint(m_arrowIndex == 0 ? vertCount-1 : m_arrowIndex-1);
+				const CCVector3* P1 = getPoint(m_arrowIndex);
+				//direction of the last polyline chunk
+				CCVector3 u = *P1 - *P0;
+				u.normalize();
+
+				if (m_mode2D)
+				{
+					u *= -m_arrowLength;
+					static const PointCoordinateType s_defaultArrowAngle = static_cast<PointCoordinateType>(15.0 * CC_DEG_TO_RAD);
+					static const PointCoordinateType cost = cos(s_defaultArrowAngle);
+					static const PointCoordinateType sint = sin(s_defaultArrowAngle);
+					CCVector3 A(cost * u.x - sint * u.y,  sint * u.x + cost * u.y, 0);
+					CCVector3 B(cost * u.x + sint * u.y, -sint * u.x + cost * u.y, 0);
+					glBegin(GL_POLYGON);
+					ccGL::Vertex3v((A+*P1).u);
+					ccGL::Vertex3v((B+*P1).u);
+					ccGL::Vertex3v((  *P1).u);
+					glEnd();
+				}
+				else
+				{
+					if (!c_unitArrow)
+					{
+						c_unitArrow = QSharedPointer<ccCone>(new ccCone(0.5,0.0,1.0));
+						c_unitArrow->showColors(true);
+						c_unitArrow->showNormals(false);
+						c_unitArrow->setVisible(true);
+						c_unitArrow->setEnabled(true);
+					}
+					if (colorsShown())
+						c_unitArrow->setTempColor(m_rgbColor);
+					else
+						c_unitArrow->setTempColor(context.pointsDefaultCol);
+					//build-up unit arrow own 'context'
+					CC_DRAW_CONTEXT markerContext = context;
+					markerContext.flags &= (~CC_DRAW_ENTITY_NAMES); //we must remove the 'push name flag' so that the sphere doesn't push its own!
+					markerContext._win = 0;
+
+					glMatrixMode(GL_MODELVIEW);
+					glPushMatrix();
+					ccGL::Translate(P1->x,P1->y,P1->z);
+					ccGLMatrix rotMat = ccGLMatrix::FromToRotation(u,CCVector3(0,0,PC_ONE));
+					glMultMatrixf(rotMat.inverse().data());
+					glScalef(m_arrowLength,m_arrowLength,m_arrowLength);
+					ccGL::Translate(0.0,0.0,-0.5);
+					c_unitArrow->draw(markerContext);
+					glPopMatrix();
+				}
+			}
 
 			if (m_width != 0)
 			{
@@ -186,22 +299,15 @@ void ccPolyline::drawMeOnly(CC_DRAW_CONTEXT& context)
 
 			glPopAttrib();
 		}
-	}
-}
 
-void ccPolyline::setColor(const colorType col[])
-{
-	memcpy(m_rgbColor,col,sizeof(colorType)*3);
+		if (pushName)
+			glPopName();
+	}
 }
 
 void ccPolyline::setWidth(PointCoordinateType width)
 {
 	m_width = width;
-}
-
-const colorType* ccPolyline::getColor() const
-{
-	return m_rgbColor;
 }
 
 bool ccPolyline::toFile_MeOnly(QFile& out) const
@@ -235,15 +341,18 @@ bool ccPolyline::toFile_MeOnly(QFile& out) const
 			return WriteError();
 	}
 
+	//'global shift & scale' (dataVersion>=39)
+	saveShiftInfoToFile(out);
+	
 	QDataStream outStream(&out);
 
 	//Closing state (dataVersion>=28)
 	outStream << m_isClosed;
 
 	//RGB Color (dataVersion>=28)
-	outStream << m_rgbColor[0];
-	outStream << m_rgbColor[1];
-	outStream << m_rgbColor[2];
+	outStream << m_rgbColor.r;
+	outStream << m_rgbColor.g;
+	outStream << m_rgbColor.b;
 
 	//2D mode (dataVersion>=28)
 	outStream << m_mode2D;
@@ -290,15 +399,27 @@ bool ccPolyline::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 		addPointIndex(pointIndex);
 	}
 
+	//'global shift & scale' (dataVersion>=39)
+	if (dataVersion >= 39)
+	{
+		if (!loadShiftInfoFromFile(in))
+			return ReadError();
+	}
+	else
+	{
+		m_globalScale = 1.0;
+		m_globalShift = CCVector3d(0,0,0);
+	}
+
 	QDataStream inStream(&in);
 
 	//Closing state (dataVersion>=28)
 	inStream >> m_isClosed;
 
 	//RGB Color (dataVersion>=28)
-	inStream >> m_rgbColor[0];
-	inStream >> m_rgbColor[1];
-	inStream >> m_rgbColor[2];
+	inStream >> m_rgbColor.r;
+	inStream >> m_rgbColor.g;
+	inStream >> m_rgbColor.b;
 
 	//2D mode (dataVersion>=28)
 	inStream >> m_mode2D;
@@ -315,7 +436,7 @@ bool ccPolyline::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	return true;
 }
 
-bool ccPolyline::split(	PointCoordinateType maxEdgelLength,
+bool ccPolyline::split(	PointCoordinateType maxEdgeLength,
 						std::vector<ccPolyline*>& parts)
 {
 	parts.clear();
@@ -333,7 +454,7 @@ bool ccPolyline::split(	PointCoordinateType maxEdgelLength,
 	while (startIndex <= lastIndex)
 	{
 		unsigned stopIndex = startIndex;
-		while (stopIndex < lastIndex && (*getPoint(stopIndex+1) - *getPoint(stopIndex)).norm() <= maxEdgelLength)
+		while (stopIndex < lastIndex && (*getPoint(stopIndex+1) - *getPoint(stopIndex)).norm() <= maxEdgeLength)
 		{
 			++stopIndex;
 		}
@@ -347,7 +468,7 @@ bool ccPolyline::split(	PointCoordinateType maxEdgelLength,
 			if (isClosed())
 			{
 				unsigned realStartIndex = vertCount;
-				while (realStartIndex > stopIndex && (*getPoint(realStartIndex-1) - *getPoint(realStartIndex % vertCount)).norm() <= maxEdgelLength)
+				while (realStartIndex > stopIndex && (*getPoint(realStartIndex-1) - *getPoint(realStartIndex % vertCount)).norm() <= maxEdgeLength)
 				{
 					--realStartIndex;
 				}
@@ -404,126 +525,6 @@ bool ccPolyline::split(	PointCoordinateType maxEdgelLength,
 	}
 
 	return true;
-}
-
-bool ccPolyline::ExtractFlatContour(CCLib::GenericIndexedCloudPersist* points,
-									PointCoordinateType maxEdgelLength,
-									std::vector<ccPolyline*>& parts,
-									bool allowSplitting/*=true*/,
-									const PointCoordinateType* preferredDim/*=0*/)
-{
-	parts.clear();
-
-	//extract whole contour
-	ccPolyline* basePoly = ExtractFlatContour(points,maxEdgelLength,preferredDim);
-	if (!basePoly)
-	{
-		return false;
-	}
-	else if (!allowSplitting)
-	{
-		parts.push_back(basePoly);
-		return true;
-	}
-
-	//and split it if necessary
-	bool success = basePoly->split(maxEdgelLength,parts);
-
-	delete basePoly;
-	basePoly = 0;
-
-	return success;
-
-}
-
-ccPolyline* ccPolyline::ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* points,
-											PointCoordinateType maxEdgelLength/*=0*/,
-											const PointCoordinateType* preferredDim/*=0*/)
-{
-	assert(points);
-	if (!points)
-		return 0;
-	unsigned ptsCount = points->size();
-	if (ptsCount < 3)
-		return 0;
-
-	CCLib::Neighbourhood Yk(points);
-	CCVector3 O,X,Y; //local base
-
-	//we project the input points on a plane
-	std::vector<CCLib::PointProjectionTools::IndexedCCVector2> points2D;
-	PointCoordinateType* planeEq = 0;
-	//if the user has specified a default direction, we'll use it as 'projecting plane'
-	PointCoordinateType preferredPlaneEq[4] = {0, 0, 0, 0};
-	if (preferredDim != 0)
-	{
-		const CCVector3* G = points->getPoint(0); //any point through which the point pass is ok
-		preferredPlaneEq[0] = preferredDim[0];
-		preferredPlaneEq[1] = preferredDim[1];
-		preferredPlaneEq[2] = preferredDim[2];
-		CCVector3::vnormalize(preferredPlaneEq);
-		preferredPlaneEq[3] = CCVector3::vdot(G->u,preferredPlaneEq);
-		planeEq = preferredPlaneEq;
-	}
-	if (!Yk.projectPointsOn2DPlane<CCLib::PointProjectionTools::IndexedCCVector2>(points2D,planeEq,&O,&X,&Y))
-	{
-		ccLog::Warning("[ccPolyline::ExtractFlatContour] Failed to project the points on the LS plane (not enough memory?)!");
-		return 0;
-	}
-
-	//update the points indexes (not done by Neighbourhood::projectPointsOn2DPlane)
-	{
-		for (unsigned i=0; i<ptsCount; ++i)
-			points2D[i].index = i;
-	}
-
-	//try to get the points on the convex/concave hull to build the contour and the polygon
-	std::list<CCLib::PointProjectionTools::IndexedCCVector2*> hullPoints;
-	if (!CCLib::PointProjectionTools::extractConcaveHull2D(	points2D,
-															hullPoints,
-															maxEdgelLength*maxEdgelLength) )
-	{
-		ccLog::Error("[ccPolyline::ExtractFlatContour] Failed to compute the convex hull of the input points!");
-	}
-
-	unsigned hullPtsCount = static_cast<unsigned>(hullPoints.size());
-
-	//create vertices
-	ccPointCloud* contourVertices = new ccPointCloud();
-	{
-		if (!contourVertices->reserve(hullPtsCount))
-		{
-			delete contourVertices;
-			contourVertices = 0;
-			ccLog::Error("[ccPolyline::ExtractFlatContour] Not enough memory!");
-			return 0;
-		}
-
-		//projection on the LS plane (in 3D)
-		for (std::list<CCLib::PointProjectionTools::IndexedCCVector2*>::const_iterator it = hullPoints.begin(); it != hullPoints.end(); ++it)
-			contourVertices->addPoint(O + X*(*it)->x + Y*(*it)->y);
-		contourVertices->setName("vertices");
-		contourVertices->setEnabled(false);
-	}
-
-	//we create the corresponding (3D) polyline
-	ccPolyline* contourPolyline = new ccPolyline(contourVertices);
-	if (contourPolyline->reserve(hullPtsCount))
-	{
-		contourPolyline->addPointIndex(0,hullPtsCount);
-		contourPolyline->setClosed(true);
-		contourPolyline->setVisible(true);
-		contourPolyline->setName("contour");
-		contourPolyline->addChild(contourVertices);
-	}
-	else
-	{
-		delete contourPolyline;
-		contourPolyline = 0;
-		ccLog::Warning("[ccPolyline::ExtractFlatContour] Not enough memory to create the contour polyline!");
-	}
-
-	return contourPolyline;
 }
 
 PointCoordinateType ccPolyline::computeLength() const

@@ -152,7 +152,7 @@ int MLSSmoothingUpsampling::compute()
 			req_fields.push_back(cloud->getCurrentDisplayedScalarField()->getName());
 		}
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return -1;
@@ -203,6 +203,10 @@ int MLSSmoothingUpsampling::compute()
 	//copy the original colors here
 	copyRGBColors(cloud, new_cloud, mapping_indices, true);
 #endif
+
+	//copy global shift & scale
+	new_cloud->setGlobalScale(cloud->getGlobalScale());
+	new_cloud->setGlobalShift(cloud->getGlobalShift());
 
 	//disable original cloud
 	cloud->setEnabled(false);

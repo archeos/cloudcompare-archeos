@@ -30,17 +30,18 @@
 
 class ccGLWindow;
 class ccPointCloud;
+class ccHObject;
 
 /** Generic interface for any dialog/graphical interactor that relies on point picking.
 **/
 class ccPointPickingGenericInterface : public ccOverlayDialog
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
 
 	//! Default constructor
-	ccPointPickingGenericInterface(QWidget* parent = 0) : ccOverlayDialog(parent) {}
+	explicit ccPointPickingGenericInterface(QWidget* parent = 0) : ccOverlayDialog(parent) {}
 	//! Destructor
 	virtual ~ccPointPickingGenericInterface() {};
 
@@ -52,7 +53,7 @@ public:
 protected slots:
 
 	//! Slot to handle directly a picked point (OpenGL based picking)
-	virtual void handlePickedPoint(int cloudID, unsigned pointIdx, int x, int y);
+	virtual void handlePickedItem(ccHObject* entity, unsigned itemIdx, int x, int y);
 
 protected:
 

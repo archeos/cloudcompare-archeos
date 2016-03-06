@@ -27,13 +27,11 @@
 #include <QString>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QProgressDialog>
 
 //qCC_db
 #include <ccLog.h>
 #include <ccMesh.h>
 #include <ccPointCloud.h>
-#include <ccProgressDialog.h>
 #include <ccNormalVectors.h>
 #include <ccOctree.h>
 
@@ -56,7 +54,7 @@ bool OFFFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) con
 	return false;
 }
 
-CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity)
 		return CC_FERR_BAD_ARGUMENT;
@@ -110,7 +108,7 @@ CC_FILE_ERROR OFFFilter::saveToFile(ccHObject* entity, QString filename)
 	{
 		for (unsigned i=0; i<triCount; ++i)
 		{
-			const CCLib::TriangleSummitsIndexes* tsi = mesh->getTriangleIndexes(i);
+			const CCLib::VerticesIndexes* tsi = mesh->getTriangleVertIndexes(i);
 			stream << "3 " << tsi->i1 << ' ' << tsi->i2 << ' ' << tsi->i3 << endl;
 		}
 	}
@@ -161,8 +159,6 @@ CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, LoadPa
 		//end of file already?!
 		if (currentLine.isNull())
 			return CC_FERR_MALFORMED_FILE;
-
-		while (currentLine.startsWith("#") || currentLine.isEmpty());
 
 		//read the number of vertices/faces
 		tokens = currentLine.split(QRegExp("\\s+"),QString::SkipEmptyParts);
@@ -275,9 +271,9 @@ CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, LoadPa
 
 				//reserve memory if necessary
 				unsigned polyTriCount = polyVertCount-2;
-				if (mesh->size() + polyTriCount > mesh->maxSize())
+				if (mesh->size() + polyTriCount > mesh->capacity())
 				{
-					if (!mesh->reserve(mesh->size() + polyTriCount + 256)) //take some advance to avoid too many allocations
+					if (!mesh->reserve(mesh->size() + polyTriCount + 256)) //use some margin to avoid too many allocations
 					{
 						delete mesh;
 						return CC_FERR_NOT_ENOUGH_MEMORY;
@@ -314,8 +310,7 @@ CC_FILE_ERROR OFFFilter::loadFile(QString filename, ccHObject& container, LoadPa
 	}
 	else
 	{
-		if (mesh->size() < mesh->maxSize())
-			mesh->resize(mesh->size());
+		mesh->shrinkToFit();
 
 		//DGM: normals can be per-vertex or per-triangle so it's better to let the user do it himself later
 		//Moreover it's not always good idea if the user doesn't want normals (especially in ccViewer!)

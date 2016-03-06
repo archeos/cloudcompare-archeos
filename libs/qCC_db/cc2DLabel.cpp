@@ -33,11 +33,15 @@
 #include <string.h>
 #include <assert.h>
 
+//'Delta' character
+static const QChar MathSymbolDelta(0x0394);
+
 cc2DLabel::cc2DLabel(QString name/*=QString()*/)
 	: ccHObject(name.isEmpty() ? "label" : name)
 	, m_showFullBody(true)
-	, m_dispIn3D(true)
+	, m_dispIn3D(false)
 	, m_dispIn2D(true)
+	, m_relMarkerScale(1.0f)
 {
 	m_screenPos[0] = m_screenPos[1] = 0.05f;
 
@@ -47,6 +51,89 @@ cc2DLabel::cc2DLabel(QString name/*=QString()*/)
 	setEnabled(true);
 }
 
+static const QString POINT_INDEX_0("pi0");
+static const QString POINT_INDEX_1("pi1");
+static const QString POINT_INDEX_2("pi2");
+static const QString CLOUD_INDEX_0("ci0");
+static const QString CLOUD_INDEX_1("ci1");
+static const QString CLOUD_INDEX_2("ci2");
+
+//return angle between two vectors (in degrees)
+//warning: vectors will be normalized by default
+double GetAngle_deg(CCVector3 AB, CCVector3 AC)
+{
+	AB.normalize();
+	AC.normalize();
+	double dotprod = AB.dot(AC);
+	//clamp value (just in case)
+	if (dotprod <= -1.0)
+		dotprod = -1.0;
+	else if (dotprod > 1.0)
+		dotprod = 1.0;
+	return acos(dotprod) * CC_RAD_TO_DEG;
+}
+
+QString cc2DLabel::GetSFValueAsString(const LabelInfo1& info, int precision)
+{
+	if (info.hasSF)
+	{
+		if (!ccScalarField::ValidValue(info.sfValue))
+		{
+			return "NaN";
+		}
+		else
+		{
+			QString sfVal = QString::number(info.sfValue,'f',precision);
+			if (info.sfValueIsShifted)
+			{
+				sfVal = QString::number(info.sfShiftedValue,'f',precision) + QString(" (shifted: %1)").arg(sfVal);
+			}
+			return sfVal;
+		}
+	}
+	else
+	{
+		return QString();
+	}
+}
+
+QString cc2DLabel::getTitle(int precision) const
+{
+	QString title;
+	size_t count = m_points.size();
+	if (count == 1)
+	{
+		title = m_name;
+		title.replace(POINT_INDEX_0,QString::number(m_points[0].index));
+
+		//if available, we display the point SF value
+		LabelInfo1 info;
+		getLabelInfo1(info);
+		if (info.hasSF)
+		{
+			QString sfVal = GetSFValueAsString(info, precision);
+			title = QString("%1 = %2").arg(info.sfName).arg(sfVal);
+		}
+	}
+	else if (count == 2)
+	{
+		LabelInfo2 info;
+		getLabelInfo2(info);
+		//display distance by default
+		double dist = info.diff.normd();
+		title = QString("Distance: %1").arg(dist,0,'f',precision);
+	}
+	else if (count == 3)
+	{
+		LabelInfo3 info;
+		getLabelInfo3(info);
+		//display area by default
+		title = QString("Area: %1").arg(info.area,0,'f',precision);
+	}
+
+	return title;
+}
+
 QString cc2DLabel::getName() const
 {
 	QString processedName = m_name;
@@ -54,19 +141,19 @@ QString cc2DLabel::getName() const
 	size_t count = m_points.size();
 	if (count > 0)
 	{
-		processedName.replace(QString("pt_0_idx"),QString::number(m_points[0].index));
+		processedName.replace(POINT_INDEX_0,QString::number(m_points[0].index));
 		if (count > 1)
 		{
-			processedName.replace(QString("pt_1_idx"),QString::number(m_points[1].index));
+			processedName.replace(POINT_INDEX_1,QString::number(m_points[1].index));
 			if (m_points[0].cloud)
-				processedName.replace(QString("pt_0_cloud_id"),QString::number(m_points[0].cloud->getUniqueID()));
+				processedName.replace(CLOUD_INDEX_0,QString::number(m_points[0].cloud->getUniqueID()));
 			if (m_points[1].cloud)
-				processedName.replace(QString("pt_1_cloud_id"),QString::number(m_points[1].cloud->getUniqueID()));
+				processedName.replace(CLOUD_INDEX_1,QString::number(m_points[1].cloud->getUniqueID()));
 			if (count > 2)
 			{
-				processedName.replace(QString("pt_2_idx"),QString::number(m_points[2].index));
+				processedName.replace(POINT_INDEX_2,QString::number(m_points[2].index));
 				if (m_points[2].cloud)
-					processedName.replace(QString("pt_2_cloud_id"),QString::number(m_points[2].cloud->getUniqueID()));
+					processedName.replace(CLOUD_INDEX_2,QString::number(m_points[2].cloud->getUniqueID()));
 			}
 		}
 	}
@@ -84,8 +171,8 @@ bool cc2DLabel::move2D(int x, int y, int dx, int dy, int screenWidth, int screen
 {
 	assert(screenHeight > 0 && screenWidth > 0);
 	
-	m_screenPos[0] += static_cast<float>(dx)/static_cast<float>(screenWidth);
-	m_screenPos[1] += static_cast<float>(dy)/static_cast<float>(screenHeight);
+	m_screenPos[0] += static_cast<float>(dx)/screenWidth;
+	m_screenPos[1] += static_cast<float>(dy)/screenHeight;
 
 	return true;
 }
@@ -107,7 +194,7 @@ void cc2DLabel::clear(bool ignoreDependencies)
 	}
 
 	m_lastScreenPos[0] = m_lastScreenPos[1] = -1;
-	memset(m_labelROI,0,sizeof(int)*4);
+	m_labelROI = QRect(0,0,0,0);
 	setVisible(false);
 	setName("Label");
 }
@@ -159,19 +246,22 @@ void cc2DLabel::updateName()
 		setName("Label");
 		break;
 	case 1:
-		setName("Point #pt_0_idx");
+		setName(QString("Point #") + POINT_INDEX_0);
 		break;
 	case 2:
 		if (m_points[0].cloud == m_points[1].cloud)
-			setName("Vector #pt_0_idx - #pt_1_idx");
+			setName(QString("Vector #") + POINT_INDEX_0 + QString(" - #") + POINT_INDEX_1);
 		else
-			setName("Vector #pt_0_idx(@pt_0_cloud_id) - #pt_1_idx@(@pt_1_cloud_id)");
+			setName(QString("Vector #") + POINT_INDEX_0 + QString("@") + CLOUD_INDEX_0
+			          + QString(" - #") + POINT_INDEX_1 + QString("@") + CLOUD_INDEX_1);
 		break;
 	case 3:
 		if (m_points[0].cloud == m_points[2].cloud && m_points[1].cloud == m_points[2].cloud)
-			setName("Triplet #pt_0_idx - #pt_1_idx - #pt_2_idx");
+			setName(QString("Triplet #") + POINT_INDEX_0 + QString(" - #") + POINT_INDEX_1 + QString(" - #") + POINT_INDEX_2);
 		else
-			setName("Triplet #pt_0_idx(@pt_0_cloud_id) - #pt_1_idx(@pt_1_cloud_id) - #pt_2_idx(@pt_2_cloud_id)");
+			setName(QString("Triplet #") + POINT_INDEX_0 + QString("@") + CLOUD_INDEX_0
+			           + QString(" - #") + POINT_INDEX_1 + QString("@") + CLOUD_INDEX_1
+			           + QString(" - #") + POINT_INDEX_2 + QString("@") + CLOUD_INDEX_2);
 		break;
 	}
 }
@@ -187,7 +277,7 @@ bool cc2DLabel::addPoint(ccGenericPointCloud* cloud, unsigned pointIndex)
 	{
 		m_points.resize(m_points.size()+1);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return false;
@@ -303,27 +393,15 @@ bool cc2DLabel::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	return true;
 }
 
-//return angle between two vectors (in degrees)
-//warning: vectors will be normalized by default
-double GetAngle_deg(CCVector3& AB, CCVector3& AC)
-{
-	AB.normalize();
-	AC.normalize();
-	double dotprod = AB.dot(AC);
-	if (dotprod <= -1.0)
-		return 180.0;
-	else if (dotprod > 1.0)
-		return 0.0;
-	return 180.0*acos(dotprod)/M_PI;
-}
-
-void AddPointCoordinates(QStringList& body, unsigned pointIndex, ccGenericPointCloud* cloud, int precision)
+void AddPointCoordinates(QStringList& body, unsigned pointIndex, ccGenericPointCloud* cloud, int precision, QString pointName = QString())
 {
 	assert(cloud);
 	const CCVector3* P = cloud->getPointPersistentPtr(pointIndex);
 	bool isShifted = cloud->isShifted();
 
 	QString coordStr = QString("P#%0:").arg(pointIndex);
+	if (!pointName.isEmpty())
+		coordStr = QString("%1 (%2)").arg(pointName).arg(coordStr);
 	if (isShifted)
 	{
 		body << coordStr;
@@ -341,6 +419,119 @@ void AddPointCoordinates(QStringList& body, unsigned pointIndex, ccGenericPointC
 	}
 }
 
+void cc2DLabel::getLabelInfo1(LabelInfo1& info) const
+{
+	info.cloud = 0;
+	if (m_points.size() != 1)
+		return;
+
+	//cloud and point index
+	info.cloud = m_points[0].cloud;
+	if (!info.cloud)
+	{
+		assert(false);
+		return;
+	}
+	info.pointIndex = m_points[0].index;
+	//normal
+	info.hasNormal = info.cloud->hasNormals();
+	if (info.hasNormal)
+	{
+		info.normal = info.cloud->getPointNormal(info.pointIndex);
+	}
+	//color
+	info.hasRGB = info.cloud->hasColors();
+	if (info.hasRGB)
+	{
+		const ColorCompType* C = info.cloud->getPointColor(info.pointIndex);
+		assert(C);
+		info.rgb[0] = C[0];
+		info.rgb[1] = C[1];
+		info.rgb[2] = C[2];
+	}
+	//scalar field
+	info.hasSF = info.cloud->hasDisplayedScalarField();
+	if (info.hasSF)
+	{
+		info.sfValue = info.cloud->getPointScalarValue(info.pointIndex);
+
+		info.sfName = "Scalar";
+		//fetch the real scalar field name if possible
+		if (info.cloud->isA(CC_TYPES::POINT_CLOUD))
+		{
+			ccPointCloud* pc = static_cast<ccPointCloud*>(info.cloud);
+			if (pc->getCurrentDisplayedScalarField())
+			{
+				ccScalarField* sf = pc->getCurrentDisplayedScalarField();
+				info.sfName = QString(sf->getName());
+				if (ccScalarField::ValidValue(info.sfValue) && sf->getGlobalShift() != 0)
+				{
+					info.sfShiftedValue = sf->getGlobalShift() + info.sfValue;
+					info.sfValueIsShifted = true;
+				}
+			}
+		}
+	}
+}
+
+void cc2DLabel::getLabelInfo2(LabelInfo2& info) const
+{
+	info.cloud1 = info.cloud2 = 0;
+	if (m_points.size() != 2)
+		return;
+
+	//1st point
+	info.cloud1 = m_points[0].cloud;
+	info.point1Index = m_points[0].index;
+	const CCVector3* P1 = info.cloud1->getPointPersistentPtr(info.point1Index);
+	//2nd point
+	info.cloud2 = m_points[1].cloud;
+	info.point2Index = m_points[1].index;
+	const CCVector3* P2 = info.cloud2->getPointPersistentPtr(info.point2Index);
+
+	info.diff = *P2-*P1;
+}
+
+void cc2DLabel::getLabelInfo3(LabelInfo3& info) const
+{
+	info.cloud1 = info.cloud2 = info.cloud3 = 0;
+	if (m_points.size() != 3)
+		return;
+	//1st point
+	info.cloud1 = m_points[0].cloud;
+	info.point1Index = m_points[0].index;
+	const CCVector3* P1 = info.cloud1->getPointPersistentPtr(info.point1Index);
+	//2nd point
+	info.cloud2 = m_points[1].cloud;
+	info.point2Index = m_points[1].index;
+	const CCVector3* P2 = info.cloud2->getPointPersistentPtr(info.point2Index);
+	//3rd point
+	info.cloud3 = m_points[2].cloud;
+	info.point3Index = m_points[2].index;
+	const CCVector3* P3 = info.cloud3->getPointPersistentPtr(info.point3Index);
+
+	//area
+	CCVector3 P1P2 = *P2-*P1;
+	CCVector3 P1P3 = *P3-*P1;
+	CCVector3 P2P3 = *P3-*P2;
+	CCVector3 N = P1P2.cross(P1P3); //N = ABxAC
+	info.area = N.norm()/2;
+
+	//normal
+	N.normalize();
+	info.normal = N;
+
+	//edges length
+	info.edges.u[0] = P1P2.norm2d();  //edge 1-2
+	info.edges.u[1] = P2P3.norm2d();  //edge 2-3
+	info.edges.u[2] = P1P3.norm2d();  //edge 3-1
+
+	//angle
+	info.angles.u[0] = GetAngle_deg(P1P2,P1P3);   //angleAtP1
+	info.angles.u[1] = GetAngle_deg(P2P3,-P1P2);  //angleAtP2
+	info.angles.u[2] = GetAngle_deg(-P1P3,-P2P3); //angleAtP3 (should be equal to 180-a1-a2!)
+}
+
 QStringList cc2DLabel::getLabelContent(int precision)
 {
 	QStringList body;
@@ -354,45 +545,31 @@ QStringList cc2DLabel::getLabelContent(int precision)
 
 	case 1: //point
 		{
-			//init title
-			/*title = m_title;
-			//automatically elide the title
-			title = titleFontMetrics.elidedText(title,Qt::ElideRight,dx);
-			//*/
+			LabelInfo1 info;
+			getLabelInfo1(info);
+			if (!info.cloud)
+				break;
 
 			//coordinates
-			ccGenericPointCloud* cloud = m_points[0].cloud;
-			const unsigned& pointIndex = m_points[0].index;
-			AddPointCoordinates(body,pointIndex,cloud,precision);
+			AddPointCoordinates(body,info.pointIndex,info.cloud,precision);
 
 			//normal
-			if (cloud->hasNormals())
+			if (info.hasNormal)
 			{
-				const CCVector3& N = cloud->getPointNormal(pointIndex);
-				QString normStr = QString("Normal: (%1;%2;%3)").arg(N.x,0,'f',precision).arg(N.y,0,'f',precision).arg(N.z,0,'f',precision);
+				QString normStr = QString("Normal: (%1;%2;%3)").arg(info.normal.x,0,'f',precision).arg(info.normal.y,0,'f',precision).arg(info.normal.z,0,'f',precision);
 				body << normStr;
 			}
 			//color
-			if (cloud->hasColors())
+			if (info.hasRGB)
 			{
-				const colorType* C = cloud->getPointColor(pointIndex);
-				assert(C);
-				QString colorStr = QString("Color: (%1;%2;%3)").arg(C[0]).arg(C[1]).arg(C[2]);
+				QString colorStr = QString("Color: (%1;%2;%3)").arg(info.rgb[0]).arg(info.rgb[1]).arg(info.rgb[2]);
 				body << colorStr;
 			}
 			//scalar field
-			if (cloud->hasDisplayedScalarField())
+			if (info.hasSF)
 			{
-				ScalarType D = cloud->getPointScalarValue(pointIndex);
-				QString source("Scalar");
-				//fetch the real scalar field name if possible
-				if (cloud->isA(CC_TYPES::POINT_CLOUD))
-				{
-					ccPointCloud* pc = static_cast<ccPointCloud*>(cloud);
-					if (pc->getCurrentDisplayedScalarField())
-						source = QString(pc->getCurrentDisplayedScalarField()->getName());
-				}
-				QString sfStr = QString("%1 = %2").arg(source).arg(D,0,'f',precision);
+				QString sfVal = GetSFValueAsString(info, precision);
+				QString sfStr = QString("%1 = %2").arg(info.sfName).arg(sfVal);
 				body << sfStr;
 			}
 		}
@@ -400,74 +577,67 @@ QStringList cc2DLabel::getLabelContent(int precision)
 
 	case 2: //vector
 		{
-			//1st point
-			ccGenericPointCloud* cloud1 = m_points[0].cloud;
-			const unsigned& pointIndex1 = m_points[0].index;
-			const CCVector3* P1 = cloud1->getPointPersistentPtr(pointIndex1);
-			//2nd point
-			ccGenericPointCloud* cloud2 = m_points[1].cloud;
-			const unsigned& pointIndex2 = m_points[1].index;
-			const CCVector3* P2 = cloud2->getPointPersistentPtr(pointIndex2);
+			LabelInfo2 info;
+			getLabelInfo2(info);
+			if (!info.cloud1 || !info.cloud2)
+				break;
 
-			PointCoordinateType d = (*P1-*P2).norm();
-			QString distStr = QString("Distance = %1").arg(d,0,'f',precision);
-			body << distStr;
+			//distance is now the default label title
+			//PointCoordinateType dist = info.diff.norm();
+			//QString distStr = QString("Distance = %1").arg(dist,0,'f',precision);
+			//body << distStr;
 
-			CCVector3 V = *P2-*P1;
-			QString vecStr = QString("Vec: (%1;%2;%3)").arg(V.x,0,'f',precision).arg(V.y,0,'f',precision).arg(V.z,0,'f',precision);
+			QString vecStr =	MathSymbolDelta + QString("X: %1\t").arg(info.diff.x,0,'f',precision)
+							+	MathSymbolDelta + QString("Y: %1\t").arg(info.diff.y,0,'f',precision)
+							+	MathSymbolDelta + QString("Z: %1"  ).arg(info.diff.z,0,'f',precision);
+
 			body << vecStr;
 
-			AddPointCoordinates(body,pointIndex1,cloud1,precision);
-			AddPointCoordinates(body,pointIndex2,cloud2,precision);
+			PointCoordinateType dXY = sqrt(info.diff.x*info.diff.x + info.diff.y*info.diff.y);
+			PointCoordinateType dXZ = sqrt(info.diff.x*info.diff.x + info.diff.z*info.diff.z);
+			PointCoordinateType dZY = sqrt(info.diff.z*info.diff.z + info.diff.y*info.diff.y);
+
+			vecStr =	MathSymbolDelta + QString("XY: %1\t").arg(dXY,0,'f',precision)
+					+	MathSymbolDelta + QString("XZ: %1\t").arg(dXZ,0,'f',precision)
+					+	MathSymbolDelta + QString("ZY: %1"  ).arg(dZY,0,'f',precision);
+			body << vecStr;
+
+			AddPointCoordinates(body,info.point1Index,info.cloud1,precision);
+			AddPointCoordinates(body,info.point2Index,info.cloud2,precision);
 		}
 		break;
 
 	case 3: //triangle/plane
 		{
-			//1st point
-			ccGenericPointCloud* cloud1 = m_points[0].cloud;
-			const unsigned& pointIndex1 = m_points[0].index;
-			const CCVector3* P1 = cloud1->getPointPersistentPtr(pointIndex1);
-			//2nd point
-			ccGenericPointCloud* cloud2 = m_points[1].cloud;
-			const unsigned& pointIndex2 = m_points[1].index;
-			const CCVector3* P2 = cloud2->getPointPersistentPtr(pointIndex2);
-			//3rd point
-			ccGenericPointCloud* cloud3 = m_points[2].cloud;
-			const unsigned& pointIndex3 = m_points[2].index;
-			const CCVector3* P3 = cloud3->getPointPersistentPtr(pointIndex3);
+			LabelInfo3 info;
+			getLabelInfo3(info);
 
 			//area
-			CCVector3 P1P2 = *P2-*P1;
-			CCVector3 P1P3 = *P3-*P1;
-			CCVector3 N = P1P2.cross(P1P3); //N=ABxAC
-			PointCoordinateType area = N.norm()*(PointCoordinateType)0.5;
-			QString areaStr = QString("Area = %1").arg(area,0,'f',precision);
+			QString areaStr = QString("Area = %1").arg(info.area,0,'f',precision);
 			body << areaStr;
 
 			//coordinates
-			AddPointCoordinates(body,pointIndex1,cloud1,precision);
-			AddPointCoordinates(body,pointIndex2,cloud2,precision);
-			AddPointCoordinates(body,pointIndex3,cloud3,precision);
+			AddPointCoordinates(body,info.point1Index,info.cloud1,precision,"A");
+			AddPointCoordinates(body,info.point2Index,info.cloud2,precision,"B");
+			AddPointCoordinates(body,info.point3Index,info.cloud3,precision,"C");
 
 			//normal
-			N.normalize();
-			QString normStr = QString("Normal: (%1;%2;%3)").arg(N.x,0,'f',precision).arg(N.y,0,'f',precision).arg(N.z,0,'f',precision);
+			QString normStr = QString("Normal: (%1;%2;%3)").arg(info.normal.x,0,'f',precision).arg(info.normal.y,0,'f',precision).arg(info.normal.z,0,'f',precision);
 			body << normStr;
 
-			//angle
-			CCVector3 P2P3 = *P3-*P2;
-
-			//negatives
-			CCVector3 _P1P2 = -P1P2;
-			CCVector3 _P1P3 = -P1P3;
-			CCVector3 _P2P3 = -P2P3;
-
-			double angleAtP1 = GetAngle_deg(P1P2,P1P3);
-			double angleAtP2 = GetAngle_deg(P2P3,_P1P2);
-			double angleAtP3 = GetAngle_deg(_P1P3,_P2P3); //should be equal to 180-a1-a2!
-			QString angleStr = QString("Angles: A=%1 - B=%3 - C=%5 deg.").arg(angleAtP1,0,'f',precision).arg(angleAtP2,0,'f',precision).arg(angleAtP3,0,'f',precision);
+			//angles
+			QString angleStr = QString("Angles: A=%1 - B=%2 - C=%3 deg.")
+									.arg(info.angles.u[0],0,'f',precision)
+									.arg(info.angles.u[1],0,'f',precision)
+									.arg(info.angles.u[2],0,'f',precision);
 			body << angleStr;
+
+			//edges
+			QString edgesStr = QString("Edges: AB=%1 - BC=%2 - CA=%3")
+									.arg(info.edges.u[0],0,'f',precision)
+									.arg(info.edges.u[1],0,'f',precision)
+									.arg(info.edges.u[2],0,'f',precision);
+			body << edgesStr;
 		}
 		break;
 
@@ -483,13 +653,12 @@ bool cc2DLabel::acceptClick(int x, int y, Qt::MouseButton button)
 {
 	if (button == Qt::RightButton)
 	{
-		if (	x >= m_lastScreenPos[0]+m_labelROI[0] && x <= m_lastScreenPos[0]+m_labelROI[2]
-			&&	y >= m_lastScreenPos[1]-m_labelROI[3] && y <= m_lastScreenPos[1]-m_labelROI[1])
-			{
-				//toggle collapse state
-				m_showFullBody = !m_showFullBody;
-				return true;
-			}
+		if (m_labelROI.contains(x-m_lastScreenPos[0],y-m_lastScreenPos[1]))
+		{
+			//toggle collapse state
+			m_showFullBody = !m_showFullBody;
+			return true;
+		}
 	}
 
 	return false;
@@ -545,24 +714,26 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 			//we draw the triangle
 			glColor4ub(255,255,0,128);
 			glBegin(GL_TRIANGLES);
-			for (unsigned i=0; i<count; ++i)
-				ccGL::Vertex3v(m_points[i].cloud->getPoint(m_points[i].index)->u);
+			ccGL::Vertex3v(m_points[0].cloud->getPoint(m_points[0].index)->u);
+			ccGL::Vertex3v(m_points[1].cloud->getPoint(m_points[1].index)->u);
+			ccGL::Vertex3v(m_points[2].cloud->getPoint(m_points[2].index)->u);
 			glEnd();
 
 			glPopAttrib();
-			loop=true;
+			loop = true;
 		}
 	case 2:
 		{
 			//segment width
 			glPushAttrib(GL_LINE_BIT);
-			glLineWidth(c_sizeFactor);
+			glLineWidth(c_sizeFactor * context.renderZoom);
 
 			//we draw the segments
 			if (isSelected())
-				glColor3ubv(ccColor::red);
+				ccGL::Color3v(ccColor::red.rgba);
 			else
-				glColor3ubv(ccColor::green);
+				ccGL::Color3v(ccColor::green.rgba);
+			
 			glBegin(GL_LINES);
 			for (unsigned i=0; i<count; i++)
 			{
@@ -596,7 +767,7 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 				if (isSelected() && !pushName)
 					c_unitPointMarker->setTempColor(ccColor::red);
 				else
-					c_unitPointMarker->setTempColor(ccColor::magenta);
+					c_unitPointMarker->setTempColor(context.labelDefaultMarkerCol);
 
 				for (unsigned i=0; i<count; i++)
 				{
@@ -604,7 +775,8 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 					glPushMatrix();
 					const CCVector3* P = m_points[i].cloud->getPoint(m_points[i].index);
 					ccGL::Translate(P->x,P->y,P->z);
-					glScalef(context.pickedPointsRadius,context.pickedPointsRadius,context.pickedPointsRadius);
+					float scale = context.labelMarkerSize * m_relMarkerScale;
+					glScalef(scale,scale,scale);
 					c_unitPointMarker->draw(markerContext);
 					glPopMatrix();
 				}
@@ -615,6 +787,15 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 				QFont font(context._win->getTextDisplayFont()); //takes rendering zoom into account!
 				//font.setPointSize(font.pointSize()+2);
 				font.setBold(true);
+				static const QChar ABC[3] = {'A','B','C'};
+
+				//we can't use the context 'ccGLCameraParameters' (viewport, modelView matrix, etc. )
+				//because it doesn't take the temporary 'GL transformation' into account!
+				ccGLCameraParameters camera;
+				//context._win->getGLCameraParameters(camera);
+				glGetIntegerv(GL_VIEWPORT, camera.viewport);
+				glGetDoublev(GL_PROJECTION_MATRIX, camera.projectionMat.data());
+				glGetDoublev(GL_MODELVIEW_MATRIX, camera.modelViewMat.data());
 
 				//draw their name
 				glPushAttrib(GL_DEPTH_BUFFER_BIT);
@@ -622,13 +803,25 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 				for (unsigned j=0; j<count; j++)
 				{
 					const CCVector3* P = m_points[j].cloud->getPoint(m_points[j].index);
-					QString title = (count == 1 ? getName() : QString("P#%0").arg(m_points[j].index));
-					context._win->display3DLabel(	title,
-													*P + CCVector3(	context.pickedPointsTextShift,
-																	context.pickedPointsTextShift,
-																	context.pickedPointsTextShift),
-													ccColor::magenta,
-													font );
+					QString title;
+					if (count == 1)
+						title = getName(); //for single-point labels we prefer the name
+					else if (count == 3)
+						title = ABC[j]; //for triangle-labels, we only display "A","B","C"
+					else
+						title = QString("P#%0").arg(m_points[j].index); 
+
+					//project it in 2D screen coordinates
+					CCVector3d Q2D;
+					camera.project(*P, Q2D);
+
+					context._win->displayText(	title,
+												static_cast<int>(Q2D.x) + context.labelMarkerTextShift_pix,
+												static_cast<int>(Q2D.y) + context.labelMarkerTextShift_pix,
+												ccGenericGLDisplay::ALIGN_DEFAULT,
+												context.labelOpacity / 100.0f,
+												ccColor::white.rgba,
+												&font );
 				}
 				glPopAttrib();
 			}
@@ -641,8 +834,80 @@ void cc2DLabel::drawMeOnly3D(CC_DRAW_CONTEXT& context)
 
 //display parameters
 static const int c_margin = 5;
+static const int c_tabMarginX = 5;
+static const int c_tabMarginY = 2;
 static const int c_arrowBaseSize = 3;
 //static const int c_buttonSize = 10;
+
+static const ccColor::Rgba c_darkGreen(0,200,0,255);
+
+//! Data table
+struct Tab
+{
+	//! Default constructor
+	Tab(int _maxBlockPerRow = 2)
+		: maxBlockPerRow(_maxBlockPerRow)
+		, blockCount(0)
+		, rowCount(0)
+		, colCount(0)
+	{}
+
+	//! Sets the maximum number of blocks per row
+	/** \warning Must be called before adding data!
+	**/
+	inline void setMaxBlockPerRow(int maxBlock) { maxBlockPerRow = maxBlock; }
+
+	//! Adds a 2x3 block (must be filled!)
+	int add2x3Block()
+	{
+		//add columns (if necessary)
+		if (colCount < maxBlockPerRow*2)
+		{
+			colCount += 2;
+			colContent.resize(colCount);
+			colWidth.resize(colCount,0);
+		}
+		int blockCol = (blockCount % maxBlockPerRow);
+		//add new row
+		if (blockCol == 0)
+			rowCount += 3;
+		++blockCount;
+
+		//return the first column index of the block
+		return blockCol*2;
+	}
+
+	//! Updates columns width table
+	/** \return the total width
+	**/
+	int updateColumnsWidthTable(const QFontMetrics& fm)
+	{
+		//compute min width of each column
+		int totalWidth = 0;
+		for (int i=0; i<colCount; ++i)
+		{
+			int maxWidth = 0;
+			for (int j=0; j<colContent[i].size(); ++j)
+				maxWidth = std::max(maxWidth, fm.width(colContent[i][j]));
+			colWidth[i] = maxWidth;
+			totalWidth += maxWidth;
+		}
+		return totalWidth;
+	}
+
+	//! Maximum number of blocks per row
+	int maxBlockPerRow;
+	//! Number of 2x3 blocks
+	int blockCount;
+	//! Number of rows
+	int rowCount;
+	//! Number of columns
+	int colCount;
+	//! Columns width
+	std::vector<int> colWidth;
+	//! Columns content
+	std::vector<QStringList> colContent;
+};
 
 void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 {
@@ -659,11 +924,28 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 	//we should already be in orthoprojective & centered omde
 	//glOrtho(-halfW,halfW,-halfH,halfH,-maxS,maxS);
 
-	int strHeight = 0;
-	int titleHeight = 0;
-	QString title(getName());
+	//label title
+	const int precision = context.dispNumberPrecision;
+	QString title = getTitle(precision);
+
+#define DRAW_CONTENT_AS_TAB
+#ifdef DRAW_CONTENT_AS_TAB
+	//draw contents as an array
+	Tab tab(4);
+	int rowHeight = 0;
+#else
+//simply display the content as text
 	QStringList body;
-	GLdouble arrowDestX=-1.0,arrowDestY=-1.0;
+#endif
+
+	//render zoom
+	int margin        = static_cast<int>(c_margin        * context.renderZoom);
+	int tabMarginX    = static_cast<int>(c_tabMarginX    * context.renderZoom);
+	int tabMarginY    = static_cast<int>(c_tabMarginY    * context.renderZoom);
+	int arrowBaseSize = static_cast<int>(c_arrowBaseSize * context.renderZoom);
+	
+	int titleHeight = 0;
+	GLdouble arrowDestX = -1.0, arrowDestY = -1.0;
 	QFont bodyFont,titleFont;
 	if (!pushName)
 	{
@@ -674,89 +956,218 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 		m_points[0].cloud->getPoint(m_points[0].index,arrowDest);
 		for (unsigned i=1; i<m_points.size(); ++i)
 			arrowDest += *m_points[i].cloud->getPointPersistentPtr(m_points[i].index);
-		arrowDest /= (PointCoordinateType)m_points.size();
+		arrowDest /= static_cast<PointCoordinateType>(m_points.size());
 
 		//project it in 2D screen coordinates
-		int VP[4];
-		context._win->getViewportArray(VP);
-		const double* MM = context._win->getModelViewMatd(); //viewMat
-		const double* MP = context._win->getProjectionMatd(); //projMat
-		GLdouble zp;
-		gluProject(arrowDest.x,arrowDest.y,arrowDest.z,MM,MP,VP,&arrowDestX,&arrowDestY,&zp);
+		{
+			ccGLCameraParameters camera;
+			context._win->getGLCameraParameters(camera);
+
+			CCVector3d Q2D;
+			camera.project(arrowDest, Q2D);
+			arrowDestX = Q2D.x;
+			arrowDestY = Q2D.y;
+		}
 
 		/*** label border ***/
-		bodyFont = context._win->getTextDisplayFont(); //takes rendering zoom into account!
-		titleFont = QFont(context._win->getTextDisplayFont()); //takes rendering zoom into account!
-		titleFont.setBold(true);
-		QFontMetrics titleFontMetrics(titleFont);
-		QFontMetrics bodyFontMetrics(bodyFont);
+		bodyFont = context._win->getLabelDisplayFont(); //takes rendering zoom into account!
+		titleFont = bodyFont; //takes rendering zoom into account!
+		//titleFont.setBold(true);
 
-		strHeight = bodyFontMetrics.height();
+		QFontMetrics titleFontMetrics(titleFont);
 		titleHeight = titleFontMetrics.height();
 
-		if (m_showFullBody)
-			body = getLabelContent(context.dispNumberPrecision);
+		QFontMetrics bodyFontMetrics(bodyFont);
+		rowHeight = bodyFontMetrics.height();
 
-		//base box dimension
-		int dx = 150;
-		dx = std::max(dx,titleFontMetrics.width(title));
-
-		int dy = c_margin;	//top vertical margin
-		dy += titleHeight;	//title
-		if (!body.empty())
+		//get label box dimension
+		int dx = 100;
+		int dy = 0;
+		//int buttonSize    = static_cast<int>(c_buttonSize * context.renderZoom);
 		{
-			dy += c_margin;	//vertical margin above separator
-			for (int j=0; j<body.size(); ++j)
+			//base box dimension
+			dx = std::max(dx,titleFontMetrics.width(title));
+			dy += margin;		//top vertical margin
+			dy += titleHeight;	//title
+
+			if (m_showFullBody)
 			{
-				dx = std::max(dx,bodyFontMetrics.width(body[j]));
-				dy += strHeight; //body line height
+#ifdef DRAW_CONTENT_AS_TAB
+				try
+				{
+					size_t labelCount = m_points.size();
+					if (labelCount == 1)
+					{
+						LabelInfo1 info;
+						getLabelInfo1(info);
+
+						bool isShifted = info.cloud->isShifted();
+						//1st block: X, Y, Z (local)
+						{
+							int c = tab.add2x3Block();
+							QChar suffix;
+							if (isShifted)
+								suffix = 'l'; //'l' for local
+							const CCVector3* P = info.cloud->getPoint(info.pointIndex);
+							tab.colContent[c] << QString("X") + suffix; tab.colContent[c+1] << QString::number(P->x,'f',precision);
+							tab.colContent[c] << QString("Y") + suffix; tab.colContent[c+1] << QString::number(P->y,'f',precision);
+							tab.colContent[c] << QString("Z") + suffix; tab.colContent[c+1] << QString::number(P->z,'f',precision);
+						}
+						//next block:  X, Y, Z (global)
+						if (isShifted)
+						{
+							int c = tab.add2x3Block();
+							CCVector3d P = info.cloud->toGlobal3d(*info.cloud->getPoint(info.pointIndex));
+							tab.colContent[c] << "Xg"; tab.colContent[c+1] << QString::number(P.x,'f',precision);
+							tab.colContent[c] << "Yg"; tab.colContent[c+1] << QString::number(P.y,'f',precision);
+							tab.colContent[c] << "Zg"; tab.colContent[c+1] << QString::number(P.z,'f',precision);
+						}
+						//next block: normal
+						if (info.hasNormal)
+						{
+							int c = tab.add2x3Block();
+							tab.colContent[c] << "Nx"; tab.colContent[c+1] << QString::number(info.normal.x,'f',precision);
+							tab.colContent[c] << "Ny"; tab.colContent[c+1] << QString::number(info.normal.y,'f',precision);
+							tab.colContent[c] << "Nz"; tab.colContent[c+1] << QString::number(info.normal.z,'f',precision);
+						}
+
+						//next block: RGB color
+						if (info.hasRGB)
+						{
+							int c = tab.add2x3Block();
+							tab.colContent[c] <<"R"; tab.colContent[c+1] << QString::number(info.rgb.x);
+							tab.colContent[c] <<"G"; tab.colContent[c+1] << QString::number(info.rgb.y);
+							tab.colContent[c] <<"B"; tab.colContent[c+1] << QString::number(info.rgb.z);
+						}
+					}
+					else if (labelCount == 2)
+					{
+						LabelInfo2 info;
+						getLabelInfo2(info);
+
+						//1st block: dX, dY, dZ
+						{
+							int c = tab.add2x3Block();
+							tab.colContent[c] << MathSymbolDelta + QString("X"); tab.colContent[c+1] << QString::number(info.diff.x,'f',precision);
+							tab.colContent[c] << MathSymbolDelta + QString("Y"); tab.colContent[c+1] << QString::number(info.diff.y,'f',precision);
+							tab.colContent[c] << MathSymbolDelta + QString("Z"); tab.colContent[c+1] << QString::number(info.diff.z,'f',precision);
+						}
+						//2nd block: dXY, dXZ, dZY
+						{
+							int c = tab.add2x3Block();
+							PointCoordinateType dXY = sqrt(info.diff.x*info.diff.x + info.diff.y*info.diff.y);
+							PointCoordinateType dXZ = sqrt(info.diff.x*info.diff.x + info.diff.z*info.diff.z);
+							PointCoordinateType dZY = sqrt(info.diff.z*info.diff.z + info.diff.y*info.diff.y);
+							tab.colContent[c] << MathSymbolDelta + QString("XY"); tab.colContent[c+1] << QString::number(dXY,'f',precision);
+							tab.colContent[c] << MathSymbolDelta + QString("XZ"); tab.colContent[c+1] << QString::number(dXZ,'f',precision);
+							tab.colContent[c] << MathSymbolDelta + QString("ZY"); tab.colContent[c+1] << QString::number(dZY,'f',precision);
+						}
+					}
+					else if (labelCount == 3)
+					{
+						LabelInfo3 info;
+						getLabelInfo3(info);
+						tab.setMaxBlockPerRow(2); //square tab (2x2 blocks)
+
+						//next block: indexes
+						{
+							int c = tab.add2x3Block();
+							tab.colContent[c] << "index.A"; tab.colContent[c+1] << QString::number(info.point1Index);
+							tab.colContent[c] << "index.B"; tab.colContent[c+1] << QString::number(info.point2Index);
+							tab.colContent[c] << "index.C"; tab.colContent[c+1] << QString::number(info.point3Index);
+						}
+						//next block: edges length
+						{
+							int c = tab.add2x3Block();
+							tab.colContent[c] << "AB"; tab.colContent[c+1] << QString::number(info.edges.u[0],'f',precision);
+							tab.colContent[c] << "BC"; tab.colContent[c+1] << QString::number(info.edges.u[1],'f',precision);
+							tab.colContent[c] << "CA"; tab.colContent[c+1] << QString::number(info.edges.u[2],'f',precision);
+						}
+						//next block: angles
+						{
+							int c = tab.add2x3Block();
+							tab.colContent[c] << "angle.A"; tab.colContent[c+1] << QString::number(info.angles.u[0],'f',precision);
+							tab.colContent[c] << "angle.B"; tab.colContent[c+1] << QString::number(info.angles.u[1],'f',precision);
+							tab.colContent[c] << "angle.C"; tab.colContent[c+1] << QString::number(info.angles.u[2],'f',precision);
+						}
+						//next block: normal
+						{
+							int c = tab.add2x3Block();
+							tab.colContent[c] << "Nx"; tab.colContent[c+1] << QString::number(info.normal.x,'f',precision);
+							tab.colContent[c] << "Ny"; tab.colContent[c+1] << QString::number(info.normal.y,'f',precision);
+							tab.colContent[c] << "Nz"; tab.colContent[c+1] << QString::number(info.normal.z,'f',precision);
+						}
+					}
+				}
+				catch (const std::bad_alloc&)
+				{
+					//not enough memory
+					return;
+				}
+
+				//compute min width of each column
+				int totalWidth = tab.updateColumnsWidthTable(bodyFontMetrics);
+
+				int tabWidth = totalWidth + tab.colCount * (2*tabMarginX); //add inner margins
+				dx = std::max(dx,tabWidth);
+				dy += tab.rowCount * (rowHeight + 2*tabMarginY); //add inner margins
+				//we also add a margin every 3 rows
+				dy += std::max(0,(tab.rowCount/3)-1) * margin;
+				dy += margin;		//bottom vertical margin
+#else
+				body = getLabelContent(precision);
+				if (!body.empty())
+				{
+					dy += margin;	//vertical margin above separator
+					for (int j=0; j<body.size(); ++j)
+					{
+						dx = std::max(dx,bodyFontMetrics.width(body[j]));
+						dy += rowHeight; //body line height
+					}
+					dy += margin;	//vertical margin below text
+				}
+#endif //DRAW_CONTENT_AS_TAB
 			}
-			dy += c_margin;	//vertical margin below text
+
+			dx += margin*2;	// horizontal margins
 		}
-		else
-		{
-			dy += c_margin;	// vertical margin (purely for aesthetics)
-		}
-		dy += c_margin;		// bottom vertical margin
-		dx += c_margin*2;	// horizontal margins
 
 		//main rectangle
-		m_labelROI[0]=0;
-		m_labelROI[1]=0;
-		m_labelROI[2]=dx;
-		m_labelROI[3]=dy;
+		m_labelROI = QRect(0,0,dx,dy);
 
 		//close button
-		/*m_closeButtonROI[2]=dx-c_margin;
-		m_closeButtonROI[0]=m_closeButtonROI[2]-c_buttonSize;
-		m_closeButtonROI[3]=c_margin;
-		m_closeButtonROI[1]=m_closeButtonROI[3]+c_buttonSize;
-		//*/
+		//m_closeButtonROI.right()   = dx-margin;
+		//m_closeButtonROI.left()    = m_closeButtonROI.right()-buttonSize;
+		//m_closeButtonROI.bottom()  = margin;
+		//m_closeButtonROI.top()     = m_closeButtonROI.bottom()+buttonSize;
 
 		//automatically elide the title
-		//title = titleFontMetrics.elidedText(title,Qt::ElideRight,m_closeButtonROI[0]-2*c_margin);
+		//title = titleFontMetrics.elidedText(title,Qt::ElideRight,m_closeButtonROI[0]-2*margin);
 	}
 
 	int halfW = (context.glW >> 1);
 	int halfH = (context.glH >> 1);
 
 	//draw label rectangle
-	int xStart = m_lastScreenPos[0] = (int)((float)context.glW * m_screenPos[0]);
-	int yStart = m_lastScreenPos[1] = (int)((float)context.glH * (1.0f-m_screenPos[1]));
+	int xStart = static_cast<int>(static_cast<float>(context.glW) * m_screenPos[0]);
+	int yStart = static_cast<int>(static_cast<float>(context.glH) * (1.0f-m_screenPos[1]));
+
+	m_lastScreenPos[0] = xStart;
+	m_lastScreenPos[1] = yStart - m_labelROI.height();
 
 	//colors
 	bool highlighted = (!pushName && isSelected());
 	//default background color
-	colorType defaultBkgColor[4];
-	memcpy(defaultBkgColor,context.labelDefaultCol,sizeof(colorType)*3);
-	defaultBkgColor[3] = (colorType)((float)context.labelsTransparency*(float)MAX_COLOR_COMP/100.0f);
+	unsigned char alpha = static_cast<unsigned char>((context.labelOpacity/100.0) * 255);
+	ccColor::Rgbaub defaultBkgColor(context.labelDefaultBkgCol,alpha);
 	//default border color (mustn't be totally transparent!)
-	colorType defaultBorderColor[4];
-	if (highlighted)
-		memcpy(defaultBorderColor,ccColor::red,sizeof(colorType)*3);
-	else
-		memcpy(defaultBorderColor,context.labelDefaultCol,sizeof(colorType)*3);
-	defaultBorderColor[3] = (colorType)((float)(50+context.labelsTransparency/2)*(float)MAX_COLOR_COMP/100.0f);
+	ccColor::Rgbaub defaultBorderColor(ccColor::red);
+	if (!highlighted)
+	{
+		//apply only half of the transparency
+		unsigned char halfAlpha = static_cast<unsigned char>((50.0 + context.labelOpacity/200.0) * 255);
+		defaultBorderColor = ccColor::Rgbaub(context.labelDefaultBkgCol,halfAlpha);
+	}
 
 	glPushAttrib(GL_COLOR_BUFFER_BIT);
 	glEnable(GL_BLEND);
@@ -769,19 +1180,19 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 	{
 		//compute arrow base position relatively to the label rectangle (for 0 to 8)
 		int arrowBaseConfig = 0;
-		int iArrowDestX = (int)arrowDestX-xStart;
-		int iArrowDestY = (int)arrowDestY-yStart;
+		int iArrowDestX = static_cast<int>(arrowDestX)-xStart;
+		int iArrowDestY = static_cast<int>(arrowDestY)-yStart;
 		{
-			if (iArrowDestX < m_labelROI[0]) //left
+			if (iArrowDestX < m_labelROI.left()) //left
 				arrowBaseConfig += 0;
-			else if (iArrowDestX > m_labelROI[2]) //Right
+			else if (iArrowDestX > m_labelROI.right()) //Right
 				arrowBaseConfig += 2;
 			else  //Middle
 				arrowBaseConfig += 1;
 
-			if (iArrowDestY > -m_labelROI[1]) //Top
+			if (iArrowDestY > -m_labelROI.top()) //Top
 				arrowBaseConfig += 0;
-			else if (iArrowDestY < -m_labelROI[3]) //Bottom
+			else if (iArrowDestY < -m_labelROI.bottom()) //Bottom
 				arrowBaseConfig += 6;
 			else  //Middle
 				arrowBaseConfig += 3;
@@ -790,48 +1201,48 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 		//we make the arrow base start from the nearest corner
 		if (arrowBaseConfig != 4) //4 = label above point!
 		{
-			glColor4ubv(defaultBorderColor);
+			glColor4ubv(defaultBorderColor.rgba);
 			glBegin(GL_TRIANGLE_FAN);
 			glVertex2d(arrowDestX-xStart,arrowDestY-yStart);
 			switch(arrowBaseConfig)
 			{
 			case 0: //top-left corner
-				glVertex2i(m_labelROI[0], -m_labelROI[1]-2*c_arrowBaseSize);
-				glVertex2i(m_labelROI[0], -m_labelROI[1]);
-				glVertex2i(m_labelROI[0]+2*c_arrowBaseSize, -m_labelROI[1]);
+				glVertex2i(m_labelROI.left(), -m_labelROI.top()-2*arrowBaseSize);
+				glVertex2i(m_labelROI.left(), -m_labelROI.top());
+				glVertex2i(m_labelROI.left()+2*arrowBaseSize, -m_labelROI.top());
 				break;
 			case 1: //top-middle edge
-				glVertex2i(std::max(m_labelROI[0],iArrowDestX-c_arrowBaseSize), -m_labelROI[1]);
-				glVertex2i(std::min(m_labelROI[2],iArrowDestX+c_arrowBaseSize), -m_labelROI[1]);
+				glVertex2i(std::max(m_labelROI.left(),iArrowDestX-arrowBaseSize), -m_labelROI.top());
+				glVertex2i(std::min(m_labelROI.right(),iArrowDestX+arrowBaseSize), -m_labelROI.top());
 				break;
 			case 2: //top-right corner
-				glVertex2i(m_labelROI[2], -m_labelROI[1]-2*c_arrowBaseSize);
-				glVertex2i(m_labelROI[2], -m_labelROI[1]);
-				glVertex2i(m_labelROI[2]-2*c_arrowBaseSize, -m_labelROI[1]);
+				glVertex2i(m_labelROI.right(), -m_labelROI.top()-2*arrowBaseSize);
+				glVertex2i(m_labelROI.right(), -m_labelROI.top());
+				glVertex2i(m_labelROI.right()-2*arrowBaseSize, -m_labelROI.top());
 				break;
 			case 3: //middle-left edge
-				glVertex2i(m_labelROI[0], std::min(-m_labelROI[1],iArrowDestY+c_arrowBaseSize));
-				glVertex2i(m_labelROI[0], std::max(-m_labelROI[3],iArrowDestY-c_arrowBaseSize));
+				glVertex2i(m_labelROI.left(), std::min(-m_labelROI.top(),iArrowDestY+arrowBaseSize));
+				glVertex2i(m_labelROI.left(), std::max(-m_labelROI.bottom(),iArrowDestY-arrowBaseSize));
 				break;
 			case 4: //middle of rectangle!
 				break;
 			case 5: //middle-right edge
-				glVertex2i(m_labelROI[2], std::min(-m_labelROI[1],iArrowDestY+c_arrowBaseSize));
-				glVertex2i(m_labelROI[2], std::max(-m_labelROI[3],iArrowDestY-c_arrowBaseSize));
+				glVertex2i(m_labelROI.right(), std::min(-m_labelROI.top(),iArrowDestY+arrowBaseSize));
+				glVertex2i(m_labelROI.right(), std::max(-m_labelROI.bottom(),iArrowDestY-arrowBaseSize));
 				break;
 			case 6: //bottom-left corner
-				glVertex2i(m_labelROI[0], -m_labelROI[3]+2*c_arrowBaseSize);
-				glVertex2i(m_labelROI[0], -m_labelROI[3]);
-				glVertex2i(m_labelROI[0]+2*c_arrowBaseSize, -m_labelROI[3]);
+				glVertex2i(m_labelROI.left(), -m_labelROI.bottom()+2*arrowBaseSize);
+				glVertex2i(m_labelROI.left(), -m_labelROI.bottom());
+				glVertex2i(m_labelROI.left()+2*arrowBaseSize, -m_labelROI.bottom());
 				break;
 			case 7: //bottom-middle edge
-				glVertex2i(std::max(m_labelROI[0],iArrowDestX-c_arrowBaseSize), -m_labelROI[3]);
-				glVertex2i(std::min(m_labelROI[2],iArrowDestX+c_arrowBaseSize), -m_labelROI[3]);
+				glVertex2i(std::max(m_labelROI.left(),iArrowDestX-arrowBaseSize), -m_labelROI.bottom());
+				glVertex2i(std::min(m_labelROI.right(),iArrowDestX+arrowBaseSize), -m_labelROI.bottom());
 				break;
 			case 8: //bottom-right corner
-				glVertex2i(m_labelROI[2], -m_labelROI[3]+2*c_arrowBaseSize);
-				glVertex2i(m_labelROI[2], -m_labelROI[3]);
-				glVertex2i(m_labelROI[2]-2*c_arrowBaseSize, -m_labelROI[3]);
+				glVertex2i(m_labelROI.right(), -m_labelROI.bottom()+2*arrowBaseSize);
+				glVertex2i(m_labelROI.right(), -m_labelROI.bottom());
+				glVertex2i(m_labelROI.right()-2*arrowBaseSize, -m_labelROI.bottom());
 				break;
 			}
 			glEnd();
@@ -839,24 +1250,24 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 	}
 
 	//main rectangle
-	glColor4ubv(defaultBkgColor);
+	glColor4ubv(defaultBkgColor.rgba);
 	glBegin(GL_QUADS);
-	glVertex2i(m_labelROI[0], -m_labelROI[1]);
-	glVertex2i(m_labelROI[0], -m_labelROI[3]);
-	glVertex2i(m_labelROI[2], -m_labelROI[3]);
-	glVertex2i(m_labelROI[2], -m_labelROI[1]);
+	glVertex2i(m_labelROI.left(),  -m_labelROI.top());
+	glVertex2i(m_labelROI.left(),  -m_labelROI.bottom());
+	glVertex2i(m_labelROI.right(), -m_labelROI.bottom());
+	glVertex2i(m_labelROI.right(), -m_labelROI.top());
 	glEnd();
 
 	//if (highlighted)
 	{
 		glPushAttrib(GL_LINE_BIT);
-		glLineWidth(3.0f);
-		glColor4ubv(defaultBorderColor);
+		glLineWidth(3.0f * context.renderZoom);
+		glColor4ubv(defaultBorderColor.rgba);
 		glBegin(GL_LINE_LOOP);
-		glVertex2i(m_labelROI[0], -m_labelROI[1]);
-		glVertex2i(m_labelROI[0], -m_labelROI[3]);
-		glVertex2i(m_labelROI[2], -m_labelROI[3]);
-		glVertex2i(m_labelROI[2], -m_labelROI[1]);
+		glVertex2i(m_labelROI.left(),  -m_labelROI.top());
+		glVertex2i(m_labelROI.left(),  -m_labelROI.bottom());
+		glVertex2i(m_labelROI.right(), -m_labelROI.bottom());
+		glVertex2i(m_labelROI.right(), -m_labelROI.top());
 		glEnd();
 		glPopAttrib();
 	}
@@ -864,47 +1275,123 @@ void cc2DLabel::drawMeOnly2D(CC_DRAW_CONTEXT& context)
 	//draw close button
 	/*glColor3ubv(ccColor::black);
 	glBegin(GL_LINE_LOOP);
-	glVertex2i(m_closeButtonROI[0],-m_closeButtonROI[1]);
-	glVertex2i(m_closeButtonROI[0],-m_closeButtonROI[3]);
-	glVertex2i(m_closeButtonROI[2],-m_closeButtonROI[3]);
-	glVertex2i(m_closeButtonROI[2],-m_closeButtonROI[1]);
+	glVertex2i(m_closeButtonROI.left(),-m_closeButtonROI.top());
+	glVertex2i(m_closeButtonROI.left(),-m_closeButtonROI.bottom());
+	glVertex2i(m_closeButtonROI.right(),-m_closeButtonROI.bottom());
+	glVertex2i(m_closeButtonROI.right(),-m_closeButtonROI.top());
 	glEnd();
 	glBegin(GL_LINES);
-	glVertex2i(m_closeButtonROI[0]+2,-m_closeButtonROI[1]+2);
-	glVertex2i(m_closeButtonROI[2]-2,-m_closeButtonROI[3]-2);
-	glVertex2i(m_closeButtonROI[2]-2,-m_closeButtonROI[1]+2);
-	glVertex2i(m_closeButtonROI[0]+2,-m_closeButtonROI[3]-2);
+	glVertex2i(m_closeButtonROI.left()+2,-m_closeButtonROI.top()+2);
+	glVertex2i(m_closeButtonROI.right()-2,-m_closeButtonROI.bottom()-2);
+	glVertex2i(m_closeButtonROI.right()-2,-m_closeButtonROI.top()+2);
+	glVertex2i(m_closeButtonROI.left()+2,-m_closeButtonROI.bottom()-2);
 	glEnd();
 	//*/
 
 	//display text
 	if (!pushName)
 	{
-		int xStartRel = c_margin;
-		int yStartRel = -c_margin;
+		int xStartRel = margin;
+		int yStartRel = 0;
 		yStartRel -= titleHeight;
 
-		const colorType* defaultTextColor = (context.labelsTransparency<40 ? context.textDefaultCol : ccColor::darkBlue);
-
-		context._win->displayText(title,xStart+xStartRel,yStart+yStartRel,ccGenericGLDisplay::ALIGN_DEFAULT,0,defaultTextColor,&titleFont);
-		yStartRel -= c_margin;
-
-		if (!body.empty())
+		ccColor::Rgbub defaultTextColor;
+		if (context.labelOpacity < 40)
 		{
-			//line separation
-			glColor4ubv(defaultBorderColor);
-			glBegin(GL_LINES);
-			glVertex2i(xStartRel,yStartRel);
-			glVertex2i(xStartRel+m_labelROI[2]-m_labelROI[0]-2*c_margin,yStartRel);
-			glEnd();
+			//under a given opacity level, we use the default text color instead!
+			defaultTextColor = context.textDefaultCol;
+		}
+		else
+		{
+			defaultTextColor = ccColor::Rgbub(	255 - context.labelDefaultBkgCol.r,
+												255 - context.labelDefaultBkgCol.g,
+												255 - context.labelDefaultBkgCol.b);
+		}
 
-			//display body
-			yStartRel -= c_margin;
-			for (int i=0; i<body.size(); ++i)
+		//label title
+		context._win->displayText(	title,
+									xStart+xStartRel,
+									yStart+yStartRel,
+									ccGenericGLDisplay::ALIGN_DEFAULT,
+									0,
+									defaultTextColor.rgb,
+									&titleFont);
+		yStartRel -= margin;
+		
+		if (m_showFullBody)
+		{
+#ifdef DRAW_CONTENT_AS_TAB
+			int xCol = xStartRel;
+			for (int c=0; c<tab.colCount; ++c)
 			{
-				yStartRel -= strHeight;
-				context._win->displayText(body[i],xStart+xStartRel,yStart+yStartRel,ccGenericGLDisplay::ALIGN_DEFAULT,0,defaultTextColor,&bodyFont);
+				int width = tab.colWidth[c] + 2*tabMarginX;
+				int height = rowHeight + 2*tabMarginY;
+
+				int yRow = yStartRel;
+				int actualRowCount = std::min(tab.rowCount,tab.colContent[c].size());
+
+				bool labelCol = ((c & 1) == 0);
+				const unsigned char* textColor = labelCol ? ccColor::white.rgba : defaultTextColor.rgb;
+				
+				for (int r=0; r<actualRowCount; ++r)
+				{
+					if (r && (r % 3) == 0)
+						yRow -= margin;
+
+					if (labelCol)
+					{
+						//draw background
+						int rgbIndex = (r % 3);
+						if (rgbIndex == 0)
+							glColor3ubv(ccColor::red.rgba);
+						else if (rgbIndex == 1)
+							glColor3ubv(c_darkGreen.rgba);
+						else if (rgbIndex == 2)
+							glColor3ubv(ccColor::blue.rgba);
+
+						glBegin(GL_QUADS);
+						glVertex2i(m_labelROI.left() + xCol, -m_labelROI.top() + yRow);
+						glVertex2i(m_labelROI.left() + xCol, -m_labelROI.top() + yRow - height);
+						glVertex2i(m_labelROI.left() + xCol + width, -m_labelROI.top() + yRow - height);
+						glVertex2i(m_labelROI.left() + xCol + width, -m_labelROI.top() + yRow);
+						glEnd();
+					}
+
+					const QString& str = tab.colContent[c][r];
+
+					int xShift = 0;
+					if (labelCol)
+					{
+						//align characters in the middle
+						xShift = (tab.colWidth[c] - QFontMetrics(bodyFont).width(str)) / 2;
+					}
+					else
+					{
+						//align digits on the right
+						xShift = tab.colWidth[c] - QFontMetrics(bodyFont).width(str);
+					}
+
+					context._win->displayText(	str,
+												xStart+xCol+tabMarginX+xShift,
+												yStart+yRow-rowHeight,ccGenericGLDisplay::ALIGN_DEFAULT,0,textColor,&bodyFont);
+
+					yRow -= height;
+				}
+
+				xCol += width;
 			}
+#else
+			if (!body.empty())
+			{
+				//display body
+				yStartRel -= margin;
+				for (int i=0; i<body.size(); ++i)
+				{
+					yStartRel -= rowHeight;
+					context._win->displayText(body[i],xStart+xStartRel,yStart+yStartRel,ccGenericGLDisplay::ALIGN_DEFAULT,0,defaultTextColor.rgb,&bodyFont);
+				}
+			}
+#endif //DRAW_CONTENT_AS_TAB
 		}
 	}
 

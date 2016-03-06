@@ -21,6 +21,11 @@
 #include <string.h>
 #include <iostream>
 #include <stdlib.h>
+#include <assert.h>
+#include <unordered_set>
+
+//qCC_db
+//#include <ccLog.h>
 
 using namespace PdmsTools;
 using namespace PdmsCommands;
@@ -35,9 +40,50 @@ using namespace PdmsObjects;
 #define PDMS_SQR(a) (a*a)
 
 /////////// GLOBALS ////////////
-ElementCreation::ElementsStack* ElementCreation::s_elementsStack = NULL;
 Token DistanceValue::workingUnit = PDMS_MILLIMETRE;
 static GroupElement defaultWorld(PDMS_WORLD);
+
+///////////////////////////////
+// ITEM STACK
+///////////////////////////////
+typedef std::unordered_set<PdmsObjects::GenericItem*> ElementsStack;
+ElementsStack s_elementsStack;
+
+void PdmsObjects::Stack::Init()
+{
+	assert(s_elementsStack.empty());
+	s_elementsStack.clear();
+}
+
+void PdmsObjects::Stack::Clear()
+{
+	//DGM: warning, while deleting some entities, the stack may be modified!!!
+	while (!s_elementsStack.empty())
+	{
+		GenericItem* item = *(s_elementsStack.begin());
+		s_elementsStack.erase(item);
+		if (item)
+		{
+			//ccLog::Print(QString("[PDMS] Should be deleting %1").arg(item->name));
+			delete item;
+		}
+	}
+	s_elementsStack.clear();
+}
+
+void PdmsObjects::Stack::Detroy(GenericItem* &item)
+{
+	if (item)
+	{
+		//ccLog::Print(QString("[PDMS] Destroying %1").arg((item)->name));
+		if (s_elementsStack.find(item) != s_elementsStack.end())
+		{
+			s_elementsStack.erase(item);
+			delete item;
+		}
+		item = 0;
+	}
+}
 
 ///////////////////////////////
 // PDMS COMMANDS IMPLEMENTATION
@@ -70,11 +116,9 @@ PointCoordinateType NumericalValue::getValue() const
 	}
 }
 
-bool NumericalValue::execute(PdmsObjects::GenericItem **item) const
+bool NumericalValue::execute(PdmsObjects::GenericItem* &item) const
 {
-	if (!*item)
-		return false;
-	return ((*item)->setValue(command, getValue()));
+	return item ? item->setValue(command, getValue()) : false;
 }
 
 bool DistanceValue::handle(Token t)
@@ -97,14 +141,10 @@ PointCoordinateType DistanceValue::getValueInWorkingUnit() const
 	return value;
 }
 
-bool DistanceValue::execute(PdmsObjects::GenericItem **item) const
+bool DistanceValue::execute(PdmsObjects::GenericItem* &item) const
 {
-	if (!*item)
-		return false;
-	
-	return((*item)->setValue(command, getValueInWorkingUnit()));
+	return item ? item->setValue(command, getValueInWorkingUnit()) : false;
 }
-
 
 Reference& Reference::operator=(const Reference &ref)
 {
@@ -161,33 +201,27 @@ int Reference::isSet() const
 	return nb;
 }
 
-bool Reference::execute(PdmsObjects::GenericItem **item) const
+bool Reference::execute(PdmsObjects::GenericItem* &item) const
 {
-	if (!item)
-		return false;
-
 	//Handle the PDMS_LAST command
 	if (command == PDMS_LAST)
 	{
-		if (ElementCreation::s_elementsStack->size()<2)
+		if (s_elementsStack.size() < 2)
 			return false;
-		ElementCreation::ElementsStack::const_reverse_iterator it = ElementCreation::s_elementsStack->rbegin();
-		it++;
-		
+		ElementsStack::const_reverse_iterator it = s_elementsStack.rbegin(); ++it;
 		if (isSet() == 1)
 		{
-			while (it != ElementCreation::s_elementsStack->rend())
+			for( ; it != s_elementsStack.rend(); ++it)
 			{
 				if (isNameReference() && strcmp(refname,(*it)->name) == 0)
 					break;
 				if (isTokenReference() && (*it)->getType() == token)
 					break;
-				it++;
 			}
-			if (it == ElementCreation::s_elementsStack->rend())
+			if (it == s_elementsStack.rend())
 				return false;
 		}
-		*item = *it;
+		item = *it;
 		return true;
 	}
 
@@ -204,7 +238,9 @@ bool Reference::execute(PdmsObjects::GenericItem **item) const
 	if (isNameReference())
 	{
 		//Use the hierarchy scanning function given the requested object name
-		result = (*item)->getRoot()->scan(refname);
+		if (item)
+			return false;
+		result = item->getRoot()->scan(refname);
 	}
 	//Request for an element (hierachical or design element only)
 	else if (isTokenReference())
@@ -212,7 +248,7 @@ bool Reference::execute(PdmsObjects::GenericItem **item) const
 		if (PdmsToken::isGroupElement(token))
 		{
 			//Go up in the hierarchy to find a matching, or the first group which can own the request item
-			result = *item;
+			result = item;
 			while (result && result->getType()>token)
 				result = result->owner;
 			if (!result)
@@ -221,7 +257,7 @@ bool Reference::execute(PdmsObjects::GenericItem **item) const
 		else if (PdmsToken::isDesignElement(token))
 		{
 			//Go up in the hierarchy untill we meet the requested type
-			result = *item;
+			result = item;
 			while (result && result->getType()!=token)
 				result = result->owner;
 		}
@@ -232,12 +268,14 @@ bool Reference::execute(PdmsObjects::GenericItem **item) const
 	//If the reference command is PDMS_OWNER, then we have to change the request item owner
 	if (command == PDMS_OWNER && result)
 	{
-		(*item)->owner = result;
-		result = (*item);
+		if (!item)
+			return false;
+		item->owner = result;
+		result = item;
 	}
 
 	if (result)
-		*item = result;
+		item = result;
 
 	return (result != NULL);
 }
@@ -410,25 +448,25 @@ bool Position::isValid() const
 	return true;
 }
 
-bool Position::execute(PdmsObjects::GenericItem **item) const
+bool Position::execute(PdmsObjects::GenericItem* &item) const
 {
-	if (!*item)
+	if (!item)
 		return false;
 
 	//Resolve reference if needed
 	GenericItem* refpos = NULL;
 	if (ref.isValid())
 	{
-		refpos = *item;
-		if (!ref.execute(&refpos))
+		refpos = item;
+		if (!ref.execute(refpos))
 			return false;
 	}
 	
 	//Get position point
 	CCVector3 p;
 	position.getVector(p);
-	(*item)->setPosition(p);
-	(*item)->positionReference = refpos;
+	item->setPosition(p);
+	item->positionReference = refpos;
 	
 	return true;
 }
@@ -594,7 +632,7 @@ int Orientation::getNbComponents() const
 	return nb;
 }
 
-bool Orientation::execute(PdmsObjects::GenericItem **item) const
+bool Orientation::execute(PdmsObjects::GenericItem* &item) const
 {
 	if (!item)
 		return false;
@@ -605,11 +643,11 @@ bool Orientation::execute(PdmsObjects::GenericItem **item) const
 		GenericItem* refori = NULL;
 		if (refs[i].isValid())
 		{
-			refori = *item;
-			if (!refs[i].execute(&refori))
+			refori = item;
+			if (!refs[i].execute(refori))
 				return false;
 		}
-		(*item)->orientationReferences[i] = refori;
+		item->orientationReferences[i] = refori;
 	}
 	
 	//Get position point
@@ -617,15 +655,16 @@ bool Orientation::execute(PdmsObjects::GenericItem **item) const
 	if (!getAxes(x, y, z))
 		return false;
 	
-	(*item)->setOrientation(x, y, z);
+	item->setOrientation(x, y, z);
 	return true;
 }
 
-bool Name::execute(PdmsObjects::GenericItem **item) const
+bool Name::execute(PdmsObjects::GenericItem* &item) const
 {
-	if (!*item)
+	if (!item)
 		return false;
-	strcpy((*item)->name, name);
+	
+	strcpy(item->name, name);
 	
 	return true;
 }
@@ -706,10 +745,10 @@ const char* ElementCreation::GetDefaultElementName(Token token)
 	return 0;
 }
 
-bool ElementCreation::execute(PdmsObjects::GenericItem **item) const
+bool ElementCreation::execute(PdmsObjects::GenericItem* &item) const
 {
 	GenericItem* newElement = NULL;
-	switch(elementType)
+	switch (elementType)
 	{
 	case PDMS_GROUP:
 	case PDMS_WORLD:
@@ -773,108 +812,84 @@ bool ElementCreation::execute(PdmsObjects::GenericItem **item) const
 	//If the path is changed during the creation, do it now
 	if (path.size() > 1)
 	{
-		PdmsObjects::GenericItem *mitem = *item;
-		if (!mitem)
+		if (!item)
 		{
-			delete newElement; 
+			//delete newElement;
+			PdmsObjects::Stack::Detroy(newElement);
 			return false;
 		}
-		mitem = mitem->getRoot();
-		for (unsigned i=0; i<path.size()-1; i++)
+		PdmsObjects::GenericItem* mitem = item->getRoot();
+		for (unsigned i=0; i+1<path.size(); i++)
 		{
 			mitem = mitem->scan(path[i].c_str());
 			if (!mitem)
 			{
-				delete newElement;
+				//delete newElement;
+				PdmsObjects::Stack::Detroy(newElement);
 				return false;
 			}
 		}
-		*item = mitem;
+		item = mitem;
 	}
-	//Then we can push the new element in the hierarchy
-	if (*item && ! (*item)->push(newElement))
+	
+	//Then we can (try to) push the new element in the hierarchy
+	if (item && !item->push(newElement))
 	{
-		delete newElement;
+		//delete newElement;
+		PdmsObjects::Stack::Detroy(newElement);
 		return false;
 	}
 	
 	newElement->creator = newElement->owner;
 	if (path.size())
 		strcpy(newElement->name, path.back().c_str());
-	*item = newElement;
 	try
 	{
-		s_elementsStack->push_back(newElement);
+		s_elementsStack.insert(newElement);
 	}
 	catch(std::exception &pex)
 	{
 		memalert(pex,1);
+		PdmsObjects::Stack::Detroy(newElement);
+		//delete newElement;
 		return false;
 	}
+	item = newElement;
 	return true;
 }
 
-bool ElementCreation::Initialize()
+bool ElementEnding::execute(PdmsObjects::GenericItem* &item) const
 {
-	Finalize();
-
-	try
-	{
-		s_elementsStack = new std::list<PdmsObjects::GenericItem*>;
-	}
-	catch(std::exception &nex)
-	{
-		memalert(nex,1);
-		return false;
-	}
-
-	return true;
-}
-
-void ElementCreation::Finalize()
-{
-	if (s_elementsStack)
-		delete s_elementsStack;
-	s_elementsStack = 0;
-}
-
-bool ElementEnding::execute(PdmsObjects::GenericItem **item) const
-{
-	if (!*item)
-		return false;
-
 	GenericItem* result = NULL;
-	switch(command)
+	switch (command)
 	{
 	case PDMS_OWNER:
 		//If the ending command is PDMS_OWNER, then we simply go back to the item owner
-		result = (*item)->owner;
+		result = item ? item->owner : 0;
 		break;
 	case PDMS_END:
 		//Bug realworks : ignore END EXTRU command
 		if (end.isTokenReference() && (end.token == PDMS_EXTRU || end.token == PDMS_NEXTRU))
 			return true;
-		//If the general case, we have to find the references item (default : this one), and go back to its creator
-		result = *item;
-		if (end.isValid())
+		//In the general case, we have to find the references item (default : this one), and go back to its creator
+		result = item;
+		if (end.isValid() && !end.execute(result))
 		{
-			if (!end.execute(&result))
-				return false;
-		}
-		if (result)
-			result = result->creator;
-		else
 			return false;
+		}
+		if (!result)
+			return false;
+		result = result->creator;
 		break;
 	case PDMS_LAST:
-		if (!end.execute(&result))
+		if (!end.execute(result))
 			return false;
 		break;
 	default:
 		return false;
 	}
 
-	*item = result;
+	item = result;
 
 	return true;
 }
@@ -908,9 +923,9 @@ bool ElementCreation::splitPath(const char *str)
 }
 
 
-bool HierarchyNavigation::execute(PdmsObjects::GenericItem **item) const
+bool HierarchyNavigation::execute(PdmsObjects::GenericItem* &item) const
 {
-	GenericItem* result = *item;
+	GenericItem* result = item;
 	if (!result || !isValid())
 		return true;
 
@@ -925,16 +940,16 @@ bool HierarchyNavigation::execute(PdmsObjects::GenericItem **item) const
 		{
 			result = new GroupElement(command);
 		}
-		catch(std::exception &nex)
+		catch (std::exception &nex)
 		{
 			memfail(nex,1);
 			return false;
 		}
-		result->push(*item);
+		result->push(item);
 	}
 
 	//change the current element as the new accessed element
-	*item = result;
+	item = result;
 	return true;
 }
 
@@ -1158,9 +1173,15 @@ bool GenericItem::scan(Token t, std::vector<GenericItem *> &array)
 
 DesignElement::~DesignElement()
 {
-	for (std::list<DesignElement*>::iterator it=nelements.begin(); it!=nelements.end(); it++)
-		if (*it)
-			delete *it;
+	for (std::list<DesignElement*>::iterator it=nelements.begin(); it!=nelements.end(); ++it)
+	{
+		GenericItem* item = *it;
+		if (item)
+		{
+			Stack::Detroy(item);
+		}
+	}
+	nelements.clear();
 }
 
 bool DesignElement::push(GenericItem *i)
@@ -1200,7 +1221,7 @@ void DesignElement::remove(GenericItem *i)
 		if (*it == i)
 			nelements.erase(it);
 		else
-			it++;
+			++it;
 	}
 }
 
@@ -1221,12 +1242,18 @@ void GroupElement::clear(bool del)
 {
 	if (del)
 	{
-		for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end(); eit++)
+		for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end(); ++eit)
+		{
+			GenericItem* item = *eit;
 			if (*eit)
-				delete *eit;
-		for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); hit++)
+				Stack::Detroy(item);
+		}
+		for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); ++hit)
+		{
+			GenericItem* item = *hit;
 			if (*hit)
-				delete *hit;
+				Stack::Detroy(item);
+		}
 	}
 	elements.clear();
 	subhierarchy.clear();
@@ -1285,7 +1312,7 @@ bool GroupElement::push(GenericItem *i)
 
 void GroupElement::remove(GenericItem *i)
 {
-	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); hit++)
+	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); ++hit)
 	{
 		if (*hit == i)
 		{
@@ -1294,7 +1321,7 @@ void GroupElement::remove(GenericItem *i)
 		}
 	}
 
-	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end(); eit++)
+	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end(); ++eit)
 	{
 		if (*eit == i)
 		{
@@ -1313,10 +1340,10 @@ bool GroupElement::convertCoordinateSystem()
 
 	if (!GenericItem::convertCoordinateSystem())
 		return false;
-	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end(); eit++)
+	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end(); ++eit)
 		if (!(*eit)->convertCoordinateSystem())
 			return false;
-	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); hit++)
+	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); ++hit)
 		if (!(*hit)->convertCoordinateSystem())
 			return false;
 	return true;
@@ -1326,9 +1353,9 @@ GenericItem* GroupElement::scan(const char* str)
 {
 	//scan all elements contained in this group, begining with this one, while none matches the requested name
 	GenericItem *item=GenericItem::scan(str);
-	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end() && !item; eit++)
+	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit != elements.end() && !item; ++eit)
 		item = (*eit)->scan(str);
-	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end() && !item; hit++)
+	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end() && !item; ++hit)
 		item = (*hit)->scan(str);
 	return item;
 }
@@ -1337,9 +1364,9 @@ bool GroupElement::scan(Token t, std::vector<GenericItem*> &items)
 {
 	GenericItem::scan(t, items);
 	size_t size = items.size();
-	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit!=elements.end(); eit++)
+	for (std::list<DesignElement*>::iterator eit = elements.begin(); eit!=elements.end(); ++eit)
 		(*eit)->scan(t, items);
-	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); hit++)
+	for (std::list<GroupElement*>::iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); ++hit)
 		(*hit)->scan(t, items);
 	return (items.size() > size);
 }
@@ -1372,14 +1399,14 @@ std::pair<int,int> GroupElement::write(std::ostream &output, int nbtabs) const
 
 	std::pair<int,int> nb(1,0);
 
-	for (std::list<GroupElement*>::const_iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); hit++)
+	for (std::list<GroupElement*>::const_iterator hit = subhierarchy.begin(); hit != subhierarchy.end(); ++hit)
 	{
 		std::pair<int,int> n = (*hit)->write(output, nbtabs+1);
 		nb.first += n.first;
 		nb.second += n.second;
 	}
 
-	for (std::list<DesignElement*>::const_iterator eit = elements.begin(); eit != elements.end(); eit++)
+	for (std::list<DesignElement*>::const_iterator eit = elements.begin(); eit != elements.end(); ++eit)
 	{
 		std::pair<int,int> n = (*eit)->write(output, nbtabs+1);
 		nb.first += n.first;
@@ -1811,7 +1838,7 @@ void Loop::remove(GenericItem *i)
 		if ((*it) == i)
 			loop.erase(it);
 		else
-			it++;
+			++it;
 	}
 }
 
@@ -1849,8 +1876,8 @@ PointCoordinateType Extrusion::surface() const
 			if (it2 == loop->loop.end())
 				it2 = loop->loop.begin();
 			p += ((*it1)->v-(*it2)->v).norm();
-			it1++;
-			it2++;
+			++it1;
+			++it2;
 		}
 	}
 

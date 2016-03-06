@@ -43,7 +43,6 @@ ccPointPropertiesDlg::ccPointPropertiesDlg(QWidget* parent)
 	, m_pickingMode(POINT_INFO)
 {
 	setupUi(this);
-	setWindowFlags(Qt::FramelessWindowHint |Qt::Tool);
 
 	connect(closeButton,				SIGNAL(clicked()), this, SLOT(onClose()));
 	connect(pointPropertiesButton,		SIGNAL(clicked()), this, SLOT(activatePointPropertiesDisplay()));
@@ -81,17 +80,17 @@ bool ccPointPropertiesDlg::linkWith(ccGLWindow* win)
 	ccGLWindow* oldWin = m_associatedWin;
 
 	if (!ccPointPickingGenericInterface::linkWith(win))
+	{
 		return false;
+	}
 
 	//old window?
 	if (oldWin)
 	{
 		oldWin->removeFromOwnDB(m_label);
 		oldWin->removeFromOwnDB(m_rect2DLabel);
-		oldWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
-		disconnect(oldWin, SIGNAL(mouseMoved(int,int,Qt::MouseButtons)), this, SLOT(update2DZone(int,int,Qt::MouseButtons)));
-		disconnect(oldWin, SIGNAL(leftButtonClicked(int,int)), this, SLOT(processClickedPoint(int,int)));
-		disconnect(oldWin, SIGNAL(buttonReleased()), this, SLOT(close2DZone()));
+		oldWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
+		oldWin->disconnect(this);
 	}
 
 	m_rect2DLabel->setVisible(false);	//=invalid
@@ -127,7 +126,7 @@ void ccPointPropertiesDlg::stop(bool state)
 	m_rect2DLabel->setSelected(true);	//=closed
 
 	if (m_associatedWin)
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
 
 	ccPointPickingGenericInterface::stop(state);
 }
@@ -140,7 +139,7 @@ void ccPointPropertiesDlg::onClose()
 void ccPointPropertiesDlg::activatePointPropertiesDisplay()
 {
 	if (m_associatedWin)
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
 
 	m_pickingMode = POINT_INFO;
 	pointPropertiesButton->setDown(true);
@@ -163,8 +162,8 @@ void ccPointPropertiesDlg::activateDistanceDisplay()
 
 	if (m_associatedWin)
 	{
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
-		m_associatedWin->updateGL();
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
+		m_associatedWin->redraw(false);
 	}
 }
 
@@ -180,8 +179,8 @@ void ccPointPropertiesDlg::activateAngleDisplay()
 
 	if (m_associatedWin)
 	{
-		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA);
-		m_associatedWin->updateGL();
+		m_associatedWin->setInteractionMode(ccGLWindow::TRANSFORM_CAMERA());
+		m_associatedWin->redraw(false);
 	}
 }
 
@@ -197,8 +196,8 @@ void ccPointPropertiesDlg::activate2DZonePicking()
 
 	if (m_associatedWin)
 	{
-		m_associatedWin->setInteractionMode(ccGLWindow::SEGMENT_ENTITY);
-		m_associatedWin->updateGL();
+		m_associatedWin->setInteractionMode(ccGLWindow::INTERACT_SEND_ALL_SIGNALS);
+		m_associatedWin->redraw(false);
 	}
 }
 
@@ -210,7 +209,7 @@ void ccPointPropertiesDlg::initializeState()
 	m_rect2DLabel->setSelected(true);	//=closed
 
 	if (m_associatedWin)
-		m_associatedWin->redraw();
+		m_associatedWin->redraw(false);
 }
 
 void ccPointPropertiesDlg::exportCurrentLabel()
@@ -250,7 +249,7 @@ void ccPointPropertiesDlg::exportCurrentLabel()
 	if (m_associatedWin)
 	{
 		m_associatedWin->addToOwnDB(newLabelObject);
-		m_associatedWin->redraw();
+		m_associatedWin->redraw(true, false);
 	}	
 }
 
@@ -279,13 +278,13 @@ void ccPointPropertiesDlg::processPickedPoint(ccPointCloud* cloud, unsigned poin
 
 	m_label->addPoint(cloud,pointIndex);
 	m_label->setVisible(true);
-	if (m_label->size()==1 && m_associatedWin)
-		m_label->setPosition((float)(x+20)/(float)m_associatedWin->width(),(float)(y+20)/(float)m_associatedWin->height());
+	if (m_label->size() == 1 && m_associatedWin)
+		m_label->setPosition(static_cast<float>(x+20)/m_associatedWin->width(),static_cast<float>(y+20)/m_associatedWin->height());
 
 	//output info to Console
 	QStringList body = m_label->getLabelContent(ccGui::Parameters().displayedNumPrecision);
 	ccLog::Print(QString("[Picked] ")+m_label->getName());
-	for (int i=0;i<body.size();++i)
+	for (int i=0; i<body.size(); ++i)
 		ccLog::Print(QString("[Picked]\t- ")+body[i]);
 
 	if (m_associatedWin)
@@ -302,7 +301,10 @@ void ccPointPropertiesDlg::processClickedPoint(int x, int y)
 
 	if (m_rect2DLabel->isSelected()) //already closed? we start a new label
 	{
-		float roi[4]={(float)x,(float)y,0,0};
+		float roi[4] = {static_cast<float>(x),
+						static_cast<float>(y),
+						0,0};
+
 		if (m_associatedWin)
 			m_rect2DLabel->setParameters(m_associatedWin->getViewportParameters());
 		m_rect2DLabel->setVisible(false);	//=invalid
@@ -312,36 +314,44 @@ void ccPointPropertiesDlg::processClickedPoint(int x, int y)
 	}
 	else //we close the existing one
 	{
-		float roi[4]={m_rect2DLabel->roi()[0],
+		float roi[4] = {m_rect2DLabel->roi()[0],
 						m_rect2DLabel->roi()[1],
-						(float)x,
-						(float)y};
+						static_cast<float>(x),
+						static_cast<float>(y) };
 		m_rect2DLabel->setRoi(roi);
 		m_rect2DLabel->setVisible(true);	//=valid
 		m_rect2DLabel->setSelected(true);	//=closed
 	}
 
 	if (m_associatedWin)
-		m_associatedWin->updateGL();
+		m_associatedWin->redraw(true, false);
 }
 
 void ccPointPropertiesDlg::update2DZone(int x, int y, Qt::MouseButtons buttons)
 {
 	if (m_pickingMode != RECT_ZONE)
+	{
 		return;
+	}
 
 	if (m_rect2DLabel->isSelected())
+	{
 		return;
+	}
 
-	float roi[4]={m_rect2DLabel->roi()[0],
+	if (!m_associatedWin || !m_associatedWin->hasFBO()) //we need fast rendering (with FBO) for live update of the rectangle!
+	{
+		return;
+	}
+
+	float roi[4] = {m_rect2DLabel->roi()[0],
 					m_rect2DLabel->roi()[1],
-					(float)x,
-					(float)y};
+					static_cast<float>(x - m_associatedWin->width()/2),
+					static_cast<float>(m_associatedWin->height()/2 - y) };
 	m_rect2DLabel->setRoi(roi);
 	m_rect2DLabel->setVisible(true);
 
-	if (m_associatedWin)
-		m_associatedWin->updateGL();
+	m_associatedWin->redraw(true, false);
 }
 
 static QString s_last2DLabelComment("");
@@ -368,5 +378,5 @@ void ccPointPropertiesDlg::close2DZone()
 	}
 
 	if (m_associatedWin)
-		m_associatedWin->updateGL();
+		m_associatedWin->redraw(true, false);
 }

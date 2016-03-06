@@ -40,6 +40,7 @@ class cc2DViewportObject;
 class ccFacet;
 class ccSensor;
 class ccIndexedTransformationBuffer;
+class ccShiftedObject;
 class CCShareable;
 
 class QStandardItemModel;
@@ -76,6 +77,7 @@ public:
 							OBJECT_CLOUD_SF_EDITOR					,
 							OBJECT_SENSOR_MATRIX_EDITOR				,
 							OBJECT_SENSOR_DISPLAY_SCALE				,
+							OBJECT_SENSOR_UNCERTAINTY				,
 							OBJECT_COLOR_RAMP_STEPS					,
 							OBJECT_MATERIALS						,
 							OBJECT_APPLY_LABEL_VIEWPORT				,
@@ -96,6 +98,7 @@ public:
 							OBJECT_SHOW_TRANS_BUFFER_TRIHDERONS		,
 							OBJECT_TRANS_BUFFER_TRIHDERONS_SCALE	,
 							OBJECT_HISTORY_MATRIX_EDITOR			,
+							OBJECT_GLTRANS_MATRIX_EDITOR			,
 							TREE_VIEW_HEADER						,
 	};
 
@@ -145,6 +148,7 @@ protected slots:
 	void objectDisplayChanged(const QString &);
 	void colorSourceChanged(const QString &);
 	void sensorScaleChanged(double);
+	void sensorUncertaintyChanged();
 	void sensorIndexChanged(double);
 	void cloudPointSizeChanged(int);
 	void polyineWidthChanged(int);
@@ -175,6 +179,7 @@ protected:
 	void fillWithMaterialSet(ccMaterialSet*);
 	void fillWithShareable(CCShareable*);
 	void fillWithMetaData(ccObject*);
+	void fillWithShifted(ccShiftedObject*);
 	template<int N, class ElementType> void fillWithChunkedArray(ccChunkedArray<N,ElementType>*);
 
 	//! Returns whether the editor is wide (i.e. spans on two columns) or not

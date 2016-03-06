@@ -41,10 +41,10 @@ class CC_CORE_LIB_API TrueKdTree
 {
 public:
 
+	//Warning: never pass a 'constant initializer' by reference
 	static const uint8_t X_DIM = 0;
 	static const uint8_t Y_DIM = 1;
 	static const uint8_t Z_DIM = 2;
-
 	static const uint8_t NODE_TYPE = 0;
 	static const uint8_t LEAF_TYPE = 1;
 
@@ -52,7 +52,7 @@ public:
 	struct BaseNode
 	{
 	public:
-		BaseNode(uint8_t nodeType) : parent(0), type(nodeType) {}
+		explicit BaseNode(uint8_t nodeType) : parent(0), type(nodeType) {}
 		virtual ~BaseNode() {}
 
 		bool isNode() const { return type == NODE_TYPE; }
@@ -114,7 +114,7 @@ public:
 	typedef std::vector<Leaf*> LeafVector;
 
 	//! Default constructor
-	TrueKdTree(GenericIndexedCloudPersist* cloud);
+	explicit TrueKdTree(GenericIndexedCloudPersist* cloud);
 
 	//! Destructor
 	~TrueKdTree();
@@ -125,11 +125,13 @@ public:
 	//! Builds KD-tree
 	/** \param maxError maximum error per cell (relatively to the best LS plane fit)
 		\param errorMeasure error measurement
+		\param minPointCountPerCell minimum number of points per cell (can't be smaller than 3)
 		\param maxPointCountPerCell maximum number of points per cell (speed-up - ignored if < 6)
 		\param progressCb the client application can get some notification of the process progress through this callback mechanism (see GenericProgressCallback)
 	**/
 	bool build(	double maxError,
 				DistanceComputationTools::ERROR_MEASURES errorMeasure = DistanceComputationTools::RMS,
+				unsigned minPointCountPerCell = 3,
 				unsigned maxPointCountPerCell = 0,
 				GenericProgressCallback* progressCb = 0);
 
@@ -161,6 +163,11 @@ protected:
 
 	//! Error measurement
 	DistanceComputationTools::ERROR_MEASURES m_errorMeasure;
+
+	//! Min number of points per cell (speed-up)
+	/** Can't be < 3
+	**/
+	unsigned m_minPointCountPerCell;
 
 	//! Max number of points per cell (speed-up)
 	/** Ignored if < 6

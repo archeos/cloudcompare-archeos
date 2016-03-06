@@ -58,9 +58,9 @@ public:
 public slots:
 
 	//! Tries to load (and then adds to main db) a list of entity (files)
-	/** \param filenames list of all filenames
+	/** \param filenames filenames to load
 	**/
-	void addToDB(const QStringList& filenames);
+	void addToDB(QStringList filenames);
 
 protected slots:
 
@@ -71,17 +71,18 @@ protected slots:
 	void updateDisplay();
 
 	//! Selects entity
-	void selectEntity(int uniqueID);
-
-	//! Selects multiple entities
-	//void selectEntities(std::set<int> entIDs); //not supported yet!
+	void selectEntity(ccHObject* entity);
 
 	//! Delete selected entity
 	void doActionDeleteSelectedEntity();
 
+	//! Slot called when the exclusive full screen mode is called
+	void onExclusiveFullScreenToggled(bool);
+
 	void doActionEditCamera();
 	void toggleSunLight(bool);
 	void toggleCustomLight(bool);
+	void toggleStereoMode(bool);
 	void toggleFullScreen(bool);
 	void toggleRotationAboutVertAxis();
 	void doActionAbout();
@@ -108,6 +109,7 @@ protected slots:
 	//selected entity properties
 	void toggleColorsShown(bool);
 	void toggleNormalsShown(bool);
+	void toggleMaterialsShown(bool);
 	void toggleScalarShown(bool);
 	void toggleColorbarShown(bool);
 	void changeCurrentScalarField(bool);
@@ -123,7 +125,7 @@ protected slots:
 	void doEnableGLFilter();
 	void doDisableGLFilter();
 
-protected:
+protected: //methods
 
 	//! Loads plugins (from files)
 	void loadPlugins();
@@ -141,6 +143,11 @@ protected:
 
 	//! Updates lights UI elements
 	void reflectLightsState();
+
+	//! Checks whether stereo mode can be stopped (if necessary) or not
+	bool checkStereoMode();
+
+protected: //members
 
 	//! Releases any connected 3D mouse (if any)
 	void release3DMouse();

@@ -186,6 +186,7 @@ ccHObject* ccHObject::New(CC_CLASS_ENUM objectType, const char* name/*=0*/)
 	case CC_TYPES::TORUS:
 		return new ccTorus(name);
 	case CC_TYPES::CYLINDER:
+	case CC_TYPES::OLD_CYLINDER_ID:
 		return new ccCylinder(name);
 	case CC_TYPES::BOX:
 		return new ccBox(name);
@@ -308,11 +309,10 @@ void ccHObject::removeDependencyFlag(ccHObject* otherObject, DEPENDENCY_FLAGS fl
 
 void ccHObject::onDeletionOf(const ccHObject* obj)
 {
-	//remove any dependency declarated with this object
+	//remove any dependency declared with this object
 	//and remove it from the children list as well (in case of)
 	//DGM: we can't call 'detachChild' as this method will try to
-	//modify the child's content!
-	//remove any dependency (bilateral)
+	//modify the child contents!
 	removeDependencyWith(const_cast<ccHObject*>(obj)); //this method will only modify the dependency flags of obj
 
 	int pos = getChildIndex(obj);
@@ -330,6 +330,11 @@ bool ccHObject::addChild(ccHObject* child, int dependencyFlags/*=DP_PARENT_OF_OT
 		assert(false);
 		return false;
 	}
+	if (std::find(m_children.begin(),m_children.end(),child) != m_children.end())
+	{
+		ccLog::ErrorDebug("[ccHObject::addChild] Object is already a child!");
+		return false;
+	}
 
 	if (isLeaf())
 	{
@@ -345,7 +350,7 @@ bool ccHObject::addChild(ccHObject* child, int dependencyFlags/*=DP_PARENT_OF_OT
 		else
 			m_children.insert(m_children.begin()+insertIndex,child);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory!
 		return false;
@@ -392,23 +397,27 @@ ccHObject* ccHObject::find(unsigned uniqueID)
 unsigned ccHObject::filterChildren(	Container& filteredChildren,
 									bool recursive/*=false*/,
 									CC_CLASS_ENUM filter/*=CC_TYPES::OBJECT*/,
-									bool strict/*=false*/) const
+									bool strict/*=false*/,
+									ccGenericGLDisplay* inDisplay/*=0*/) const
 {
 	for (Container::const_iterator it = m_children.begin(); it != m_children.end(); ++it)
 	{
 		if (	(!strict && (*it)->isKindOf(filter))
-			||	( strict && (*it)->isA(filter)) )
+			||	( strict && (*it)->isA(filter)))
 		{
-			//warning: we have to handle unicity as a sibling may be in the same container as its parent!
-			if (std::find(filteredChildren.begin(),filteredChildren.end(),*it) == filteredChildren.end()) //not yet in output vector?
+			if (!inDisplay || (*it)->getDisplay() == inDisplay)
 			{
-				filteredChildren.push_back(*it);
+				//warning: we have to handle unicity as a sibling may be in the same container as its parent!
+				if (std::find(filteredChildren.begin(), filteredChildren.end(), *it) == filteredChildren.end()) //not yet in output vector?
+				{
+					filteredChildren.push_back(*it);
+				}
 			}
 		}
 
 		if (recursive)
 		{
-			(*it)->filterChildren(filteredChildren, true, filter, strict);
+			(*it)->filterChildren(filteredChildren, true, filter, strict, inDisplay);
 		}
 	}
 
@@ -489,80 +498,78 @@ bool ccHObject::isAncestorOf(const ccHObject *anObject) const
 	return isAncestorOf(parent);
 }
 
-ccBBox ccHObject::getBB(bool relative/*=true*/, bool withGLfeatures/*=false*/, const ccGenericGLDisplay* display/* = NULL*/)
+bool ccHObject::getAbsoluteGLTransformation(ccGLMatrix& trans) const
 {
-	ccBBox box;
-
-	//if (!isEnabled())
-	//	return box;
-
-	if (!display || m_currentDisplay == display)
-		box = (withGLfeatures ? getDisplayBB() : getMyOwnBB());
-
-	for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it)
+	trans.toIdentity();
+	bool hasGLTrans = false;
+	
+	//recurse among ancestors to get the absolute GL transformation
+	const ccHObject* obj = this;
+	while (obj)
 	{
-		if ((*it)->isEnabled())
-			box += (*it)->getBB(false, withGLfeatures, display);
+		if (obj->isGLTransEnabled())
+		{
+			trans = trans * obj->getGLTransformation();
+			hasGLTrans = true;
+		}
+		obj = obj->getParent();
 	}
 
-	//apply GL transformation afterwards!
-	if (!display || m_currentDisplay == display)
-		if (!relative && m_glTransEnabled && box.isValid())
-			box = box*m_glTrans;
-
-	return box;
+	return hasGLTrans;
 }
 
-ccBBox ccHObject::getMyOwnBB()
+ccBBox ccHObject::getOwnBB(bool withGLFeatures/*=false*/)
 {
 	return ccBBox();
 }
 
-ccBBox ccHObject::getDisplayBB()
+ccBBox ccHObject::getBB_recursive(bool withGLFeatures/*=false*/, bool onlyEnabledChildren/*=true*/)
 {
-	//by default, this is the same bbox as the "geometrical" one
-	return getMyOwnBB();
-}
+	ccBBox box = getOwnBB(withGLFeatures);
 
-CCVector3 ccHObject::getBBCenter()
-{
-	ccBBox box = getBB(true,false,m_currentDisplay);
-
-	return box.getCenter();
-}
-
-void ccHObject::drawNameIn3D(CC_DRAW_CONTEXT& context)
-{
-	if (!context._win)
-		return;
-
-	//we display it in the 2D layer in fact!
-	ccBBox bBox = getBB(false,false,m_currentDisplay);
-	if (bBox.isValid())
+	for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it)
 	{
-		const double* MM = context._win->getModelViewMatd(); //viewMat
-		const double* MP = context._win->getProjectionMatd(); //projMat
-		int VP[4];
-		context._win->getViewportArray(VP);
-
-		GLdouble xp,yp,zp;
-		CCVector3 C = bBox.getCenter();
-		gluProject(C.x,C.y,C.z,MM,MP,VP,&xp,&yp,&zp);
-
-		QFont font = context._win->getTextDisplayFont(); //takes rendering zoom into account!
-		context._win->displayText(	getName(),
-									static_cast<int>(xp),
-									static_cast<int>(yp),
-									ccGenericGLDisplay::ALIGN_HMIDDLE | ccGenericGLDisplay::ALIGN_VMIDDLE,
-									0.75f,
-									0,
-									&font);
+		if (!onlyEnabledChildren || (*it)->isEnabled())
+			box += (*it)->getBB_recursive(withGLFeatures,onlyEnabledChildren);
 	}
+
+	return box;
+}
+
+ccBBox ccHObject::getDisplayBB_recursive(bool relative, const ccGenericGLDisplay* display/*=0*/)
+{
+	ccBBox box;
+
+	if (!display || display == m_currentDisplay)
+		box = getOwnBB(true);
+
+	for (Container::iterator it = m_children.begin(); it != m_children.end(); ++it)
+	{
+		if ((*it)->isEnabled())
+		{
+			ccBBox childBox = (*it)->getDisplayBB_recursive(true, display);
+			if ((*it)->isGLTransEnabled())
+			{
+				childBox = childBox * (*it)->getGLTransformation();
+			}
+			box += childBox;
+		}
+	}
+
+	if (!relative && box.isValid())
+	{
+		//get absolute bounding-box?
+		ccGLMatrix trans;
+		getAbsoluteGLTransformation(trans);
+		box = box * trans;
+	}
+
+	return box;
 }
 
 bool ccHObject::isDisplayed() const
 {
-	return isBranchEnabled() && isVisible() && (getDisplay() != 0);
+	return isVisible() && (getDisplay() != 0) && isBranchEnabled();
 }
 
 bool ccHObject::isBranchEnabled() const
@@ -576,6 +583,67 @@ bool ccHObject::isBranchEnabled() const
 	return true;
 }
 
+void ccHObject::drawBB(const ccColor::Rgb& col)
+{
+	switch (m_selectionBehavior)
+	{
+	case SELECTION_AA_BBOX:
+		getDisplayBB_recursive(true,m_currentDisplay).draw(col);
+		break;
+	
+	case SELECTION_FIT_BBOX:
+		{
+			ccGLMatrix trans;
+			ccBBox box = getOwnFitBB(trans);
+			if (box.isValid())
+			{
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultMatrixf(trans.data());
+				box.draw(col);
+				glPopMatrix();
+			}
+		}
+		break;
+	
+	case SELECTION_IGNORED:
+		break;
+
+	default:
+		assert(false);
+	}
+}
+
+void ccHObject::drawNameIn3D(CC_DRAW_CONTEXT& context)
+{
+	if (!context._win)
+		return;
+
+	//we display it in the 2D layer in fact!
+	ccBBox bBox = getOwnBB();
+	if (bBox.isValid())
+	{
+		ccGLMatrix trans;
+		getAbsoluteGLTransformation(trans);
+
+		ccGLCameraParameters camera;
+		context._win->getGLCameraParameters(camera);
+
+		CCVector3 C = bBox.getCenter();
+		CCVector3d Q2D;
+		camera.project(C, Q2D);
+
+		QFont font = context._win->getTextDisplayFont(); //takes rendering zoom into account!
+		context._win->displayText(	getName(),
+									static_cast<int>(Q2D.x),
+									static_cast<int>(Q2D.y),
+									ccGenericGLDisplay::ALIGN_HMIDDLE | ccGenericGLDisplay::ALIGN_VMIDDLE,
+									0.75f,
+									0,
+									&font);
+	}
+}
+
 void ccHObject::draw(CC_DRAW_CONTEXT& context)
 {
 	if (!isEnabled())
@@ -584,29 +652,40 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 	//are we currently drawing objects in 2D or 3D?
 	bool draw3D = MACRO_Draw3D(context);
 	
-	//the entity must be either visible and selected, and of course it should be displayed in this context
+	//the entity must be either visible or selected, and of course it should be displayed in this context
 	bool drawInThisContext = ((m_visible || m_selected) && m_currentDisplay == context._win);
 
 	//no need to display anything but clouds and meshes in "element picking mode"
 	drawInThisContext &= (	( !MACRO_DrawPointNames(context)	|| isKindOf(CC_TYPES::POINT_CLOUD) ) || 
 							( !MACRO_DrawTriangleNames(context)	|| isKindOf(CC_TYPES::MESH) ));
 
-	//apply 3D 'temporary' transformation (for display only)
-	if (draw3D && m_glTransEnabled)
+	if (draw3D)
 	{
-		glMatrixMode(GL_MODELVIEW);
-		glPushMatrix();
-		glMultMatrixf(m_glTrans.data());
+		//apply 3D 'temporary' transformation (for display only)
+		if (m_glTransEnabled)
+		{
+			glMatrixMode(GL_MODELVIEW);
+			glPushMatrix();
+			glMultMatrixf(m_glTrans.data());
+		}
+
+		if (	context.decimateCloudOnMove						//LOD for clouds is enabled?
+			&&	context.currentLODLevel >= context.minLODLevel	//and we are currently rendering higher levels?
+			)
+		{
+			//only for real clouds
+			drawInThisContext &= isA(CC_TYPES::POINT_CLOUD);
+		}
 	}
 
 	//draw entity
 	if (m_visible && drawInThisContext)
 	{
 		if (( !m_selected || !MACRO_SkipSelected(context) ) &&
-			( m_selected || !MACRO_SkipUnselected(context) ))
+			(  m_selected || !MACRO_SkipUnselected(context) ))
 		{
 			//apply default color (in case of)
-			glColor3ubv(context.pointsDefaultCol);
+			ccGL::Color3v(context.pointsDefaultCol.rgb);
 
 			drawMeOnly(context);
 
@@ -621,32 +700,9 @@ void ccHObject::draw(CC_DRAW_CONTEXT& context)
 		(*it)->draw(context);
 
 	//if the entity is currently selected, we draw its bounding-box
-	if (m_selected && draw3D && drawInThisContext && !MACRO_DrawNames(context))
+	if (m_selected && draw3D && drawInThisContext && !MACRO_DrawNames(context) && context.currentLODLevel == 0)
 	{
-		switch (m_selectionBehavior)
-		{
-		case SELECTION_AA_BBOX:
-			drawBB(context.bbDefaultCol);
-			break;
-		case SELECTION_FIT_BBOX:
-			{
-				ccGLMatrix trans;
-				ccBBox box = getFitBB(trans);
-				if (box.isValid())
-				{
-					glMatrixMode(GL_MODELVIEW);
-					glPushMatrix();
-					glMultMatrixf(trans.data());
-					box.draw(context.bbDefaultCol);
-					glPopMatrix();
-				}
-			}
-			break;
-		case SELECTION_IGNORED:
-			break;
-		default:
-			assert(false);
-		}
+		drawBB(context.bbDefaultCol);
 	}
 
 	if (draw3D && m_glTransEnabled)
@@ -658,35 +714,34 @@ void ccHObject::applyGLTransformation(const ccGLMatrix& trans)
 	m_glTransHistory = trans * m_glTransHistory;
 }
 
-void ccHObject::applyGLTransformation_recursive(ccGLMatrix* trans/*=NULL*/)
+void ccHObject::applyGLTransformation_recursive(const ccGLMatrix* transInput/*=NULL*/)
 {
-	ccGLMatrix* _trans = NULL;
+	ccGLMatrix transTemp;
+	const ccGLMatrix* transToApply = transInput;
 
 	if (m_glTransEnabled)
 	{
-		if (!trans)
+		if (!transInput)
 		{
 			//if no transformation is provided (by father)
 			//we initiate it with the current one
-			trans = _trans = new ccGLMatrix(m_glTrans);
+			transToApply = &m_glTrans;
 		}
 		else
 		{
-			*trans *= m_glTrans;
+			transTemp = *transInput * m_glTrans;
+			transToApply = &transTemp;
 		}
 	}
 
-	if (trans)
+	if (transToApply)
 	{
-		applyGLTransformation(*trans);
+		applyGLTransformation(*transToApply);
 		notifyGeometryUpdate();
 	}
 
 	for (Container::iterator it = m_children.begin(); it!=m_children.end(); ++it)
-		(*it)->applyGLTransformation_recursive(trans);
-
-	if (_trans)
-		delete _trans;
+		(*it)->applyGLTransformation_recursive(transToApply);
 
 	if (m_glTransEnabled)
 		resetGLTransformation();
@@ -754,7 +809,11 @@ void ccHObject::removeChild(ccHObject* child)
 
 void ccHObject::removeChild(int pos)
 {
-	assert(pos >= 0 && static_cast<size_t>(pos) < m_children.size());
+	if (pos < 0 || static_cast<size_t>(pos) >= m_children.size())
+	{
+		assert(false);
+		return;
+	}
 
 	ccHObject* child = m_children[pos];
 
@@ -775,7 +834,7 @@ void ccHObject::removeChild(int pos)
 		//delete object
 		if (child->isShareable())
 			dynamic_cast<CCShareable*>(child)->release();
-		else
+		else/* if (!child->isA(CC_TYPES::POINT_OCTREE))*/
 			delete child;
 	}
 	else if (child->getParent() == this)
@@ -853,6 +912,11 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags, bool omitChild
 	if (!ccObject::fromFile(in, dataVersion, flags))
 		return false;
 
+#ifdef _DEBUG
+	char buffer[1024];
+	strcpy(buffer, qPrintable(getName()));
+#endif
+
 	//read own data
 	if (!fromFile_MeOnly(in, dataVersion, flags))
 		return false;
@@ -917,7 +981,7 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags, bool omitChild
 			}
 			else
 			{
-				delete child;
+				//delete child; //we can't do this as the object might be invalid
 				return false;
 			}
 		}
@@ -927,7 +991,7 @@ bool ccHObject::fromFile(QFile& in, short dataVersion, int flags, bool omitChild
 		}
 	}
 
-	//write current selection behavior (dataVersion>=23)
+	//read the selection behavior (dataVersion>=23)
 	if (dataVersion >= 23)
 	{
 		if (in.read((char*)&m_selectionBehavior,sizeof(SelectionBehavior)) < 0)
@@ -968,7 +1032,7 @@ bool ccHObject::toFile_MeOnly(QFile& out) const
 	if (m_colorIsOverriden)
 	{
 		//'tempColor' (dataVersion>=20)
-		if (out.write((const char*)m_tempColor,sizeof(colorType)*3) < 0)
+		if (out.write((const char*)m_tempColor.rgb,sizeof(ColorCompType)*3) < 0)
 			return WriteError();
 	}
 	//'glTransEnabled' state (dataVersion>=20)
@@ -1012,7 +1076,7 @@ bool ccHObject::fromFile_MeOnly(QFile& in, short dataVersion, int flags)
 	if (m_colorIsOverriden)
 	{
 		//'tempColor' (dataVersion>=20)
-		if (in.read((char*)m_tempColor,sizeof(colorType)*3) < 0)
+		if (in.read((char*)m_tempColor.rgb,sizeof(ColorCompType)*3) < 0)
 			return ReadError();
 	}
 	//'glTransEnabled' state (dataVersion>=20)

@@ -28,8 +28,6 @@ ccClippingBoxRepeatDlg::ccClippingBoxRepeatDlg(bool singleContourMode/*=false*/,
 {
 	setupUi(this);
 
-	//setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
-
 	if (!singleContourMode)
 	{
 		connect( xRepeatCheckBox, SIGNAL(toggled(bool)), this, SLOT(onDimChecked(bool)));
@@ -48,7 +46,7 @@ ccClippingBoxRepeatDlg::ccClippingBoxRepeatDlg(bool singleContourMode/*=false*/,
 
 		extractContoursGroupBox->setChecked(true);
 		extractContoursGroupBox->setCheckable(false);
-		projectOnBestFitCheckBox->setEnabled(true);
+		projectOnBestFitCheckBox->setVisible(true);
 		projectOnBestFitCheckBox->setChecked(false);
 
 		randomColorCheckBox->setChecked(false);
@@ -99,13 +97,13 @@ void ccClippingBoxRepeatDlg::onDimChecked(bool)
 
 	if (sum == 1)
 	{
-		if (!projectOnBestFitCheckBox->isEnabled())
+		if (!projectOnBestFitCheckBox->isVisible())
 			projectOnBestFitCheckBox->setChecked(false);
-		projectOnBestFitCheckBox->setEnabled(true);
+		projectOnBestFitCheckBox->setVisible(true);
 	}
 	else
 	{
-		projectOnBestFitCheckBox->setEnabled(false);
+		projectOnBestFitCheckBox->setVisible(false);
 		projectOnBestFitCheckBox->setChecked(true);
 	}
 

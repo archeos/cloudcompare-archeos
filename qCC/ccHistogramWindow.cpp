@@ -19,17 +19,25 @@
 #include "ccGuiParameters.h"
 
 //Local
-#include <ccQCustomPlot.h>
-
+#include "ccQCustomPlot.h"
+#include "ccPersistentSettings.h"
 
 //qCC_db
 #include <ccColorScalesManager.h>
 
 //Qt
 #include <QCloseEvent>
+#include <QFile>
+#include <QTextStream>
+#include <QFileDialog>
+#include <QSettings>
+#include <QImageWriter>
 
 //System
 #include <assert.h>
+
+//Gui
+#include "ui_histogramDlg.h"
 
 ccHistogramWindow::ccHistogramWindow(QWidget* parent/*=0*/)
 	: QCustomPlot(parent)
@@ -59,7 +67,7 @@ ccHistogramWindow::ccHistogramWindow(QWidget* parent/*=0*/)
 	setFocusPolicy(Qt::StrongFocus);
 
 	//setMinimumHeight(100);
-	setSizePolicy(QSizePolicy(QSizePolicy::Expanding,QSizePolicy::Expanding));
+	setSizePolicy(QSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding));
 
 	setAutoAddPlottableToLegend(false);
 
@@ -135,7 +143,8 @@ void ccHistogramWindow::setAxisLabels(const QString& xLabel, const QString& yLab
 
 void ccHistogramWindow::fromSF(	ccScalarField* sf,
 								unsigned initialNumberOfClasses/*=0*/,
-								bool numberOfClassesCanBeChanged/*=true*/)
+								bool numberOfClassesCanBeChanged/*=true*/,
+								bool showNaNValuesInGrey/*=true*/)
 {
 	if (m_associatedSF != sf)
 	{
@@ -148,8 +157,8 @@ void ccHistogramWindow::fromSF(	ccScalarField* sf,
 
 	if (m_associatedSF)
 	{
-		m_minVal = m_associatedSF->getMin();
-		m_maxVal = m_associatedSF->getMax();
+		m_minVal = showNaNValuesInGrey ? m_associatedSF->getMin() : m_associatedSF->displayRange().start();
+		m_maxVal = showNaNValuesInGrey ? m_associatedSF->getMax() : m_associatedSF->displayRange().stop();
 		m_numberOfClassesCanBeChanged = numberOfClassesCanBeChanged;
 	}
 	else
@@ -171,7 +180,7 @@ void ccHistogramWindow::fromBinArray(	const std::vector<unsigned>& histoValues,
 	{
 		m_histoValues = histoValues;
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		ccLog::Warning("[ccHistogramWindow::fromBinArray] Not enough memory!");
 		return;
@@ -190,7 +199,7 @@ void ccHistogramWindow::setCurveValues(const std::vector<double>& curveValues)
 	{
 		m_curveValues = curveValues;
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		ccLog::Warning("[ccHistogramWindow::setCurveValues] Not enough memory!");
 	}
@@ -222,7 +231,7 @@ bool ccHistogramWindow::computeBinArrayFromSF(size_t binCount)
 		{
 			m_histoValues = m_associatedSF->getHistogram();
 		}
-		catch(std::bad_alloc)
+		catch (const std::bad_alloc&)
 		{
 			ccLog::Warning("[ccHistogramWindow::computeBinArrayFromSF] Not enough memory!");
 			return false;
@@ -235,7 +244,7 @@ bool ccHistogramWindow::computeBinArrayFromSF(size_t binCount)
 	{
 		m_histoValues.resize(binCount,0);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		ccLog::Warning("[ccHistogramWindow::computeBinArrayFromSF] Not enough memory!");
 		return false;
@@ -325,9 +334,9 @@ void ccHistogramWindow::refreshBars()
 			keyData[i] = m_minVal + normVal * (m_maxVal - m_minVal);
 			valueData[i] = m_histoValues[i];
 
-			const colorType* col= m_associatedSF->getColor(static_cast<ScalarType>(keyData[i]));
+			const ColorCompType* col= m_associatedSF->getColor(static_cast<ScalarType>(keyData[i]));
 			if (!col) //hidden values may have no associated color!
-				col = ccColor::lightGrey;
+				col = ccColor::lightGrey.rgba;
 			colors[i] = QColor(col[0],col[1],col[2]);
 		}
 
@@ -456,7 +465,7 @@ void ccHistogramWindow::refresh()
 			//import color for the current bin
 			if (colorScheme != USE_SOLID_COLOR)
 			{
-				const colorType* col = 0;
+				const ColorCompType* col = 0;
 				if (colorScheme == USE_SF_SCALE)
 				{
 					//equivalent SF value
@@ -470,7 +479,7 @@ void ccHistogramWindow::refresh()
 					col = colorScale->getColorByRelativePos(normVal);
 				}
 				if (!col) //hidden values may have no associated color!
-					col = ccColor::lightGrey;
+					col = ccColor::lightGrey.rgba;
 				colors[i] = QColor(col[0],col[1],col[2]);
 			}
 		}
@@ -500,8 +509,8 @@ void ccHistogramWindow::refresh()
 		m_overlayCurve->setName("OverlayCurve");
 
 		//set pen color
-		const unsigned char* col = ccColor::darkGrey;
-		QPen pen(QColor(col[0],col[1],col[2]));
+		const ccColor::Rgba& col = ccColor::darkGrey;
+		QPen pen(QColor(col.r,col.g,col.b));
 		m_overlayCurve->setPen(pen);
 
 		//set width
@@ -530,7 +539,7 @@ void ccHistogramWindow::refresh()
 		m_arrowLeft->setCurrentVal(satRange.start());
 		if (colorScale)
 		{
-			const colorType* col = colorScale->getColorByRelativePos(m_associatedSF->symmetricalScale() ? 0.5 : 0,m_associatedSF->getColorRampSteps());
+			const ColorCompType* col = colorScale->getColorByRelativePos(m_associatedSF->symmetricalScale() ? 0.5 : 0,m_associatedSF->getColorRampSteps());
 			if (col)
 				m_arrowLeft->setColor(col[0],col[1],col[2]);
 		}
@@ -541,7 +550,7 @@ void ccHistogramWindow::refresh()
 		m_arrowRight->setCurrentVal(satRange.stop());
 		if (colorScale)
 		{
-			const colorType* col = colorScale->getColorByRelativePos(1.0,m_associatedSF->getColorRampSteps());
+			const ColorCompType* col = colorScale->getColorByRelativePos(1.0,m_associatedSF->getColorRampSteps());
 			if (col)
 				m_arrowRight->setColor(col[0],col[1],col[2]);
 		}
@@ -881,12 +890,160 @@ void ccHistogramWindow::wheelEvent(QWheelEvent* e)
 }
 
 ccHistogramWindowDlg::ccHistogramWindowDlg(QWidget* parent/*=0*/)
-	: QDialog(parent)
+	: QDialog(parent,  Qt::WindowMaximizeButtonHint)
 	, m_win(new ccHistogramWindow(this))
+	, m_gui(new Ui_HistogramDialog)
 {
-	QHBoxLayout* hboxLayout = new QHBoxLayout(this);
+	m_gui->setupUi(this);
+	QHBoxLayout* hboxLayout = new QHBoxLayout(m_gui->histoFrame);
 	hboxLayout->addWidget(m_win);
 	hboxLayout->setContentsMargins(0,0,0,0);
+	m_gui->histoFrame->setLayout(hboxLayout);
+
+	connect(m_gui->exportCSVToolButton,   SIGNAL(clicked()), this, SLOT(onExportToCSV()));
+	connect(m_gui->exportImageToolButton, SIGNAL(clicked()), this, SLOT(onExportToImage()));
 
 	resize(400,275);
+}
+
+ccHistogramWindowDlg::~ccHistogramWindowDlg()
+{
+	if (m_gui)
+		delete m_gui;
+}
+
+//CSV file default separator
+static const QChar s_csvSep(';');
+
+bool ccHistogramWindowDlg::exportToCSV(QString filename) const
+{
+	if (!m_win || m_win->histoValues().empty())
+	{
+		ccLog::Warning("[Histogram] Histogram has no associated values (can't save file)");
+		return false;
+	}
+
+	QFile file(filename);
+	if (!file.open(QFile::WriteOnly | QFile::Text))
+	{
+		ccLog::Warning(QString("[Histogram] Failed to save histogram to file '%1'").arg(filename));
+		return false;
+	}
+
+	QTextStream stream(&file);
+	stream.setRealNumberPrecision(12);
+	stream.setRealNumberNotation(QTextStream::FixedNotation);
+	
+	//header
+	stream << "Class; Value; Class start; Class end;" << endl;
+
+	//data
+	{
+		const std::vector<unsigned>& histoValues = m_win->histoValues();
+		int histoSize = static_cast<int>(histoValues.size());
+		double step = (m_win->maxVal() - m_win->minVal()) / histoSize;
+		for (int i=0; i<histoSize; ++i)
+		{
+			double minVal = m_win->minVal() + i*step;
+			stream << i+1;				//class index
+			stream << s_csvSep;
+			stream << histoValues[i];	//class value
+			stream << s_csvSep;
+			stream << minVal;			//min value
+			stream << s_csvSep;
+			stream << minVal + step;	//max value
+			stream << s_csvSep;
+			stream << endl;
+		}
+	}
+
+	file.close();
+
+	ccLog::Print(QString("[Histogram] File '%1' saved").arg(filename));
+	
+	return true;
+}
+
+void ccHistogramWindowDlg::onExportToCSV()
+{
+	if (!m_win)
+	{
+		assert(false);
+		return;
+	}
+
+	//persistent settings
+	QSettings settings;
+	settings.beginGroup(ccPS::SaveFile());
+	QString currentPath = settings.value(ccPS::CurrentPath(),QApplication::applicationDirPath()).toString();
+
+	currentPath += QString("/") + m_win->windowTitle() + ".csv";
+
+	//ask for a filename
+	QString filename = QFileDialog::getSaveFileName(this,"Select output file",currentPath,"*.csv");
+	if (filename.isEmpty())
+	{
+		//process cancelled by user
+		return;
+	}
+
+	//save last saving location
+	settings.setValue(ccPS::CurrentPath(),QFileInfo(filename).absolutePath());
+	settings.endGroup();
+
+	//save file
+	exportToCSV(filename);
+}
+
+void ccHistogramWindowDlg::onExportToImage()
+{
+	if (!m_win)
+	{
+		assert(false);
+		return;
+	}
+
+	//we grab the list of supported image file formats (output)
+	QList<QByteArray> list = QImageWriter::supportedImageFormats();
+	if (list.size() < 1)
+	{
+		ccLog::Error("No supported image format on this platform?!");
+		return;
+	}
+
+	//we convert this list into a proper "filters" string
+	QString firstFilter;
+	QString filters;
+	for (int i=0; i<list.size(); ++i)
+	{
+		filters.append(QString("%1 image (*.%2)\n").arg(QString(list[i].data()).toUpper()).arg(list[i].data()));
+		if (i == 0)
+			firstFilter = filters;
+	}
+
+	//persistent settings
+	QSettings settings;
+	settings.beginGroup(ccPS::SaveFile());
+	QString currentPath = settings.value(ccPS::CurrentPath(),QApplication::applicationDirPath()).toString();
+
+	currentPath += QString("/") + m_win->windowTitle();
+
+	//ask for a filename
+	QString filename = QFileDialog::getSaveFileName(this,"Select output file",currentPath,filters);
+	if (filename.isEmpty())
+	{
+		//process cancelled by user
+		return;
+	}
+
+	//save last saving location
+	settings.setValue(ccPS::CurrentPath(),QFileInfo(filename).absolutePath());
+	settings.endGroup();
+
+	//save widget as an image file
+	QPixmap image = QPixmap::grabWidget(m_win);
+	if (!image.save(filename))
+	{
+		ccLog::Error(QString("Failed to save file '%1'").arg(filename));
+	}
 }

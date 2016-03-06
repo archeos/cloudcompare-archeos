@@ -19,22 +19,34 @@
 
 //local
 #include "ccColorScaleEditorWidget.h"
-#include "ccDisplayOptionsDlg.h"
+#include "ccQtHelpers.h"
+#include "ccPersistentSettings.h"
+#include <ccMainAppInterface.h>
 
 //qCC_db
 #include <ccColorScalesManager.h>
 #include <ccScalarField.h>
+#include <ccPointCloud.h>
 
 //Qt
 #include <QHBoxLayout>
 #include <QColorDialog>
 #include <QMessageBox>
 #include <QInputDialog>
+#include <QFileDialog>
+#include <QPlainTextEdit>
+#include <QSettings>
+#include <QUuid>
 
 //System
 #include <assert.h>
 
-ccColorScaleEditorDialog::ccColorScaleEditorDialog(ccColorScalesManager* manager, ccColorScale::Shared currentScale/*=0*/, QWidget* parent/*=0*/)
+static char s_defaultEmptyCustomListText[] = "(auto)";
+
+ccColorScaleEditorDialog::ccColorScaleEditorDialog(	ccColorScalesManager* manager,
+													ccMainAppInterface* mainApp,
+													ccColorScale::Shared currentScale/*=0*/,
+													QWidget* parent/*=0*/)
 	: QDialog(parent)
 	, Ui::ColorScaleEditorDlg()
 	, m_manager(manager)
@@ -44,6 +56,7 @@ ccColorScaleEditorDialog::ccColorScaleEditorDialog(ccColorScalesManager* manager
 	, m_modified(false)
 	, m_minAbsoluteVal(0.0)
 	, m_maxAbsoluteVal(1.0)
+	, m_mainApp(mainApp)
 {
 	assert(m_manager);
 
@@ -55,6 +68,10 @@ ccColorScaleEditorDialog::ccColorScaleEditorDialog(ccColorScalesManager* manager
 
 	//main combo box
 	connect(rampComboBox, SIGNAL(activated(int)), this, SLOT(colorScaleChanged(int)));
+
+	//import/export buttons
+	connect(exportToolButton,		SIGNAL(clicked()),				this,	SLOT(exportCurrentScale()));
+	connect(importToolButton,		SIGNAL(clicked()),				this,	SLOT(importScale()));
 
 	//upper buttons
 	connect(renameToolButton,		SIGNAL(clicked()),				this,	SLOT(renameCurrentScale()));
@@ -73,6 +90,12 @@ ccColorScaleEditorDialog::ccColorScaleEditorDialog(ccColorScalesManager* manager
 	connect(colorToolButton,		SIGNAL(clicked()),				this,	SLOT(changeSelectedStepColor()));
 	connect(valueDoubleSpinBox,		SIGNAL(valueChanged(double)),	this,	SLOT(changeSelectedStepValue(double)));
 
+	//labels list widget
+	connect(customLabelsGroupBox,		SIGNAL(toggled(bool)),		this,	SLOT(toggleCustomLabelsList(bool)));
+	connect(customLabelsPlainTextEdit,	SIGNAL(textChanged()),		this,	SLOT(onCustomLabelsListChanged()));
+
+	//apply button
+	connect(applyPushButton,		SIGNAL(clicked()),				this,	SLOT(onApply()));
 	//close button
 	connect(closePushButton,		SIGNAL(clicked()),				this,	SLOT(onClose()));
 
@@ -168,7 +191,10 @@ bool ccColorScaleEditorDialog::canChangeCurrentScale()
 																QMessageBox::Cancel);
 	if (button == QMessageBox::Yes)
 	{
-		saveCurrentScale();
+		if (!saveCurrentScale())
+		{
+			return false;
+		}
 	}
 	else if (button == QMessageBox::Cancel)
 	{
@@ -225,9 +251,13 @@ void ccColorScaleEditorDialog::setActiveScale(ccColorScale::Shared currentScale)
 		//locked state
 		bool isLocked = !m_colorScale || m_colorScale->isLocked();
 		colorScaleParametersFrame->setEnabled(!isLocked);
+		exportToolButton->setEnabled(!isLocked);
 		lockWarningLabel->setVisible(isLocked);
 		selectedSliderGroupBox->setEnabled(!isLocked);
 		m_scaleWidget->setEnabled(!isLocked);
+		customLabelsGroupBox->blockSignals(true);
+		customLabelsGroupBox->setEnabled(!isLocked);
+		customLabelsGroupBox->blockSignals(false);
 
 		//absolute or relative mode
 		if (m_colorScale)
@@ -246,6 +276,35 @@ void ccColorScaleEditorDialog::setActiveScale(ccColorScale::Shared currentScale)
 			assert(isLocked == true);
 			setScaleModeToRelative(false);
 		}
+	}
+
+	//custom labels
+	{
+		ccColorScale::LabelSet& customLabels = m_colorScale->customLabels();
+		if (customLabels.empty())
+		{
+			customLabelsPlainTextEdit->blockSignals(true);
+			customLabelsPlainTextEdit->setPlainText(s_defaultEmptyCustomListText);
+			customLabelsPlainTextEdit->blockSignals(false);
+		}
+		else
+		{
+			QString text;
+			size_t index = 0;
+			for (ccColorScale::LabelSet::const_iterator it=customLabels.begin(); it!=customLabels.end(); ++it, ++index)
+			{
+				if (index != 0)
+					text += QString("\n");
+				text += QString::number(*it,'f',6);
+			}
+			customLabelsPlainTextEdit->blockSignals(true);
+			customLabelsPlainTextEdit->setPlainText(text);
+			customLabelsPlainTextEdit->blockSignals(false);
+
+		}
+		customLabelsGroupBox->blockSignals(true);
+		customLabelsGroupBox->setChecked(!customLabels.empty());
+		customLabelsGroupBox->blockSignals(false);
 	}
 
 	m_scaleWidget->importColorScale(m_colorScale);
@@ -280,7 +339,7 @@ void ccColorScaleEditorDialog::onStepSelected(int index)
 		valueDoubleSpinBox->blockSignals(true);
 		valueDoubleSpinBox->setValue(0.0);
 		valueDoubleSpinBox->blockSignals(false);
-		ccDisplayOptionsDlg::SetButtonColor(colorToolButton,Qt::gray);
+		ccQtHelpers::SetButtonColor(colorToolButton,Qt::gray);
 		valueLabel->setVisible(false);
 	}
 	else
@@ -299,7 +358,7 @@ void ccColorScaleEditorDialog::onStepModified(int index)
 	const ColorScaleElementSlider* slider = m_scaleWidget->getStep(index);
 	assert(slider);
 
-	ccDisplayOptionsDlg::SetButtonColor(colorToolButton,slider->getColor());
+	ccQtHelpers::SetButtonColor(colorToolButton,slider->getColor());
 	if (m_colorScale)
 	{
 		const double relativePos = slider->getRelativePos();
@@ -436,6 +495,98 @@ void ccColorScaleEditorDialog::changeSelectedStepValue(double value)
 	}
 }
 
+bool ccColorScaleEditorDialog::exportCustomLabelsList(ccColorScale::LabelSet& labels)
+{
+	assert(customLabelsGroupBox->isChecked());
+	labels.clear();
+
+	QString text = customLabelsPlainTextEdit->toPlainText();
+	QStringList items = text.split(QRegExp("\\s+"),QString::SkipEmptyParts);
+	if (items.size() < 2)
+	{
+		assert(false);
+		return false;
+	}
+
+	try
+	{
+		for (int i=0; i<items.size(); ++i)
+		{
+			bool ok;
+			double d = items[i].toDouble(&ok);
+			if (!ok)
+			{
+				return false;
+			}
+			labels.insert(d);
+		}
+	}
+	catch (const std::bad_alloc&)
+	{
+		ccLog::Error("Not enough memory to save the custom labels!");
+		labels.clear();
+		return false;
+	}
+
+	return true;
+}
+
+bool ccColorScaleEditorDialog::checkCustomLabelsList(bool showWarnings)
+{
+	QString text = customLabelsPlainTextEdit->toPlainText();
+	QStringList items = text.split(QRegExp("\\s+"),QString::SkipEmptyParts);
+	if (items.size() < 2)
+	{
+		if (showWarnings)
+			ccLog::Error("Not enough labels defined (2 at least are required)");
+		return false;
+	}
+
+	for (int i=0; i<items.size(); ++i)
+	{
+		bool ok;
+		items[i].toDouble(&ok);
+		if (!ok)
+		{
+			if (showWarnings)
+				ccLog::Error(QString("Invalid label value: '%1'").arg(items[i]));
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void ccColorScaleEditorDialog::onCustomLabelsListChanged()
+{
+	setModified(true);
+}
+
+void ccColorScaleEditorDialog::toggleCustomLabelsList(bool state)
+{
+	//custom list enable
+	if (state)
+	{
+		QString previousText = customLabelsPlainTextEdit->toPlainText();
+		//if the previous list was 'empty', we clear its (fake) content
+		if (previousText == s_defaultEmptyCustomListText)
+		{
+			customLabelsPlainTextEdit->blockSignals(true);
+			customLabelsPlainTextEdit->clear();
+			customLabelsPlainTextEdit->blockSignals(false);
+		}
+	}
+	else
+	{
+		if (!checkCustomLabelsList(false))
+		{
+			//if the text is invalid
+			customLabelsPlainTextEdit->setPlainText(s_defaultEmptyCustomListText);
+		}
+	}
+	setModified(true);
+}
+
 void ccColorScaleEditorDialog::copyCurrentScale()
 {
 	if (!m_colorScale)
@@ -462,22 +613,76 @@ void ccColorScaleEditorDialog::copyCurrentScale()
 	setActiveScale(scale);
 }
 
-void ccColorScaleEditorDialog::saveCurrentScale()
+bool ccColorScaleEditorDialog::saveCurrentScale()
 {
 	if (!m_colorScale || m_colorScale->isLocked())
 	{
 		assert(false);
-		return;
+		return false;
 	}
 
+	//check the custom labels
+	if (customLabelsGroupBox->isChecked() && !checkCustomLabelsList(true))
+	{
+		//error message already issued
+		return false;
+	}
+	
 	m_scaleWidget->exportColorScale(m_colorScale);
-	bool relativeMode = isRelativeMode();
-	if (relativeMode)
+	bool wasRelative = m_colorScale->isRelative();
+	bool isRelative = isRelativeMode();
+	if (isRelative)
 		m_colorScale->setRelative();
 	else
 		m_colorScale->setAbsolute(m_minAbsoluteVal,m_maxAbsoluteVal);
 
+	//DGM: warning, if the relative state has changed
+	//we must update all the SFs currently relying on this scale!
+	if ((!isRelative || isRelative != wasRelative) && m_mainApp && m_mainApp->dbRootObject())
+	{
+		ccHObject::Container clouds;
+		m_mainApp->dbRootObject()->filterChildren(clouds, true, CC_TYPES::POINT_CLOUD, true);
+		for (size_t i=0; i<clouds.size(); ++i)
+		{
+			ccPointCloud* cloud = static_cast<ccPointCloud*>(clouds[i]);
+			for (unsigned j=0; j<cloud->getNumberOfScalarFields(); ++j)
+			{
+				ccScalarField* sf = static_cast<ccScalarField*>(cloud->getScalarField(j));
+				if (sf->getColorScale() == m_colorScale)
+				{
+					//trick: we unlink then re-link the color scale to update everything automatically
+					sf->setColorScale(ccColorScale::Shared(0));
+					sf->setColorScale(m_colorScale);
+
+					if (cloud->getCurrentDisplayedScalarField() == sf)
+					{
+						cloud->prepareDisplayForRefresh();
+						if (cloud->getParent() && cloud->getParent()->isKindOf(CC_TYPES::MESH))
+						{
+							//for mesh vertices (just in case)
+							cloud->getParent()->prepareDisplayForRefresh();
+						}
+					}
+				}
+			}
+		}
+
+		m_mainApp->refreshAll();
+	}
+
+	//save the custom labels
+	if (customLabelsGroupBox->isChecked())
+	{
+		exportCustomLabelsList(m_colorScale->customLabels());
+	}
+	else
+	{
+		m_colorScale->customLabels().clear();
+	}
+
 	setModified(false);
+
+	return true;
 }
 
 void ccColorScaleEditorDialog::renameCurrentScale()
@@ -558,10 +763,111 @@ void ccColorScaleEditorDialog::createNewScale()
 	setActiveScale(scale);
 }
 
+void ccColorScaleEditorDialog::onApply()
+{
+	if (m_mainApp && canChangeCurrentScale())
+	{
+		if (m_associatedSF)
+			m_associatedSF->setColorScale(m_colorScale);
+		m_mainApp->redrawAll();
+	}
+}
+
 void ccColorScaleEditorDialog::onClose()
 {
 	if (canChangeCurrentScale())
 	{
 		accept();
+	}
+}
+
+void ccColorScaleEditorDialog::exportCurrentScale()
+{
+	if (!m_colorScale || m_colorScale->isLocked())
+	{
+		assert(false);
+		return;
+	}
+
+	//persistent settings
+	QSettings settings;
+	settings.beginGroup(ccPS::SaveFile());
+	QString currentPath = settings.value(ccPS::CurrentPath(),QApplication::applicationDirPath()).toString();
+
+	//ask for a filename
+	QString filename = QFileDialog::getSaveFileName(this,"Select output file",currentPath,"*.xml");
+	if (filename.isEmpty())
+	{
+		//process cancelled by user
+		return;
+	}
+
+	//save last saving location
+	settings.setValue(ccPS::CurrentPath(),QFileInfo(filename).absolutePath());
+	settings.endGroup();
+
+	//try to save the file
+	if (m_colorScale->saveAsXML(filename))
+	{
+		ccLog::Print(QString("[ColorScale] Scale '%1' sucessfully exported in '%2'").arg(m_colorScale->getName()).arg(filename));
+	}
+}
+
+void ccColorScaleEditorDialog::importScale()
+{
+	//persistent settings
+	QSettings settings;
+	settings.beginGroup(ccPS::LoadFile());
+	QString currentPath = settings.value(ccPS::CurrentPath(),QApplication::applicationDirPath()).toString();
+
+	//ask for a filename
+	QString filename = QFileDialog::getOpenFileName(this,"Select color scale file",currentPath,"*.xml");
+	if (filename.isEmpty())
+	{
+		//process cancelled by user
+		return;
+	}
+
+	//save last loading parameters
+	settings.setValue(ccPS::CurrentPath(),QFileInfo(filename).absolutePath());
+	settings.endGroup();
+
+	//try to load the file
+	ccColorScale::Shared scale = ccColorScale::LoadFromXML(filename);
+	if (scale)
+	{
+		assert(m_manager);
+		if (m_manager)
+		{
+			ccColorScale::Shared otherScale = m_manager->getScale(scale->getUuid());
+			if (otherScale)
+			{
+				QString message = "A color scale with the same UUID";
+				if (otherScale->getName() == scale->getName())
+					message += QString(" and the same name (%1)").arg(scale->getName());
+				message += " is already in store!";
+				message += "\n";
+				message += "Do you want to force the importation of this new scale? (a new UUID will be generated)";
+
+				if (QMessageBox::question	(this,
+											"UUID conflict",
+											message,
+											QMessageBox::Yes,
+											QMessageBox::No) == QMessageBox::No)
+				{
+					ccLog::Warning("[ccColorScaleEditorDialog::importScale] Importation cancelled due to a conflicting UUID (color scale may already be in store)");
+					return;
+				}
+				//generate a new UUID
+				scale->setUuid(QUuid::createUuid().toString());
+			}
+			//now we can import the scale
+			m_manager->addScale(scale);
+			ccLog::Print(QString("[ccColorScaleEditorDialog::importScale] Color scale '%1' successfully imported").arg(scale->getName()));
+		}
+
+		updateMainComboBox();
+	
+		setActiveScale(scale);
 	}
 }

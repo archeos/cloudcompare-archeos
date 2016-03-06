@@ -31,7 +31,7 @@
 #include <QSharedPointer>
 
 //system
-#include <set>
+#include <unordered_set>
 #include <assert.h>
 
 class ccPointCloud;
@@ -53,7 +53,7 @@ public: //general
 		//! Helper: initializes a IntrinsicParameters structure with the default Kinect parameters
 		static void GetKinectDefaults(IntrinsicParameters& params);
 
-		float focal_pix;			/**< focal length (in pixels)**/
+		float vertFocal_pix;		/**< focal length (in pixels) - vertical dimension by default**/
 		float pixelSize_mm[2];		/**< sensor pixel size (in real dimension, e.g. mm) **/
 		float skew;					/**< skew **/
 		float vFOV_rad;				/**< vertical field of view (in Radians) **/
@@ -61,6 +61,16 @@ public: //general
 		float zFar_mm;				/**< Far plane position **/
 		int arrayWidth;				/**< Pixel array width (in pixels) **/
 		int arrayHeight;			/**< Pixel array height (in pixels) **/
+		float principal_point[2];	/**< Principal point (in pixels) **/
+
+		//! Returns the horizontal focal pix
+		/** \warning Be sure the pixel size values are correct!
+		**/
+		inline float horizFocal_pix() const
+		{
+			assert(pixelSize_mm[1] > 0);
+			return (vertFocal_pix * pixelSize_mm[0]) / pixelSize_mm[1];
+		}
 	};
 
 	//! Supported distortion models
@@ -71,16 +81,22 @@ public: //general
 	//! Lens distortion parameters (interface)
 	struct LensDistortionParameters
 	{
-		//! Returns distortion model type
-		virtual DistortionModel getModel() const = 0;
-
 		//! Shared pointer type
 		typedef QSharedPointer<LensDistortionParameters> Shared;
+
+		//! Virtual destructor
+		virtual ~LensDistortionParameters() {}
+
+		//! Returns distortion model type
+		virtual DistortionModel getModel() const = 0;
 	};
 	
 	//! Simple radial distortion model
 	struct QCC_DB_LIB_API RadialDistortionParameters : LensDistortionParameters
 	{
+		//! Shared pointer type
+		typedef QSharedPointer<RadialDistortionParameters> Shared;
+
 		//! Default initializer
 		RadialDistortionParameters() : k1(0), k2(0) {}
 		
@@ -101,6 +117,9 @@ public: //general
 	**/
 	struct QCC_DB_LIB_API BrownDistortionParameters : LensDistortionParameters
 	{
+		//! Shared pointer type
+		typedef QSharedPointer<BrownDistortionParameters> Shared;
+
 		//! Default initializer
 		BrownDistortionParameters();
 
@@ -157,9 +176,8 @@ public: //general
 	//inherited from ccHObject
 	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::CAMERA_SENSOR; }
 	virtual bool isSerializable() const { return true; }
-	virtual ccBBox getMyOwnBB();
-	virtual ccBBox getDisplayBB();
-	virtual ccBBox getFitBB(ccGLMatrix& trans);
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
+	virtual ccBBox getOwnFitBB(ccGLMatrix& trans);
 
 	//inherited from ccSensor
 	virtual bool applyViewport(ccGenericGLDisplay* win = 0);
@@ -167,9 +185,13 @@ public: //general
 public: //getters and setters
 
 	//! Sets focal (in pixels)
-	void setFocal_pix(float f_pix);
-	//! Returns focal (in pixels)
-	inline float getFocal_pix() const { return m_intrinsicParams.focal_pix; }
+	/** \warning Vertical dimension by default
+	**/
+	void setVertFocal_pix(float vertFocal_pix);
+	//! Returns vertical focal (in pixels)
+	inline float getVertFocal_pix() const { return m_intrinsicParams.vertFocal_pix; }
+	//! Returns horizontal focal (in pixels)
+	inline float getHorizFocal_pix() const { return m_intrinsicParams.horizFocal_pix(); }
 
 	//! Sets the (vertical) field of view in radians
 	void setVerticalFov_rad(float fov_rad);
@@ -182,7 +204,7 @@ public: //getters and setters
 	void setIntrinsicParameters(const IntrinsicParameters& params);
 
 	//! Returns uncertainty parameters
-	LensDistortionParameters::Shared getDistortionParameters() const { return m_distortionParams; }
+	const LensDistortionParameters::Shared& getDistortionParameters() const { return m_distortionParams; }
 	//! Sets uncertainty parameters 
 	void setDistortionParameters(LensDistortionParameters::Shared params) { m_distortionParams = params; }
 
@@ -426,12 +448,6 @@ public: //misc
 	**/ 
 	bool isGlobalCoordInFrustrum(const CCVector3& globalCoord/*, bool withLensCorrection*/);
 
-	//! Filters an octree : all the box visible in the frustum will be drawn in red.
-	/** \param octree Octree
-		\param inCameraFrustrum indices of points in the frustrum
-	**/
-	void filterOctree(ccOctree* octree, std::vector<unsigned>& inCameraFrustrum);
-	
 	//! Compute the coefficients of the 6 planes frustrum in the global coordinates system (normal vector are headed the frustrum inside), the edges direction vectors and the frustrum center
 	/** \param planeCoefficients coefficients of the six planes
 		\param edges direction vectors of the frustrum edges (there are 12 edges but some of them are colinear)
@@ -444,16 +460,16 @@ public: //misc
 public: //helpers
 
 	//! Helper: converts camera focal from pixels to mm
-	static float ConvertFocalPixToMM(float focal_pix, float ccdPixelHeight_mm);
+	static float ConvertFocalPixToMM(float focal_pix, float ccdPixelSize_mm);
 
 	//! Helper: converts camera focal from mm to pixels
-	static float ConvertFocalMMToPix(float focal_mm, float ccdPixelHeight_mm);
+	static float ConvertFocalMMToPix(float focal_mm, float ccdPixelSize_mm);
 
 	//! Helper: deduces camera f.o.v. (in radians) from focal (in pixels)
-	static float ComputeFovRadFromFocalPix(float focal_pix, int imageHeight_pix);
+	static float ComputeFovRadFromFocalPix(float focal_pix, int imageSize_pix);
 
 	//! Helper: deduces camera f.o.v. (in radians) from focal (in mm)
-	static float ComputeFovRadFromFocalMm(float focal_mm, float ccdHeight_mm);
+	static float ComputeFovRadFromFocalMm(float focal_mm, float ccdSize_mm);
 	
 protected:
 
@@ -515,11 +531,11 @@ public:
 	bool build(CCLib::DgmOctree* octree);
 
 	//! Returns the cell visibility
-	OctreeCellVisibility positionFromFrustum(CCLib::DgmOctree::OctreeCellCodeType truncatedCode, uchar level) const
+	OctreeCellVisibility positionFromFrustum(CCLib::DgmOctree::OctreeCellCodeType truncatedCode, unsigned char level) const
 	{
 		assert(m_associatedOctree);
 
-		std::set<CCLib::DgmOctree::OctreeCellCodeType>::const_iterator got = m_cellsInFrustum[level].find(truncatedCode);
+		std::unordered_set<CCLib::DgmOctree::OctreeCellCodeType>::const_iterator got = m_cellsInFrustum[level].find(truncatedCode);
 		if (got != m_cellsInFrustum[level].end())
 			return CELL_INSIDE_FRUSTRUM;
 		got = m_cellsIntersectFrustum[level].find(truncatedCode);
@@ -585,11 +601,11 @@ protected:
 	CCLib::DgmOctree* m_associatedOctree;
 
 	// contains the truncated code of the cells built in the octree
-	std::set<CCLib::DgmOctree::OctreeCellCodeType> m_cellsBuilt[CCLib::DgmOctree::MAX_OCTREE_LEVEL+1];
+	std::unordered_set<CCLib::DgmOctree::OctreeCellCodeType> m_cellsBuilt[CCLib::DgmOctree::MAX_OCTREE_LEVEL+1];
 	// contains the truncated code of the cells INSIDE the frustrum
-	std::set<CCLib::DgmOctree::OctreeCellCodeType> m_cellsInFrustum[CCLib::DgmOctree::MAX_OCTREE_LEVEL+1];
+	std::unordered_set<CCLib::DgmOctree::OctreeCellCodeType> m_cellsInFrustum[CCLib::DgmOctree::MAX_OCTREE_LEVEL+1];
 	// contains the truncated code of the cells INTERSECTING the frustrum
-	std::set<CCLib::DgmOctree::OctreeCellCodeType> m_cellsIntersectFrustum[CCLib::DgmOctree::MAX_OCTREE_LEVEL+1];
+	std::unordered_set<CCLib::DgmOctree::OctreeCellCodeType> m_cellsIntersectFrustum[CCLib::DgmOctree::MAX_OCTREE_LEVEL+1];
 };
 
 

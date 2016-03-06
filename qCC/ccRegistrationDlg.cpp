@@ -18,7 +18,7 @@
 #include "ccRegistrationDlg.h"
 
 //Local
-#include "ccDisplayOptionsDlg.h"
+#include "ccQtHelpers.h"
 #include "mainwindow.h"
 
 //CCLib
@@ -34,12 +34,17 @@
 #include <assert.h>
 
 //semi-persistent options
-static bool s_adjustScale = false;
-static unsigned s_randomSamplingLimit = 20000;
-static double s_errorDifference = 1.0e-6;
+static bool     s_adjustScale = false;
+static unsigned s_randomSamplingLimit = 50000;
+static double   s_rmsDifference = 1.0e-5;
+static int      s_maxIterationCount = 20;
+static bool     s_useErrorDifferenceCriterion = true;
+static int      s_finalOverlap = 100;
+static int      s_rotComboIndex = 0;
+static bool     s_transCheckboxes[3] = {true, true, true};
 
 ccRegistrationDlg::ccRegistrationDlg(ccHObject *data, ccHObject *model, QWidget* parent/*=0*/)
-	: QDialog(parent)
+	: QDialog(parent, Qt::Tool)
 	, Ui::RegistrationDialog()
 {
 	assert(data && model);
@@ -47,20 +52,29 @@ ccRegistrationDlg::ccRegistrationDlg(ccHObject *data, ccHObject *model, QWidget*
 	modelEntity = model;
 
 	setupUi(this);
-	errorDifferenceLineEdit->setValidator(new QDoubleValidator(errorDifferenceLineEdit));
-	setWindowFlags(Qt::Tool);
+	rmsDifferenceLineEdit->setValidator(new QDoubleValidator(rmsDifferenceLineEdit));
 
 	setColorsAndLabels();
 
 	QColor qRed(255,0,0);
 	QColor qYellow(255,255,0);
-	ccDisplayOptionsDlg::SetButtonColor(dataColorButton,qRed);
-	ccDisplayOptionsDlg::SetButtonColor(modelColorButton,qYellow);
+	ccQtHelpers::SetButtonColor(dataColorButton,qRed);
+	ccQtHelpers::SetButtonColor(modelColorButton,qYellow);
 
 	//restore semi-persistent settings
 	adjustScaleCheckBox->setChecked(s_adjustScale);
 	randomSamplingLimitSpinBox->setValue(s_randomSamplingLimit);
-	errorDifferenceLineEdit->setText(QString::number(s_errorDifference,'e',3));
+	rmsDifferenceLineEdit->setText(QString::number(s_rmsDifference,'e',1));
+	maxIterationCount->setValue(s_maxIterationCount);
+	if (s_useErrorDifferenceCriterion)
+		errorCriterion->setChecked(true);
+	else
+		iterationsCriterion->setChecked(true);
+	overlapSpinBox->setValue(s_finalOverlap);
+	rotComboBox->setCurrentIndex(s_rotComboIndex);
+	TxCheckBox->setChecked(s_transCheckboxes[0]);
+	TyCheckBox->setChecked(s_transCheckboxes[1]);
+	TzCheckBox->setChecked(s_transCheckboxes[2]);
 
 	connect(swapButton, SIGNAL(clicked()), this, SLOT(swapModelAndData()));
 }
@@ -78,7 +92,21 @@ ccRegistrationDlg::~ccRegistrationDlg()
 		dataEntity->prepareDisplayForRefresh_recursive();
 	}
 
-	MainWindow::RefreshAllGLWindow();
+	MainWindow::RefreshAllGLWindow(false);
+}
+
+void ccRegistrationDlg::saveParameters() const
+{
+	s_adjustScale = adjustScale();
+	s_randomSamplingLimit = randomSamplingLimit();
+	s_rmsDifference = getMinRMSDecrease();
+	s_maxIterationCount = getMaxIterationCount();
+	s_useErrorDifferenceCriterion = errorCriterion->isChecked();
+	s_finalOverlap = overlapSpinBox->value();
+	s_rotComboIndex = rotComboBox->currentIndex();
+	s_transCheckboxes[0] = TxCheckBox->isChecked();
+	s_transCheckboxes[1] = TyCheckBox->isChecked();
+	s_transCheckboxes[2] = TzCheckBox->isChecked();
 }
 
 ccHObject *ccRegistrationDlg::getDataEntity()
@@ -93,19 +121,17 @@ ccHObject *ccRegistrationDlg::getModelEntity()
 
 bool ccRegistrationDlg::useDataSFAsWeights() const
 {
-	return checkBoxUseDataSFAsWeights->isChecked();
+	return checkBoxUseDataSFAsWeights->isEnabled() && checkBoxUseDataSFAsWeights->isChecked();
 }
 
 bool ccRegistrationDlg::useModelSFAsWeights() const
 {
-	return checkBoxUseModelSFAsWeights->isChecked();
+	return checkBoxUseModelSFAsWeights->isEnabled() && checkBoxUseModelSFAsWeights->isChecked();
 }
 
 bool ccRegistrationDlg::adjustScale() const
 {
-	//we save the parameter by the way ;)
-	s_adjustScale = adjustScaleCheckBox->isChecked();
-	return s_adjustScale;
+	return adjustScaleCheckBox->isChecked();
 }
 
 bool ccRegistrationDlg::removeFarthestPoints() const
@@ -115,32 +141,31 @@ bool ccRegistrationDlg::removeFarthestPoints() const
 
 unsigned ccRegistrationDlg::randomSamplingLimit() const
 {
-	//we save the parameter by the way ;)
-	s_randomSamplingLimit = randomSamplingLimitSpinBox->value();
-	return s_randomSamplingLimit;
+	return randomSamplingLimitSpinBox->value();
 }
 
 unsigned ccRegistrationDlg::getMaxIterationCount() const
 {
-	return maxIterationCount->value();
+	return static_cast<unsigned>(std::max(1,maxIterationCount->value()));
 }
 
-double ccRegistrationDlg::getMinErrorDecrease() const
+unsigned ccRegistrationDlg::getFinalOverlap() const
+{
+	return static_cast<unsigned>(std::max(10,overlapSpinBox->value()));
+}
+
+double ccRegistrationDlg::getMinRMSDecrease() const
 {
 	bool ok = true;
-	double val = errorDifferenceLineEdit->text().toDouble(&ok);
+	double val = rmsDifferenceLineEdit->text().toDouble(&ok);
 	assert(ok);
-
-	//we save the parameter by the way ;)
-	if (ok)
-		s_errorDifference = val;
 
 	return val;
 }
 
 ccRegistrationDlg::ConvergenceMethod ccRegistrationDlg::getConvergenceMethod() const
 {
-	if(errorCriterion->isChecked())
+	if (errorCriterion->isChecked())
 		return CCLib::ICPRegistrationTools::MAX_ERROR_CONVERGENCE;
 	else
 		return CCLib::ICPRegistrationTools::MAX_ITER_CONVERGENCE;
@@ -190,11 +215,15 @@ void ccRegistrationDlg::setColorsAndLabels()
 	dataEntity->setTempColor(ccColor::red);
 	dataEntity->prepareDisplayForRefresh_recursive();
 
-	MainWindow::RefreshAllGLWindow();
+	checkBoxUseDataSFAsWeights->setEnabled(dataEntity->hasDisplayedScalarField());
+	checkBoxUseModelSFAsWeights->setEnabled(modelEntity->hasDisplayedScalarField());
+
+	MainWindow::RefreshAllGLWindow(false);
 }
 
 void ccRegistrationDlg::swapModelAndData()
 {
 	std::swap(dataEntity,modelEntity);
 	setColorsAndLabels();
+	checkBoxUseModelSFAsWeights->setDisabled(modelEntity->isKindOf(CC_TYPES::MESH));
 }

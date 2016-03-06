@@ -91,7 +91,7 @@ bool BundlerFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive)
 
 CC_FILE_ERROR BundlerFilter::loadFile(QString filename, ccHObject& container, LoadParameters& parameters)
 {
-	return loadFileExtended(filename,container,parameters);
+	return loadFileExtended(filename, container, parameters);
 }
 
 //ortho-rectified image related information
@@ -228,7 +228,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	//Read Bundler '.out' file
 	{
 		//progress dialog
-		ccProgressDialog pdlg(true); //cancel available
+		ccProgressDialog pdlg(true, parameters.parentWidget); //cancel available
 		CCLib::NormalizedProgress nprogress(&pdlg,camCount + (importKeypoints || orthoRectifyImages || generateColoredDTM ? ptsCount : 0));
 		pdlg.setMethodTitle("Open Bundler file");
 		pdlg.setInfo(qPrintable(QString("Cameras: %1\nPoints: %2").arg(camCount).arg(ptsCount)));
@@ -333,7 +333,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 				{
 					camUsage.resize(cameras.size(),false);
 				}
-				catch(std::bad_alloc)
+				catch (const std::bad_alloc&)
 				{
 					//nothing serious here
 				}
@@ -413,9 +413,9 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 						int R = tokens[0].toInt();
 						int G = tokens[1].toInt();
 						int B = tokens[2].toInt();
-						keypointsCloud->addRGBColor(static_cast<colorType>(std::min<int>(R,MAX_COLOR_COMP)),
-													static_cast<colorType>(std::min<int>(G,MAX_COLOR_COMP)),
-													static_cast<colorType>(std::min<int>(B,MAX_COLOR_COMP)));
+						keypointsCloud->addRGBColor(static_cast<ColorCompType>(std::min<int>(R,ccColor::MAX)),
+													static_cast<ColorCompType>(std::min<int>(G,ccColor::MAX)),
+													static_cast<ColorCompType>(std::min<int>(B,ccColor::MAX)));
 					}
 
 					currentLine = stream.readLine();
@@ -482,7 +482,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 									{
 										keypointsDescriptors.push_back(lastKeyPoint);
 									}
-									catch(std::bad_alloc)
+									catch (const std::bad_alloc&)
 									{
 										ccLog::Warning("[Bundler] Not enough memory to store keypoints!");
 										keypointsDescriptors.clear();
@@ -608,7 +608,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	}
 
 	//let's try to open the image corresponding to each camera
-	ccProgressDialog ipdlg(true); //cancel available
+	ccProgressDialog ipdlg(true, parameters.parentWidget); //cancel available
 	CCLib::NormalizedProgress inprogress(&ipdlg,camCount);
 	ipdlg.setMethodTitle("Open & process images");
 	ipdlg.setInfo(qPrintable(QString("Images: %1").arg(camCount)));
@@ -624,7 +624,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 	CCLib::SimpleCloud* mntSamples = 0;
 	if (generateColoredDTM)
 	{
-		ccProgressDialog toDlg(true); //cancel available
+		ccProgressDialog toDlg(true, parameters.parentWidget); //cancel available
 		toDlg.setMethodTitle("Preparing colored DTM");
 		toDlg.start();
 		QApplication::processEvents();
@@ -636,10 +636,15 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 		{
 			//alternative keypoints?
 			ccGenericPointCloud* altKeypoints = (altEntity ? ccHObjectCaster::ToGenericPointCloud(altEntity) : 0);
-			dummyMesh = CCLib::PointProjectionTools::computeTriangulation(altKeypoints ? altKeypoints : keypointsCloud,GENERIC_BEST_LS_PLANE);
+			char errorStr[1024];
+			dummyMesh = CCLib::PointProjectionTools::computeTriangulation(	altKeypoints ? altKeypoints : keypointsCloud,
+																			DELAUNAY_2D_BEST_LS_PLANE,
+																			0,
+																			0,
+																			errorStr);
 			if (!dummyMesh)
 			{
-				ccLog::Warning("[Bundler] Failed to generate DTM! (not enough memory?)");
+				ccLog::Warning(QString("[Bundler] Failed to generate DTM! (%1)").arg(errorStr));
 			}
 		}
 		else
@@ -717,16 +722,19 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 			ccCameraSensor::IntrinsicParameters params;
 			params.arrayWidth = static_cast<int>(image->getW());
 			params.arrayHeight = static_cast<int>(image->getH());
-			//we use an arbitray 'pixel size'
-			params.pixelSize_mm[0] = params.pixelSize_mm[1] = 1.0f / std::max(params.arrayWidth,params.arrayHeight);
-			params.focal_pix = cam.f_pix * scaleFactor;
-			params.vFOV_rad = ccCameraSensor::ComputeFovRadFromFocalPix(cam.f_pix,params.arrayHeight);
+			//we define an arbitrary principal point
+			params.principal_point[0] = params.arrayWidth / 2.0f;
+			params.principal_point[1] = params.arrayHeight / 2.0f;
+			//we use an arbitrary 'pixel size'
+			params.pixelSize_mm[0] = params.pixelSize_mm[1] = 1.0f / std::max(params.arrayWidth, params.arrayHeight);
+			params.vertFocal_pix = cam.f_pix * scaleFactor;
+			params.vFOV_rad = ccCameraSensor::ComputeFovRadFromFocalPix(cam.f_pix, params.arrayHeight);
 
 			//camera position/orientation
 			ccGLMatrix transf(cameras[i].trans.inverse().data());
 			
 			//dist to cloud
-			PointCoordinateType dist = (transf.getTranslationAsVec3D() - keypointsCloud->getBBCenter()).norm();
+			PointCoordinateType dist = keypointsCloud ? (transf.getTranslationAsVec3D() - keypointsCloud->getOwnBB().getCenter()).norm() : PC_ONE;
 			params.zFar_mm = dist;
 			params.zNear_mm = 0.001f;
 
@@ -734,7 +742,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 			sensor->setName(QString("Camera #%1").arg(i+1));
 			sensor->setEnabled(true);
 			sensor->setVisible(true/*false*/);
-			sensor->setGraphicScale(keypointsCloud->getBB().getDiagNorm() / 10);
+			sensor->setGraphicScale(keypointsCloud ? keypointsCloud->getOwnBB().getDiagNorm() / 10 : PC_ONE);
 			sensor->setRigidTransformation(transf);
 
 			//distortion parameters
@@ -838,7 +846,7 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 
 						//we take the keypoints 'middle altitude' by default
 						CCVector3 bbMin,bbMax;
-						_keypointsCloud->getBoundingBox(bbMin.u,bbMax.u);
+						_keypointsCloud->getBoundingBox(bbMin,bbMax);
 						PointCoordinateType Z0 = (bbMin.z + bbMax.z)/2;
 
 						orthoImage = sensor->orthoRectifyAsImageDirect(	image,
@@ -1136,9 +1144,9 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 					if (col[3] > 0) //accum
 					{
 						const CCVector3* X = mntSamples->getPointPersistentPtr(i);
-						colorType avgCol[3]= {	static_cast<colorType>(col[0]/col[3]),
-												static_cast<colorType>(col[1]/col[3]),
-												static_cast<colorType>(col[2]/col[3]) };
+						ColorCompType avgCol[3]= {	static_cast<ColorCompType>(col[0]/col[3]),
+												static_cast<ColorCompType>(col[1]/col[3]),
+												static_cast<ColorCompType>(col[2]/col[3]) };
 						mntCloud->addPoint(*X);
 						mntCloud->addRGBColor(avgCol);
 						++realCount;
@@ -1159,7 +1167,11 @@ CC_FILE_ERROR BundlerFilter::loadFileExtended(	const QString& filename,
 						//auto save DTM vertices
 						BinFilter bf;
 						QString outputFile = imageDir.absoluteFilePath("colored_dtm_vertices.bin");
-						if (bf.saveToFile(mntCloud,outputFile) == CC_FERR_NO_ERROR)
+						BinFilter::SaveParameters parameters;
+						{
+							parameters.alwaysDisplaySaveDialog = false;
+						}
+						if (bf.saveToFile(mntCloud,outputFile,parameters) == CC_FERR_NO_ERROR)
 							ccLog::Print(QString("[Bundler] Color DTM vertices automatically saved to '%2'").arg(outputFile));
 						else
 							ccLog::Warning(QString("[Bundler] Failed to save DTM vertices to '%2'").arg(outputFile));

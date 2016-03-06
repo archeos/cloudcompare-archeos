@@ -80,13 +80,13 @@ public:
 	//! Constructor from a float GL matrix array
 	/** \param mat16f a 16 elements array (column major order)
 	**/
-	ccGLMatrixTpl(const float* mat16f) { for (unsigned i=0; i<OPENGL_MATRIX_SIZE; ++i) m_mat[i] = static_cast<T>(mat16f[i]); }
+	explicit ccGLMatrixTpl(const float* mat16f) { for (unsigned i=0; i<OPENGL_MATRIX_SIZE; ++i) m_mat[i] = static_cast<T>(mat16f[i]); }
 
 	//! Constructor from a double GL matrix array
 	/** \warning Will implicitly cast the elements to float!
 		\param mat16d a 16 elements array (column major order)
 	**/
-	ccGLMatrixTpl(const double* mat16d) { for (unsigned i=0; i<OPENGL_MATRIX_SIZE; ++i) m_mat[i] = static_cast<T>(mat16d[i]); }
+	explicit ccGLMatrixTpl(const double* mat16d) { for (unsigned i=0; i<OPENGL_MATRIX_SIZE; ++i) m_mat[i] = static_cast<T>(mat16d[i]); }
 
 	//! Constructor from 4 columns (X,Y,Z,T)
 	/** \param X 3 first elements of the 1st column (last one is 0)
@@ -99,7 +99,7 @@ public:
 		CC_MAT_R11 = X.x;  CC_MAT_R21 = X.y;  CC_MAT_R31 = X.z;  CC_MAT_R41 = 0;
 		CC_MAT_R12 = Y.x;  CC_MAT_R22 = Y.y;  CC_MAT_R32 = Y.z;  CC_MAT_R42 = 0;
 		CC_MAT_R13 = Z.x;  CC_MAT_R23 = Z.y;  CC_MAT_R33 = Z.z;  CC_MAT_R43 = 0;
-		CC_MAT_R14 = Tr.x; CC_MAT_R24 = Tr.y; CC_MAT_R34 = Tr.z; CC_MAT_R44 = 1;
+		CC_MAT_R14 = Tr.x; CC_MAT_R24 = Tr.y; CC_MAT_R34 = Tr.z; CC_MAT_R44 = static_cast<T>(1);
 	}
 
 	//! Interpolates two matrices at relative position 'coef'
@@ -137,38 +137,27 @@ public:
 	**/
 	static ccGLMatrixTpl<T> FromToRotation(const Vector3Tpl<T>& from, const Vector3Tpl<T>& to)
 	{
-		T e = from.dot(to);
-		T f = (e < 0 ? -e : e);
+		T c = from.dot(to);
+		T f = (c < 0 ? -c : c);
 		ccGLMatrixTpl<T> result;
 
-		if (f > 1.0-ZERO_TOLERANCE) //"from" and "to"-vector almost parallel
+		if (1.0-f < ZERO_TOLERANCE) //"from" and "to"-vector almost parallel
 		{
-			// vector most nearly orthogonal to "from"
-			Vector3Tpl<T> x(from.x > 0 ? from.x : -from.x,
-							from.y > 0 ? from.y : -from.y,
-							from.z > 0 ? from.z : -from.z);
-
+			// "to" vector most nearly orthogonal to "from"
+			Vector3Tpl<T> x(0,0,0);
 			if (x.x < x.y)
 			{
 				if (x.x < x.z)
-				{
-					x.x = 1; x.y = x.z = 0;
-				}
+					x.x = static_cast<T>(1);
 				else
-				{
-					x.z = 1; x.x = x.y = 0;
-				}
+					x.z = static_cast<T>(1);
 			}
 			else
 			{
 				if (x.y < x.z)
-				{
-					x.y = 1; x.x = x.z = 0;
-				}
+					x.y = static_cast<T>(1);
 				else
-				{
-					x.z = 1; x.x = x.y = 0;
-				}
+					x.z = static_cast<T>(1);
 			}
 
 			Vector3Tpl<T> u = x-from;
@@ -192,9 +181,10 @@ public:
 		}
 		else  // the most common case, unless "from"="to", or "from"=-"to"
 		{
-			//hand optimized version (9 mults less)
+			//see Efficiently Building a Matrix to Rotate One Vector to Another
+			//T. Moller and J.F. Hugues (1999)
 			Vector3Tpl<T> v = from.cross(to);
-			T h = 1/(1 + e);
+			T h = 1 / (1 + c);
 			T hvx = h * v.x;
 			T hvz = h * v.z;
 			T hvxy = hvx * v.y;
@@ -202,17 +192,17 @@ public:
 			T hvyz = hvz * v.y;
 
 			T* mat = result.data();
-			mat[0]  = e + hvx * v.x;
-			mat[1]  = hvxy - v.z;
-			mat[2]  = hvxz + v.y;
+			mat[0]  = c + hvx * v.x;
+			mat[1]  = hvxy + v.z;
+			mat[2]  = hvxz - v.y;
 
-			mat[4]  = hvxy + v.z;
-			mat[5]  = e + h * v.y * v.y;
-			mat[6]  = hvyz - v.x;
+			mat[4]  = hvxy - v.z;
+			mat[5]  = c + h * v.y * v.y;
+			mat[6]  = hvyz + v.x;
 
-			mat[8]  = hvxz - v.y;
-			mat[9]  = hvyz + v.x;
-			mat[10] = e + hvz * v.z;
+			mat[8]  = hvxz + v.y;
+			mat[9]  = hvyz - v.x;
+			mat[10] = c + hvz * v.z;
 		}
 
 		return result;
@@ -239,7 +229,7 @@ public:
 			mat[0]	= static_cast<T>(q00 + q11 - q22 - q33);
 			mat[5]	= static_cast<T>(q00 - q11 + q22 - q33);
 			mat[10]	= static_cast<T>(q00 - q11 - q22 + q33);
-			mat[15]	= 1;
+			mat[15]	= static_cast<T>(1);
 		}
 
 		//non-diagonal elements
@@ -262,36 +252,46 @@ public:
 		return rotMat;
 	}
 
-	//! Generates a 'viewing' matrix from a looking vector and a 'up' direction (no translation)
-	/** \param forward forward 'view' vector
+	//! Generates a 'viewing' matrix from a looking vector and a 'up' direction
+	/** \warning No translation is applied (pure rotation matrix)
+		\param forward forward 'view' vector
 		\param up up vector
 		\return corresponding rotation matrix
 	**/
 	static ccGLMatrixTpl<T> FromViewDirAndUpDir(const Vector3Tpl<T>& forward, const Vector3Tpl<T>& up)
 	{
-		Vector3Tpl<T> uForward = forward; uForward.normalize();
-		Vector3Tpl<T> uSide = uForward.cross(up);  uSide.normalize();
-		Vector3Tpl<T> uUp = uSide.cross(uForward); uUp.normalize();
+		//normalize forward
+		Vector3Tpl<T> uForward = forward;
+		uForward.normalize();
+		
+		//side = forward x up
+		Vector3Tpl<T> uSide = uForward.cross(up);
+		uSide.normalize();
+		
+		//recompute 'up' as: up = side x forward
+		Vector3Tpl<T> uUp = uSide.cross(uForward);
+		uUp.normalize();
 
 		ccGLMatrixTpl<T> matrix;
-		T* mat = matrix.data();
-		mat[ 0] =  uSide.x ;
-		mat[ 4] =  uSide.y ;
-		mat[ 8] =  uSide.z ;
-		mat[12] =  0 ;
-		mat[ 1] =  uUp.x ;
-		mat[ 5] =  uUp.y ;
-		mat[ 9] =  uUp.z ;
-		mat[13] =  0 ;
-		mat[ 2] = -uForward.x ;
-		mat[ 6] = -uForward.y ;
-		mat[10] = -uForward.z ;
-		mat[14] =  0 ;
-		mat[ 3] =  0;
-		mat[ 7] =  0;
-		mat[11] =  0;
-		mat[15] =  static_cast<T>(1) ;
-
+		{
+			T* mat = matrix.data();
+			mat[ 0] =  uSide.x;
+			mat[ 4] =  uSide.y;
+			mat[ 8] =  uSide.z;
+			mat[12] =  0;
+			mat[ 1] =  uUp.x;
+			mat[ 5] =  uUp.y;
+			mat[ 9] =  uUp.z;
+			mat[13] =  0 ;
+			mat[ 2] = -uForward.x;
+			mat[ 6] = -uForward.y;
+			mat[10] = -uForward.z;
+			mat[14] =  0 ;
+			mat[ 3] =  0;
+			mat[ 7] =  0;
+			mat[11] =  0;
+			mat[15] =  static_cast<T>(1) ;
+		}
 		return matrix;
 	}
 
@@ -302,7 +302,7 @@ public:
 	static ccGLMatrixTpl<T> FromString(QString matText, bool& success)
 	{
 		QStringList valuesStr = matText.split(QRegExp("\\s+"),QString::SkipEmptyParts);
-		if (valuesStr.size() != 16)
+		if (valuesStr.size() != OPENGL_MATRIX_SIZE)
 		{
 			success = false;
 			return ccGLMatrixTpl<T>();
@@ -310,7 +310,7 @@ public:
 
 		ccGLMatrixTpl<T> matrix;
 		T* matValues = matrix.data();
-		for (int i=0; i<16; ++i)
+		for (unsigned i=0; i<OPENGL_MATRIX_SIZE; ++i)
 		{
 			matValues[i] = static_cast<T>(valuesStr[(i%4)*4+(i>>2)].toDouble(&success));
 			if (!success)
@@ -457,7 +457,7 @@ public:
 	inline virtual void toZero() { memset(m_mat,0,OPENGL_MATRIX_SIZE*sizeof(T)); }
 
 	//! Sets matrix to identity
-	inline virtual void toIdentity() { toZero(); CC_MAT_R11 = CC_MAT_R22 = CC_MAT_R33 = CC_MAT_R44 = 1; }
+	inline virtual void toIdentity() { toZero(); CC_MAT_R11 = CC_MAT_R22 = CC_MAT_R33 = CC_MAT_R44 = static_cast<T>(1); }
 
 	//! Clears translation
 	/** Translation is set to (0,0,0).
@@ -475,7 +475,7 @@ public:
 	{
 		T cos_t = cos(alpha_rad);
 		T sin_t = sin(alpha_rad);
-		T inv_cos_t = 1 - cos_t;
+		T inv_cos_t = static_cast<T>(1) - cos_t;
 
 		//normalize rotation axis
 		Vector3Tpl<T> uAxis3D = axis3D;
@@ -510,7 +510,7 @@ public:
 		CC_MAT_R14 = t3D.x;
 		CC_MAT_R24 = t3D.y;
 		CC_MAT_R34 = t3D.z;
-		CC_MAT_R44 = 1.0;
+		CC_MAT_R44 = static_cast<T>(1);
 	}
 
 
@@ -705,6 +705,18 @@ public:
 	**/
 	inline Vector3Tpl<T> getColumnAsVec3D(unsigned index) const { return Vector3Tpl<T>::fromArray(getColumn(index)); }
 
+	//! Sets the content of a given column
+	/** \param index column index (between 0 and 3)
+		\param v new column values
+	**/
+	inline void setColumn(unsigned index, const Vector3Tpl<T>& v) { T* col = m_mat+(index<<2); col[0] = v.x; col[1] = v.y; col[2] = v.z; }
+
+	//! Sets the content of a given column
+	/** \param index column index (between 0 and 3)
+		\param v new column values
+	**/
+	inline void setColumn(unsigned index, const Tuple4Tpl<T>& v) { T* col = m_mat+(index<<2); col[0] = v.x; col[1] = v.y; col[2] = v.z; col[3] = v.w; }
+
 	//! Multiplication by a matrix operator
 	ccGLMatrixTpl<T> operator * (const ccGLMatrixTpl<T>& mat) const
 	{
@@ -726,10 +738,15 @@ public:
 	//! Multiplication by a vector operator (double version)
 	inline Vector3Tpl<double> operator * (const Vector3Tpl<double>& vec) const { return Vector3Tpl<double>(applyX(vec),applyY(vec),applyZ(vec)); }
 
+	//! Multiplication by a 4D vector operator (float version)
+	inline Tuple4Tpl<float> operator * (const Tuple4Tpl<float>& vec) const { return Tuple4Tpl<float>(applyX(vec),applyY(vec),applyZ(vec),applyW(vec)); }
+	//! Multiplication by a 4D vector operator (double version)
+	inline Tuple4Tpl<double> operator * (const Tuple4Tpl<double>& vec) const { return Tuple4Tpl<double>(applyX(vec),applyY(vec),applyZ(vec),applyW(vec)); }
+
 	//! (in place) Addition operator
 	ccGLMatrixTpl<T>& operator += (const ccGLMatrixTpl<T>& mat)
 	{
-		for (unsigned i=0; i<16; ++i)
+		for (unsigned i=0; i<OPENGL_MATRIX_SIZE; ++i)
 			m_mat[i] += mat.m_mat[i];
 		return (*this);
 	}
@@ -737,7 +754,7 @@ public:
 	//! (in place) Difference operator
 	ccGLMatrixTpl<T>& operator -= (const ccGLMatrixTpl<T>& mat)
 	{
-		for (unsigned i=0; i<16; ++i)
+		for (unsigned i=0; i<OPENGL_MATRIX_SIZE; ++i)
 			m_mat[i] -= mat.m_mat[i];
 		return (*this);
 	}
@@ -791,6 +808,15 @@ public:
 	**/
 	inline void apply(Vector3Tpl<double>& vec) const	{ vec = (*this)*vec; }
 
+	//! Applies transformation to a 4D vector (in place) - float version
+	/** Input vector is directly modified after calling this method
+	**/
+	inline void apply(Tuple4Tpl<float>& vec) const	{ vec = (*this)*vec; }
+	//! Applies transformation to a 3D vector (in place) - double version
+	/** Input vector is directly modified after calling this method
+	**/
+	inline void apply(Tuple4Tpl<double>& vec) const	{ vec = (*this)*vec; }
+
 	//! Get the resulting transformation along X dimension (float version)
 	inline float applyX(const Vector3Tpl<float>& vec) const
 	{
@@ -842,14 +868,82 @@ public:
 				+ static_cast<double>(CC_MAT_R34);
 	}
 
+	//! Get the resulting transformation along X dimension (float version)
+	inline float applyX(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R11) * vec.x
+				+ static_cast<float>(CC_MAT_R12) * vec.y
+				+ static_cast<float>(CC_MAT_R13) * vec.z
+				+ static_cast<float>(CC_MAT_R14) * vec.w;
+	}
+	//! Get the resulting transformation along X dimension (double version)
+	inline double applyX(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R11) * vec.x
+				+ static_cast<double>(CC_MAT_R12) * vec.y
+				+ static_cast<double>(CC_MAT_R13) * vec.z
+				+ static_cast<double>(CC_MAT_R14) * vec.w;
+	}
+
+	//! Get the resulting transformation along Y dimension (float version)
+	inline float applyY(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R21) * vec.x
+				+ static_cast<float>(CC_MAT_R22) * vec.y
+				+ static_cast<float>(CC_MAT_R23) * vec.z
+				+ static_cast<float>(CC_MAT_R24) * vec.w;
+	}
+	//! Get the resulting transformation along Y dimension (double version)
+	inline double applyY(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R21) * vec.x
+				+ static_cast<double>(CC_MAT_R22) * vec.y
+				+ static_cast<double>(CC_MAT_R23) * vec.z
+				+ static_cast<double>(CC_MAT_R24) * vec.w;
+	}
+
+	//! Get the resulting transformation along Z dimension (float version)
+	inline float applyZ(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R31) * vec.x
+				+ static_cast<float>(CC_MAT_R32) * vec.y
+				+ static_cast<float>(CC_MAT_R33) * vec.z
+				+ static_cast<float>(CC_MAT_R34) * vec.w;
+	}
+	//! Get the resulting transformation along Z dimension (double version)
+	inline double applyZ(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R31) * vec.x
+				+ static_cast<double>(CC_MAT_R32) * vec.y
+				+ static_cast<double>(CC_MAT_R33) * vec.z
+				+ static_cast<double>(CC_MAT_R34) * vec.w;
+	}
+
+	//! Get the resulting transformation along the 4th dimension (float version)
+	inline float applyW(const Tuple4Tpl<float>& vec) const
+	{
+		return    static_cast<float>(CC_MAT_R41) * vec.x
+				+ static_cast<float>(CC_MAT_R42) * vec.y
+				+ static_cast<float>(CC_MAT_R43) * vec.z
+				+ static_cast<float>(CC_MAT_R44) * vec.w;
+	}
+	//! Get the resulting transformation along the 4th dimension (double version)
+	inline double applyW(const Tuple4Tpl<double>& vec) const
+	{
+		return    static_cast<double>(CC_MAT_R41) * vec.x
+				+ static_cast<double>(CC_MAT_R42) * vec.y
+				+ static_cast<double>(CC_MAT_R43) * vec.z
+				+ static_cast<double>(CC_MAT_R44) * vec.w;
+	}
+
 	//! Applies rotation only to a 3D vector (in place) - float version
 	/** Input vector is directly modified after calling this method
 	**/
 	inline void applyRotation(Vector3Tpl<float>& vec) const
 	{
-		register float vx = vec.x;
-		register float vy = vec.y;
-		register float vz = vec.z;
+		float vx = vec.x;
+		float vy = vec.y;
+		float vz = vec.z;
 
 		vec.x =   static_cast<float>(CC_MAT_R11) * vx
 				+ static_cast<float>(CC_MAT_R12) * vy
@@ -868,9 +962,9 @@ public:
 	**/
 	inline void applyRotation(Vector3Tpl<double>& vec) const
 	{
-		register double vx = vec.x;
-		register double vy = vec.y;
-		register double vz = vec.z;
+		double vx = vec.x;
+		double vy = vec.y;
+		double vz = vec.z;
 
 		vec.x =   static_cast<double>(CC_MAT_R11) * vx
 				+ static_cast<double>(CC_MAT_R12) * vy
@@ -890,9 +984,9 @@ public:
 	**/
 	inline void applyRotation(float vec[3]) const
 	{
-		register float vx = vec[0];
-		register float vy = vec[1];
-		register float vz = vec[2];
+		float vx = vec[0];
+		float vy = vec[1];
+		float vz = vec[2];
 
 		vec[0] =  static_cast<float>(CC_MAT_R11) * vx
 				+ static_cast<float>(CC_MAT_R12) * vy
@@ -911,9 +1005,9 @@ public:
 	**/
 	inline void applyRotation(double vec[3]) const
 	{
-		register double vx = vec[0];
-		register double vy = vec[1];
-		register double vz = vec[2];
+		double vx = vec[0];
+		double vy = vec[1];
+		double vz = vec[2];
 
 		vec[0] =  static_cast<double>(CC_MAT_R11) * vx
 				+ static_cast<double>(CC_MAT_R12) * vy

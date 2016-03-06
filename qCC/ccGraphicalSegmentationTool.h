@@ -24,8 +24,8 @@
 //qCC_db
 #include <ccHObject.h>
 
-//system
-#include <set>
+//Qt
+#include <QSet>
 
 //GUI
 #include <ui_graphicalSegmentationDlg.h>
@@ -42,7 +42,7 @@ class ccGraphicalSegmentationTool : public ccOverlayDialog, public Ui::Graphical
 public:
 
 	//! Default constructor
-	ccGraphicalSegmentationTool(QWidget* parent);
+	explicit ccGraphicalSegmentationTool(QWidget* parent);
 	//! Destructor
 	virtual ~ccGraphicalSegmentationTool();
 
@@ -60,7 +60,9 @@ public:
 	ccPolyline *getPolyLine() {return m_segmentationPoly;}
 
 	//! Returns the active 'to be segmented' set
-	const std::set<ccHObject*>& entities() const { return m_toSegment; }
+	QSet<ccHObject*>& entities() { return m_toSegment; }
+	//! Returns the active 'to be segmented' set (const version)
+	const QSet<ccHObject*>& entities() const { return m_toSegment; }
 
 	//inherited from ccOverlayDialog
 	virtual bool linkWith(ccGLWindow* win);
@@ -71,6 +73,9 @@ public:
 	bool deleteHiddenParts() const { return m_deleteHiddenParts; }
 
 	//! Remove entities from the 'to be segmented' pool
+	/** \warning 'unallocateVisibilityArray' will be called on all point clouds
+		prior to be removed from the pool.
+	**/
 	void removeAllEntities(bool unallocateVisibilityArrays);
 
 protected slots:
@@ -89,14 +94,19 @@ protected slots:
 	void pauseSegmentationMode(bool);
 	void doSetPolylineSelection();
 	void doSetRectangularSelection();
+	void doActionUseExistingPolyline();
+	void doExportSegmentationPolyline();
 
 	//! To capture overridden shortcuts (pause button, etc.)
 	void onShortcutTriggered(int);
 
 protected:
 
-	//! To be segmented entities
-	std::set<ccHObject*> m_toSegment;
+	//! Whether to allow or not to exort the current segmentation polyline
+	void allowPolylineExport(bool state);
+
+	//! Set of entities to be segmented
+	QSet<ccHObject*> m_toSegment;
 
 	//! Whether something has changed or not (for proper 'cancel')
 	bool m_somethingHasChanged;
@@ -129,4 +139,4 @@ protected:
 	bool m_deleteHiddenParts;
 };
 
-#endif
+#endif //CC_GRAPHICAL_SEGMENTATION_TOOLS_HEADER

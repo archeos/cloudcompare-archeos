@@ -114,7 +114,9 @@ public:
 
 	//! Constructor
 	QuadricLocalModel(	const PointCoordinateType eq[6],
-						uchar X, uchar Y, uchar Z,
+						unsigned char X,
+						unsigned char Y,
+						unsigned char Z,
 						CCVector3 gravityCenter,
 						const CCVector3 &center,
 						PointCoordinateType squaredRadius)
@@ -128,7 +130,7 @@ public:
 	}
 
 	//inherited from LocalModel
-	virtual CC_LOCAL_MODEL_TYPES getType() { return HF; }
+	virtual CC_LOCAL_MODEL_TYPES getType() { return QUADRIC; }
 
 	//inherited from LocalModel
 	virtual ScalarType computeDistanceFromModelToPoint(const CCVector3* _P) const
@@ -146,11 +148,11 @@ protected:
 	//! Quadric equation
 	PointCoordinateType m_eq[6];
 	//! Height function first dimension (0=X, 1=Y, 2=Z)
-	uchar m_X;
+	unsigned char m_X;
 	//! Height function second dimension (0=X, 1=Y, 2=Z)
-	uchar m_Y;
+	unsigned char m_Y;
 	//! Height function third dimension (0=X, 1=Y, 2=Z)
-	uchar m_Z;
+	unsigned char m_Z;
 	//! Model gravity center
 	CCVector3 m_gravityCenter;
 
@@ -174,10 +176,10 @@ LocalModel* LocalModel::New(CC_LOCAL_MODEL_TYPES type,
 
 	case LS:
 		{
-			const PointCoordinateType* lsq = subset.getLSQPlane();
-			if (lsq)
+			const PointCoordinateType* lsPlane = subset.getLSPlane();
+			if (lsPlane)
 			{
-				return new LSLocalModel(lsq,center,squaredRadius);
+				return new LSLocalModel(lsPlane,center,squaredRadius);
 			}
 		}
 		break;
@@ -192,16 +194,16 @@ LocalModel* LocalModel::New(CC_LOCAL_MODEL_TYPES type,
 		}
 		break;
 
-	case HF:
+	case QUADRIC:
 		{
-			uchar hfdims[3];
-			const PointCoordinateType* eq = subset.getHeightFunction(hfdims);
+			Tuple3ub dims;
+			const PointCoordinateType* eq = subset.getQuadric(&dims);
 			if (eq)
 			{
 				return new QuadricLocalModel(	eq,
-												hfdims[0],
-												hfdims[1],
-												hfdims[2],
+												dims.x,
+												dims.y,
+												dims.z,
 												*subset.getGravityCenter(), //should be ok as the quadric computation succeeded!
 												center,
 												squaredRadius );

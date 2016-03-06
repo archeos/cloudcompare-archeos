@@ -11,46 +11,82 @@ File I/O:
 - PDF 3D
 - X3D files (integration with 'xiot' in... standby)
 - POD files (Pointools)
-- LEICA, POD file formats
-- SHP files (with GDAL?)
+- LEICA files
 - OpenCTM format (https://github.com/cloudcompare/trunk/issues/146)
 - Visual SFM format (http://www.cloudcompare.org/forum/viewtopic.php?t=550)
 
 *** And from the forum topic or emails 'recent requests' ***
 
 Big ones:
+
 [*] fly-through mode (http://www.cloudcompare.org/forum/viewtopic.php?t=179)
 [*] Command line mode could be extended
-	- Rasterize tool (http://www.cloudcompare.org/forum/viewtopic.php?t=786)
-	- Label Connected Components tool (http://www.cloudcompare.org/forum/viewtopic.php?t=933)
-	- Let the user specify the precise content of an ASCII file in order to prevent the file opening dialog
+	- extract a cross section from a point cloud using an existing polyline (loading in .bin or dxf format as in the interface) (http://www.danielgm.net/cc/forum/viewtopic.php?t=1515)
+	- save the plane orientation as a text file after best plane fitting
+	- option to apply the inverse transformation
+	- change the default output directory (http://www.danielgm.net/cc/forum/viewtopic.php?t=1240)
+	- rasterize tool (http://www.cloudcompare.org/forum/viewtopic.php?t=786)
+	- label Connected Components tool (http://www.cloudcompare.org/forum/viewtopic.php?t=933)
+	- Clean filter
+	- let the user specify the precise content of an ASCII file in order to prevent the file opening dialog
 		from appearing (will happen - even in 'silent mode' - if the file has more than 5 columns)
+	- set the output file name (http://www.danielgm.net/cc/forum/viewtopic.php?t=1089)
+	- export the history transformation (or the barycenter translation - see http://www.danielgm.net/cc/forum/viewtopic.php?t=1242)
 [*] Point cloud cleanup tools (http://www.cloudcompare.org/forum/viewtopic.php?t=191)
 [*] Volume calculation
+	- between clouds (from distances)
+	- between meshes (http://www.danielgm.net/cc/forum/viewtopic.php?t=1253)
 [*] Update qKinect with the Kinect for Windows SDK (1.8)
+[*] Use the LEAP device to interact with point clouds (http://www.danielgm.net/cc/forum/viewtopic.php?t=1090)
+[*] Finish the Oculus Rift plugin
+[*] Use PDAL instead of libLAS (http://www.cloudcompare.org/forum/viewtopic.php?t=437)
+
+qAnimation plugin:
+
+[*] It would be great to specify the resolution.  I saw your comment and it just seems to make sense as this way you are not guessing.
+[*] Would it be possible to start the preview from whatever “Step” you have selected?  I think this would minimize waiting through the whole animation in order to see some defect that is near the end. 
+[*] Sometimes it’s nice to be able to loop from the last frame back to the first frame.  This allows you to keep the animation looping constantly.  Would there be a way to make Steps between Viewports?
+[*] Would there be a way of picking the viewpoints or using checkboxes to disable or enable a “Step”?
+[*] There are other things like super sampling that FARO does which I really like.  Basically they render the frame out at a much higher resolution (3 or 4 times larger) and then they shrink it back down to size…this makes some noisy pixels drop off and stops that flicker that is often present in animations.
+[*] Have different levels of smoothing between each viewport.  This way the turns and translations are not as abrupt.
 
 Various:
-[*] Change Triangle lib by a GPL-compatible library
+
+[*] Save the last clipbox parameters (maybe for each entity) and allow to restore them when restarting the clipping box tool
+[*] Volume calculation tool: make the resulting grid values available as a scalar field (http://www.danielgm.net/cc/forum/viewtopic.php?t=1253)
+[*] Compute vertical distances (http://www.cloudcompare.org/forum/viewtopic.php?t=1245)
+[*] Clipping box tool and Segmentation tool improvements (https://github.com/cloudcompare/trunk/issues/215)
+[*] Import sensors from E57 files (http://www.cloudcompare.org/forum/viewtopic.php?t=1168)
+[*] Look up and down in bubbleview mode (http://www.cloudcompare.org/forum/viewtopic.php?t=1169)
+[*] Save polylines color and thickness in DXF files (http://www.danielgm.net/cc/forum/viewtopic.php?t=1086)
+[*] Add a filter to the DB tree (http://www.danielgm.net/cc/forum/viewtopic.php?t=1055)
+[*] Selection of planar area based on region growing would be nice (http://www.cloudcompare.org/forum/viewtopic.php?t=1046)
+[*] Create a camera object at the current position of the OpenGL camera
+[*] Add a 'two-windows' mode to the point-pair based alignment tool (http://cloudcompare.org/forum/viewtopic.php?t=1043)
+[*] Handle 'Folded Normal Distribution' in the Compute Stats Params method (for positive scalar fields, e.g. unsigned C2C distances)
 [*] Export primitives to a (simple, free) CAD format (http://www.cloudcompare.org/forum/viewtopic.php?t=573)
 [*] Edit parameters for qEDL (luminosity, etc.)
 [*] Dedicated method for isolated points removal (based on the Connected Components one)
 [*] Enhance qCork so as to keep the mesh(es) properties (color, normals, etc.)
-[*] Properly segment meshes in both the graphical segmentation tool and the Cross section tool
+[*] Properly segment meshes in the graphical segmentation tool
 [*] Import control points from ascii file (for point pair-based registration - http://www.cloudcompare.org/forum/viewtopic.php?t=585)
-[*] Use a scalar field (such as scattering angles) in the subsampling method to keep the "best" points
-	Equivalent approach with the local curvature (http://www.cloudcompare.org/forum/viewtopic.php?t=711)
-[*] Add touchpad support (http://www.cloudcompare.org/forum/viewtopic.php?t=671)
 [*] Reverse Unroll Feature (http://www.cloudcompare.org/forum/viewtopic.php?t=645)
 [*] Let the user select and handle multiple clouds in the 'Clipping box' tool
 [*] Per-point size based on SF values (http://www.cloudcompare.org/forum/viewtopic.php?t=507)
 [*] Display ortho-rectified images as high-res textures (instead of point clouds!)
-[*] Use PDAL instead of libLAS (http://www.cloudcompare.org/forum/viewtopic.php?t=437)
 [*] Run the PCV plugin on more than one file at a time (or batch process)
 [*] Add interactive measurement features to ccViewer
 [*] Support mesh transparency (and PLY 'alpha' property for instance)
 [*] Convert RGB colors/scalar field to texture when exporting to OBJ mesh file (http://www.danielgm.net/cc/forum/viewtopic.php?t=830)
 [*] Overlay grid (for 3D views - http://www.cloudcompare.org/forum/viewtopic.php?t=926) 
 
+From 'kachilca' (http://www.cloudcompare.org/forum/viewtopic.php?t=1399)
+[*] Normal map support and generation
+[*] Mesh decimation (with curvature priority)
+
+From Caleb B. (http://www.danielgm.org/forum/viewtopic.php?t=1334)
+[*] an ICP option for "no-rotation" (or more complex, max-rotation) that finds the best translation between the clouds
+[*] exposure of the existing in-gui option for rotation around only one specified plane to the command line, i.e., -AXISOFROT Z to the command line mode
 
 From Thomas S. (http://www.cloudcompare.org/forum/viewtopic.php?t=550)
 [*] If CloudCompare would support VisualSFM, it would be possible to import the VisualSFM-Project (with the saved camera positions).
@@ -64,10 +100,14 @@ From Andrew B.
 From Dimitri L.
 [*] Being able to apply various methods based on a sub-sampled cloud
 [*] Vector fields (http://www.cloudcompare.org/forum/viewtopic.php?t=201)
+[*] Histogram enhancements (http://www.danielgm.net/cc/forum/viewtopic.php?t=1160)
 
 From Thomas D.
 [*] Splatting (http://idav.ucdavis.edu/~okreylos/ResDev/LiDAR/index.html)
 [*] Show/hide points based on their normal (http://www.cloudcompare.org/forum/viewtopic.php?t=168)
+[*] Facets plugin:
+	- trace iso-density contour lines in the stereogram plot
+	- use a log scale for colors
 
 From AdrienA
 [*] Radiance scaling shader
@@ -75,9 +115,6 @@ From AdrienA
 From Chartzell
 [*] A limit box- Being able to hide portions of the clouds you are working on can make the registration process much quicker and easier. With a customizable limit box you can look at just a small cross section of the clouds to get a good view of how well they fit together and what adjustments need to be made. Ideally, you would be able to push and pull on the various sides of the box to change it's dimensions.
 [*] Ability to do fly around animations and export them to some type of video format? Something where you could set various viewpoints and and have the camera fly between each point. Google SketchUp has a great example of this function. (see 'flythrough mode' above)
-
-From Jean-Francois H.
-[*] Exporting histogram as image
 
 From Konrad W.
 [*] Something like the plane shader from point tools where the depth is coloured with the Hue channel
@@ -95,9 +132,6 @@ From Andrew O.
 
 From Tim C.
 [*] Translate/Rotate with keys or GUI buttons (http://www.cloudcompare.org/forum/viewtopic.php?t=556)
-
-From Raphael M.
-[*] Add a checkbox on the Color Scale Manager to apply the current scale modifications in real time
 
 From Andrew O.
 [*] Small Clouds: I consider a cloud to be 2 or more data points. Small clouds don't behave well in Cloud compare. RANSAC, Connected Components and some other functions either crash the app or hang or go off in an endless loop when this is the case. 

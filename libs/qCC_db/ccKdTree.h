@@ -26,7 +26,7 @@
 #include "ccHObject.h"
 
 //System
-#include <set>
+#include <unordered_set>
 
 class ccGenericPointCloud;
 
@@ -40,7 +40,7 @@ public:
 	//! Default constructor
 	/** \param aCloud a point cloud
 	**/
-	ccKdTree(ccGenericPointCloud* aCloud);
+	explicit ccKdTree(ccGenericPointCloud* aCloud);
 
 	//! Multiplies the bounding-box of the tree
 	/** If the cloud coordinates are simply multiplied by the same factor,
@@ -61,8 +61,7 @@ public:
 	virtual CC_CLASS_ENUM getClassID() const { return CC_TYPES::POINT_KDTREE; }
 
 	//Inherited from ccHObject
-	virtual ccBBox getMyOwnBB();
-	virtual ccBBox getDisplayBB();
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
 
 	//! Flag points with cell index (as a scalar field)
 	bool convertCellIndexToSF();
@@ -73,7 +72,7 @@ public:
 	ccBBox getCellBBox(BaseNode* node) const;
 
 	//! A set of leaves
-	typedef std::set<Leaf*> LeafSet;
+	typedef std::unordered_set<Leaf*> LeafSet;
 
 	//! Returns the neighbor leaves around a given cell
 	bool getNeighborLeaves(BaseNode* cell, ccKdTree::LeafSet& neighbors, const int* userDataFilter = 0);

@@ -20,7 +20,6 @@
 //Qt
 #include <QMessageBox>
 #include <QApplication>
-#include <QProgressDialog>
 #include <QFileInfo>
 #include <QtConcurrentRun>
 
@@ -43,7 +42,7 @@
 #include <ccImage.h>
 
 //system
-#include <set>
+#include <unordered_set>
 #include <assert.h>
 #include <string.h>
 #if defined(CC_WINDOWS)
@@ -150,7 +149,7 @@ CC_FILE_ERROR _SaveFileV2()
 	return (s_file && s_container ? BinFilter::SaveFileV2(*s_file,s_container) : CC_FERR_BAD_ARGUMENT);
 }
 
-CC_FILE_ERROR BinFilter::saveToFile(ccHObject* root, QString filename)
+CC_FILE_ERROR BinFilter::saveToFile(ccHObject* root, QString filename, SaveParameters& parameters)
 {
 	if (!root || filename.isNull())
 		return CC_FERR_BAD_ARGUMENT;
@@ -159,8 +158,10 @@ CC_FILE_ERROR BinFilter::saveToFile(ccHObject* root, QString filename)
 	if (!out.open(QIODevice::WriteOnly))
 		return CC_FERR_WRITING;
 
-	QProgressDialog pDlg(QString("Please wait... saving in progress"),QString(),0,0);
-	pDlg.setWindowTitle("BIN file");
+	ccProgressDialog pDlg(false, parameters.parentWidget);
+	pDlg.setMethodTitle("BIN file");
+	pDlg.setInfo("Please wait... saving in progress");
+	pDlg.setRange(0,0);
 	pDlg.setModal(true);
 	pDlg.show();
 
@@ -233,7 +234,7 @@ CC_FILE_ERROR BinFilter::SaveFileV2(QFile& out, ccHObject* object)
 		toCheck.pop_back();
 
 		//we check objects that have links to other entities (meshes, polylines, etc.)
-		std::set<const ccHObject*> dependencies;
+		std::unordered_set<const ccHObject*> dependencies;
 		if (currentObject->isA(CC_TYPES::MESH) || currentObject->isKindOf(CC_TYPES::PRIMITIVE))
 		{
 			ccMesh* mesh = ccHObjectCaster::ToMesh(currentObject);
@@ -293,7 +294,7 @@ CC_FILE_ERROR BinFilter::SaveFileV2(QFile& out, ccHObject* object)
 				dependencies.insert(image->getAssociatedSensor());
 		}
 
-		for (std::set<const ccHObject*>::const_iterator it = dependencies.begin(); it != dependencies.end(); ++it)
+		for (std::unordered_set<const ccHObject*>::const_iterator it = dependencies.begin(); it != dependencies.end(); ++it)
 		{
 			if (!object->find((*it)->getUniqueID()))
 			{
@@ -333,7 +334,7 @@ CC_FILE_ERROR BinFilter::loadFile(QString filename, ccHObject& container, LoadPa
 
 	if (v1)
 	{
-		return LoadFileV1(in,container,static_cast<unsigned>(firstBytes),parameters); //firstBytes == number of scans for V1 files!
+		return LoadFileV1(in, container, static_cast<unsigned>(firstBytes), parameters); //firstBytes == number of scans for V1 files!
 	}
 	else
 	{
@@ -363,8 +364,10 @@ CC_FILE_ERROR BinFilter::loadFile(QString filename, ccHObject& container, LoadPa
 
 		if (parameters.alwaysDisplayLoadDialog)
 		{
-			QProgressDialog pDlg(QString("Loading: %1").arg(QFileInfo(filename).fileName()),QString(),0,0/*static_cast<int>(in.size())*/);
-			pDlg.setWindowTitle("BIN file");
+			ccProgressDialog pDlg(false, parameters.parentWidget);
+			pDlg.setMethodTitle("BIN file");
+			pDlg.setInfo(qPrintable(QString("Loading: %1").arg(QFileInfo(filename).fileName())));
+			pDlg.setRange(0,0);
 			pDlg.show();
 
 			//concurrent call in a separate thread
@@ -447,7 +450,7 @@ ccHObject* FindRobust(ccHObject* root, ccHObject* source, unsigned uniqueID, CC_
 					//we temporarily 'hide' this entity by removing its unique ID
 					object->setUniqueID(0);
 				}
-				catch(std::bad_alloc)
+				catch (const std::bad_alloc&)
 				{
 					//not enough memory?! Stop this process (anyway it's already a degenerate case ;)
 					break;
@@ -483,8 +486,8 @@ CC_FILE_ERROR BinFilter::LoadFileV2(QFile& in, ccHObject& container, int flags)
 	if (binVersion < 20) //should be superior to 2.0!
 		return CC_FERR_MALFORMED_FILE;
 
-	QString coordsFormat = (flags & ccSerializableObject::DF_POINT_COORDS_64_BITS ? "double" : "float");
-	QString scalarFormat = (flags & ccSerializableObject::DF_SCALAR_VAL_32_BITS ? "float" : "double");
+	QString coordsFormat = ( (flags & ccSerializableObject::DF_POINT_COORDS_64_BITS) ? "double" : "float");
+	QString scalarFormat = ( (flags & ccSerializableObject::DF_SCALAR_VAL_32_BITS)   ? "float" : "double");
 	ccLog::Print(QString("[BIN] Version %1.%2 (coords: %3 / scalar: %4)").arg(binVersion/10).arg(binVersion%10).arg(coordsFormat).arg(scalarFormat));
 
 	//we keep track of the last unique ID before load
@@ -696,7 +699,7 @@ CC_FILE_ERROR BinFilter::LoadFileV2(QFile& in, ccHObject& container, int flags)
 						unsigned vertCount = pc->size();
 						for (unsigned i=0; i<faceCount; ++i)
 						{
-							const CCLib::TriangleSummitsIndexes* tri = mesh->getTriangleIndexes(i);
+							const CCLib::VerticesIndexes* tri = mesh->getTriangleVertIndexes(i);
 							if (	tri->i1 >= vertCount
 								||	tri->i2 >= vertCount
 								||	tri->i3 >= vertCount )
@@ -933,7 +936,7 @@ CC_FILE_ERROR BinFilter::LoadFileV2(QFile& in, ccHObject& container, int flags)
 
 	//check for unique IDs duplicate (yes it happens :-( )
 	{
-		std::set<unsigned> uniqueIDs;
+		std::unordered_set<unsigned> uniqueIDs;
 		unsigned maxUniqueID = root->findMaxUniqueID_recursive();
 		assert(toCheck.empty());
 		toCheck.push_back(root);
@@ -957,7 +960,9 @@ CC_FILE_ERROR BinFilter::LoadFileV2(QFile& in, ccHObject& container, int flags)
 			}
 
 			for (unsigned i=0; i<currentObject->getChildrenNumber() ;++i)
+			{
 				toCheck.push_back(currentObject->getChild(i));
+			}
 		}
 	}
 
@@ -1018,15 +1023,17 @@ CC_FILE_ERROR BinFilter::LoadFileV1(QFile& in, ccHObject& container, unsigned nb
 		return CC_FERR_NO_LOAD;
 	}
 
-	ccProgressDialog pdlg(true);
+	ccProgressDialog pdlg(true, parameters.parentWidget);
 	pdlg.setMethodTitle("Open Bin file (old style)");
 
 	for (unsigned k=0; k<nbScansTotal; k++)
 	{
 		HeaderFlags header;
-		unsigned nbOfPoints=0;
+		unsigned nbOfPoints = 0;
 		if (ReadEntityHeader(in,nbOfPoints,header) < 0)
+		{
 			return CC_FERR_READING;
+		}
 
 		//Console::print("[BinFilter::loadModelFromBinaryFile] Entity %i : %i points, color=%i, norms=%i, dists=%i\n",k,nbOfPoints,color,norms,distances);
 
@@ -1037,14 +1044,11 @@ CC_FILE_ERROR BinFilter::LoadFileV1(QFile& in, ccHObject& container, unsigned nb
 		}
 
 		//progress for this cloud
-		CCLib::NormalizedProgress* nprogress = 0;
+		CCLib::NormalizedProgress nprogress(&pdlg, nbOfPoints);
 		if (parameters.alwaysDisplayLoadDialog)
 		{
-			nprogress = new CCLib::NormalizedProgress(&pdlg,nbOfPoints);
 			pdlg.reset();
-			char buffer[256];
-			sprintf(buffer,"cloud %u/%u (%u points)",k+1,nbScansTotal,nbOfPoints);
-			pdlg.setInfo(buffer);
+			pdlg.setInfo(qPrintable(QString("cloud %1/%2 (%3 points)").arg(k+1).arg(nbScansTotal).arg(nbOfPoints)));
 			pdlg.start();
 			QApplication::processEvents();
 		}
@@ -1061,7 +1065,9 @@ CC_FILE_ERROR BinFilter::LoadFileV1(QFile& in, ccHObject& container, unsigned nb
 					return CC_FERR_READING;
 				}
 				if (cloudName[i] == 0)
+				{
 					break;
+				}
 			}
 			//we force the end of the name in case it is too long!
 			cloudName[255] = 0;
@@ -1162,7 +1168,7 @@ CC_FILE_ERROR BinFilter::LoadFileV1(QFile& in, ccHObject& container, unsigned nb
 			if (header.colors)
 			{
 				unsigned char C[3];
-				if (in.read((char*)C,sizeof(colorType)*3) < 0)
+				if (in.read((char*)C,sizeof(ColorCompType)*3) < 0)
 				{
 					//Console::print("[BinFilter::loadModelFromBinaryFile] Error reading the %ith entity colors !\n",k);
 					return CC_FERR_READING;
@@ -1195,7 +1201,7 @@ CC_FILE_ERROR BinFilter::LoadFileV1(QFile& in, ccHObject& container, unsigned nb
 
 			lineRead++;
 
-			if (nprogress && !nprogress->oneStep())
+			if (parameters.alwaysDisplayLoadDialog && !nprogress.oneStep())
 			{
 				loadedCloud->resize(i+1-fileChunkPos);
 				k=nbScansTotal;
@@ -1203,12 +1209,10 @@ CC_FILE_ERROR BinFilter::LoadFileV1(QFile& in, ccHObject& container, unsigned nb
 			}
 		}
 
-		if (nprogress)
+		if (parameters.alwaysDisplayLoadDialog)
 		{
 			pdlg.stop();
 			QApplication::processEvents();
-			delete nprogress;
-			nprogress = 0;
 		}
 
 		if (header.scalarField)

@@ -49,11 +49,14 @@ class QMdiArea;
 class QSignalMapper;
 class QToolButton;
 class QAction;
+class QToolBar;
 class ccGLWindow;
 class ccHObject;
 class ccComparisonDlg;
 class ccGraphicalSegmentationTool;
+class ccSectionExtractionTool;
 class ccGraphicalTransformationTool;
+class ccTracePolylineTool;
 class ccClippingBoxTool;
 class ccPluginInterface;
 class ccStdPluginInterface;
@@ -99,7 +102,7 @@ public:
 	static void GetGLWindows(std::vector<ccGLWindow*>& glWindows);
 
 	//! Static shortcut to MainWindow::refreshAll
-	static void RefreshAllGLWindow();
+	static void RefreshAllGLWindow(bool only2D = false);
 
 	//! Static shortcut to MainWindow::updateUI
 	static void UpdateUI();
@@ -123,7 +126,8 @@ public:
 	virtual void addToDB(	ccHObject* obj,
 							bool updateZoom = false,
 							bool autoExpandDBTree = true,
-							bool checkDimensions = false );
+							bool checkDimensions = false,
+							bool autoRedraw = true);
 
 	virtual void removeFromDB(ccHObject* obj, bool autoDelete = true);
 	virtual void setSelectedInDB(ccHObject* obj, bool selected);
@@ -134,6 +138,7 @@ public:
 	inline virtual const ccHObject::Container& getSelectedEntities() const { return m_selectedEntities; }
 	virtual ccUniqueIDGenerator::Shared getUniqueIDGenerator();
 	virtual ccColorScalesManager* getColorScalesManager();
+	virtual void spawnHistogramDialog(const std::vector<unsigned>& histoValues, double minVal, double maxVal, QString title, QString xAxisLabel);
 
 	//! Returns real 'dbRoot' object
 	virtual ccDBRoot* db();
@@ -154,6 +159,17 @@ public:
 									ccHObject::Container& entities,
 									QWidget* parent = 0,
 									void** additionalParameters = 0);
+
+	//! Scale matching algorithms
+	enum ScaleMatchingAlgorithm { BB_MAX_DIM, BB_VOLUME, PCA_MAX_DIM, ICP_SCALE };
+
+	//! Applies a standard CCLib algorithm (see CC_LIB_ALGORITHM) on a set of entities
+	static bool ApplyScaleMatchingAlgortihm(ScaleMatchingAlgorithm algo,
+											ccHObject::Container& entities,
+											double icpRmsDiff,
+											int icpFinalOverlap,
+											unsigned refEntityIndex = 0,
+											QWidget* parent = 0);
 
 	//! Returns MDI area subwindow corresponding to a given 3D view
 	QMdiSubWindow* getMDISubWindow(ccGLWindow* win);
@@ -193,6 +209,11 @@ protected slots:
 	//! Creates a new 3D GL sub-window
 	ccGLWindow* new3DView();
 
+	//! Zooms in (current 3D view)
+	void zoomIn();
+	//! Zooms out (current 3D view)
+	void zoomOut();
+
 	//! Displays 'about' dialog
 	void doActionShawAboutDialog();
 	//! Displays 'help' dialog
@@ -212,13 +233,16 @@ protected slots:
 	**/
 	void prepareWindowDeletion(QObject* glWindow);
 
+	//! Slot called when the exclusive fullscreen mode is toggled on a window
+	void onExclusiveFullScreenToggled(bool);
+
 	//inherited from ccMainAppInterface
 	virtual void freezeUI(bool state);
-	virtual void redrawAll();
+	virtual void redrawAll(bool only2D = false);
+	virtual void refreshAll(bool only2D = false);
 	virtual void enableAll();
 	virtual void disableAll();
 	virtual void disableAllBut(ccGLWindow* win);
-	virtual void refreshAll();
 	virtual void updateUI();
 	virtual void setFrontView();
 	virtual void setBottomView();
@@ -228,6 +252,7 @@ protected slots:
 	virtual void setRightView();
 	virtual void setIsoView1();
 	virtual void setIsoView2();
+	virtual void toggleActiveWindowStereoVision(bool);
 	virtual void toggleActiveWindowCenteredPerspective();
 	virtual void toggleActiveWindowCustomLight();
 	virtual void toggleActiveWindowSunLight();
@@ -243,16 +268,6 @@ protected slots:
 	virtual void setCenteredPerspectiveView();
 	virtual void setViewerPerspectiveView();
 
-	// For rotation center picking
-	virtual void doPickRotationCenter();
-	virtual void cancelPickRotationCenter();
-	void processPickedRotationCenter(int, unsigned, int, int);
-
-	//! Tries to load (and then adds to main db) several files
-	/** \param filenames list of all filenames
-	**/
-	void addToDBAuto(const QStringList& filenames);
-
 	//! Handles new label
 	void handleNewLabel(ccHObject*);
 
@@ -261,10 +276,13 @@ protected slots:
 	void showSelectedEntitiesHistogram();
 	void testFrameRate();
 	void toggleFullScreen(bool state);
+	void toggleVisualDebugTraces();
+	void toggleExclusiveFullScreen(bool state);
 	void update3DViewsMenu();
 	void updateMenus();
 	void on3DViewActivated(QMdiSubWindow*);
 	void updateUIWithSelection();
+	void addToDBAuto(QStringList);
 
 	void echoMouseWheelRotate(float);
 	void echoCameraDisplaced(float ddx, float ddy);
@@ -286,6 +304,7 @@ protected slots:
 	//menu action
 	void doActionSetUniqueColor();
 	void doActionColorize();
+	void doActionRGBToGreyScale();
 	void doActionSetColor(bool colorize);
 	void doActionSetColorGradient();
 	void doActionInterpolateColors();
@@ -308,6 +327,7 @@ protected slots:
 	void doSphericalNeighbourhoodExtractionTest(); //DGM TODO: remove after test
 	void doCylindricalNeighbourhoodExtractionTest(); //DGM TODO: remove after test
 	void doActionFitPlane();
+	void doActionFitSphere();
 	void doActionFitFacet();
 	void doActionFitQuadric();
 	void doShowPrimitiveFactory();
@@ -329,7 +349,17 @@ protected slots:
 	void doActionLabelConnectedComponents();
 	void doActionComputeStatParams();
 	void doActionFilterByValue();
+	
+	// Picking opeations
+	void enablePickingOperation(ccGLWindow* win, QString message);
+	void cancelPreviousPickingOperation(bool aborted);
+	void processPickedPoint(ccHObject*, unsigned, int, int);
 
+	// For rotation center picking
+	void doPickRotationCenter();
+	// For leveling
+	void doLevel();
+	
 	void doActionDeleteScalarField();
 	void doActionSmoothMeshSF();
 	void doActionEnhanceMeshSF();
@@ -343,6 +373,7 @@ protected slots:
 	void doActionResampleWithOctree();
 	void doActionComputeMeshAA();
 	void doActionComputeMeshLS();
+	void doActionComputeDistanceMap();
 	void doActionComputeDistToBestFitQuadric3D();
 	void doActionMeasureMeshSurface();
 	void doActionMeasureMeshVolume();
@@ -356,6 +387,8 @@ protected slots:
 	void doActionApplyScale();
 	void doActionEditGlobalShiftAndScale();
 	void doActionMatchBBCenters();
+	void doActionMatchScales();
+	void doActionSORFilter();
 	void doActionFilterNoise();
 	void doActionUnroll();
 	void doActionCreateGBLSensor();
@@ -368,7 +401,10 @@ protected slots:
 	void doActionSetViewFromSensor();
 	void doActionShowDepthBuffer();
 	void doActionExportDepthBuffer();
-	void doActionHeightGridGeneration();
+	void doActionComputePointsVisibility();
+	void doActionRasterize();
+	void doCompute2HalfDimVolume();
+	void doConvertPolylinesToMesh();
 	void doActionExportCoordToSF();
 	void doComputeBestFitBB();
 	void doActionCrop();
@@ -397,6 +433,14 @@ protected slots:
 	//Graphical segmentation
 	void activateSegmentationMode();
 	void deactivateSegmentationMode(bool);
+
+    //Polyline tracing
+    void activateTracePolylineMode();
+    void deactivateTracePolylineMode(bool);
+
+	//Section extraction
+	void activateSectionExtractionMode();
+	void deactivateSectionExtractionMode(bool);
 
 	//Entities comparison
 	void doActionCloudCloudDist();
@@ -443,6 +487,9 @@ protected slots:
 
 protected:
 
+	//! Apply transformation to the selected entities
+	void applyTransformation(const ccGLMatrixd& transMat);
+
 	//! Normals conversion destinations
 	enum NORMAL_CONVERSION_DEST	{ HSV_COLORS, DIP_DIR_SFS };
 	//! Converts a cloud's normals
@@ -454,9 +501,9 @@ protected:
 	static void RemoveSiblingsFromCCObjectList(ccHObject::Container& ccObjects);
 
 	//! Returns a default first guess for algorithms kernel size (one cloud)
-	static PointCoordinateType GetDefaultCloudKernelSize(ccGenericPointCloud* cloud);
+	static PointCoordinateType GetDefaultCloudKernelSize(ccGenericPointCloud* cloud, unsigned knn = 12);
 	//! Returns a default first guess for algorithms kernel size (several clouds)
-	static PointCoordinateType GetDefaultCloudKernelSize(const ccHObject::Container& entities);
+	static PointCoordinateType GetDefaultCloudKernelSize(const ccHObject::Container& entities, unsigned knn = 12);
 
 	//! Creates point clouds from multiple 'components'
 	void createComponentsClouds(ccGenericPointCloud* cloud,
@@ -470,7 +517,7 @@ protected:
 	void saveGUIElementsPos();
 
 	void setOrthoView(ccGLWindow* win);
-	void setCenteredPerspectiveView(ccGLWindow* win);
+	void setCenteredPerspectiveView(ccGLWindow* win, bool autoRedraw = true);
 	void setViewerPerspectiveView(ccGLWindow* win);
 
 	void closeEvent(QCloseEvent* event);
@@ -482,7 +529,7 @@ protected:
 	ccPluginInterface* getValidPlugin(QObject* plugin);
 
 	//! Makes the window including an entity zoom on it (helper)
-	void zoomOn(ccDrawableObject* object);
+	void zoomOn(ccHObject* object);
 
 	//! Clear property process fork
 	/** - prop=0 : COLOR
@@ -551,6 +598,9 @@ protected:
 	//! Updates the pivot visibility pop-menu based for a given window (or an absence of!)
 	virtual void updatePivotVisibilityPopUpMenu(ccGLWindow* win);
 
+	//! Checks whether stereo mode can be stopped (if necessary) or not
+	bool checkStereoMode(ccGLWindow* win);
+
 	//DB & DB Tree
 	ccDBRoot* m_ccRoot;
 
@@ -609,6 +659,10 @@ protected:
 	ccCameraParamEditDlg* m_cpeDlg;
 	//! Graphical segmentation dialog
 	ccGraphicalSegmentationTool* m_gsTool;
+    //! Polyline tracing tool
+    ccTracePolylineTool * m_tplTool;
+	//! Section extraction dialog
+	ccSectionExtractionTool* m_seTool;
 	//! Graphical transformation dialog
 	ccGraphicalTransformationTool* m_transTool;
 	//! Clipping box dialog
@@ -628,6 +682,7 @@ protected:
 	QString m_pluginsPath;
 	QStringList m_pluginFileNames;
 	QList<ccStdPluginInterface*> m_stdPlugins;
+	QList<QToolBar*> m_stdPluginsToolbars;
 	QActionGroup m_glFilterActions;
 
 };

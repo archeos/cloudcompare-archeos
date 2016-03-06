@@ -204,7 +204,7 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 	//get corresponding plane
 	if (!planeEquation)
 	{
-		planeEquation = Yk.getLSQPlane();
+		planeEquation = Yk.getLSPlane();
 		if (!planeEquation)
 		{
 			ccLog::Warning("[ccFacet::createInternalRepresentation] Failed to compute the LS plane passing through the input points!");
@@ -236,7 +236,7 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 		std::list<CCLib::PointProjectionTools::IndexedCCVector2*> hullPoints;
 		if (!CCLib::PointProjectionTools::extractConcaveHull2D(	points2D,
 																hullPoints,
-																m_maxEdgeLength) )
+																m_maxEdgeLength*m_maxEdgeLength) )
 		{
 			ccLog::Error("[ccFacet::createInternalRepresentation] Failed to compute the convex hull of the input points!");
 		}
@@ -259,7 +259,7 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 				m_contourVertices->addPoint(m_center + X*(*it)->x + Y*(*it)->y);
 			m_contourVertices->setName(DEFAULT_CONTOUR_POINTS_NAME);
 			m_contourVertices->setLocked(true);
-			m_contourVertices->setVisible(false);
+			m_contourVertices->setEnabled(false);
 			addChild(m_contourVertices);
 		}
 
@@ -274,6 +274,8 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 				m_contourPolyline->setLocked(true);
 				m_contourPolyline->setName(DEFAULT_CONTOUR_NAME);
 				m_contourVertices->addChild(m_contourPolyline);
+				m_contourVertices->setEnabled(true);
+				m_contourVertices->setVisible(false);
 			}
 			else
 			{
@@ -316,7 +318,7 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 					//import faces
 					for (unsigned i=0; i<triCount; ++i)
 					{
-						const CCLib::TriangleSummitsIndexes* tsi = dm.getTriangleIndexes(i);
+						const CCLib::VerticesIndexes* tsi = dm.getTriangleVertIndexes(i);
 						m_polygonMesh->addTriangle(tsi->i1, tsi->i2, tsi->i3);
 					}
 					m_polygonMesh->setVisible(true);
@@ -333,10 +335,11 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 						for (unsigned i=0; i<triCount; ++i)
 							m_polygonMesh->addTriangleNormalIndexes(0,0,0); //all triangles will have the same normal!
 						m_polygonMesh->showNormals(true);
-						m_polygonMesh->addChild(normsTable);
 						m_polygonMesh->setLocked(true);
 						m_polygonMesh->setName(DEFAULT_POLYGON_MESH_NAME);
 						m_contourVertices->addChild(m_polygonMesh);
+						m_contourVertices->setEnabled(true);
+						m_contourVertices->setVisible(false);
 					}
 					else
 					{
@@ -363,7 +366,7 @@ bool ccFacet::createInternalRepresentation(	CCLib::GenericIndexedCloudPersist* p
 	return true;
 }
 
-void ccFacet::setColor(const colorType rgb[])
+void ccFacet::setColor(const ccColor::Rgb& rgb)
 {
 	if (m_contourVertices && m_contourVertices->setRGBColor(rgb))
 	{
@@ -414,12 +417,12 @@ void ccFacet::drawMeOnly(CC_DRAW_CONTEXT& context)
 		markerContext._win = 0;
 
 		c_unitNormalSymbol->setTempColor(m_contourPolyline->getColor());
-		PointCoordinateType scale = m_contourPolyline->getBB().getMinBoxDim();
+		PointCoordinateType scale = m_contourPolyline->getOwnBB().getMinBoxDim();
 
 		glMatrixMode(GL_MODELVIEW);
 		glPushMatrix();
 		ccGL::Translate(m_center.x,m_center.y,m_center.z);
-		ccGLMatrix mat = ccGLMatrix::FromToRotation(getNormal(),CCVector3(0,0,1));
+		ccGLMatrix mat = ccGLMatrix::FromToRotation(CCVector3(0,0,PC_ONE),getNormal());
 		glMultMatrixf(mat.data());
 		ccGL::Scale(scale,scale,scale);
 		glTranslatef(0,0,0.45f);

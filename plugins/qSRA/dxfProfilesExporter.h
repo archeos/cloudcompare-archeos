@@ -55,6 +55,7 @@ public:
 										QString filename,
 										unsigned angularStepCount,
 										double heightStep,
+										double heightShift,
 										const Parameters& params,
 										ccMainAppInterface* app = 0 );
 
@@ -63,6 +64,7 @@ public:
 										ccPolyline* profile,
 										QString filename,
 										unsigned heightStepCount,
+										double heightShift,
 										double angularStep_rad,
 										double radToUnitConvFactor,
 										QString angleUnit,

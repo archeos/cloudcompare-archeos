@@ -24,12 +24,10 @@
 #include <assert.h>
 
 ProfileImportDlg::ProfileImportDlg(QWidget* parent)
-	: QDialog(parent)
+	: QDialog(parent, Qt::Tool)
 	, Ui::ProfileImportDlg()
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool);
 
 	connect(browseToolButton, SIGNAL(clicked()), this, SLOT(browseFile()));
 }
@@ -44,7 +42,12 @@ void ProfileImportDlg::browseFile()
 	QString filter("2D profile (*.txt)");
 
 	//open file loading dialog
-	QString filename = QFileDialog::getOpenFileName(0,"Select profile file",getFilename(),filter);
+	QString filename = QFileDialog::getOpenFileName(0,"Select profile file",getFilename(),filter
+#ifdef _DEBUG
+																,0,QFileDialog::DontUseNativeDialog
+#endif
+		
+		);
 
 	if (filename.isEmpty())
 		return;
@@ -62,7 +65,7 @@ QString ProfileImportDlg::getFilename() const
 	return inputFileLineEdit->text();
 }
 
-bool ProfileImportDlg::ignoreAxisShift() const
+bool ProfileImportDlg::absoluteHeightValues() const
 {
-	return ignoreAxisShiftCheckBox->isChecked();
+	return absoluteHeightValuesCheckBox->isChecked();
 }

@@ -18,7 +18,6 @@
 #include "ReferenceCloud.h"
 
 //system
-#include <string.h>
 #include <assert.h>
 #include <algorithm>
 
@@ -37,6 +36,8 @@ ReferenceCloud::ReferenceCloud(GenericIndexedCloudPersist* associatedCloud)
 ReferenceCloud::ReferenceCloud(const ReferenceCloud& refCloud)
 	: m_theIndexes(0)
 	, m_globalIterator(0)
+	, m_bbMin(0,0,0)
+	, m_bbMax(0,0,0)
 	, m_validBB(false)
 	, m_theAssociatedCloud(refCloud.m_theAssociatedCloud)
 {
@@ -59,7 +60,7 @@ ReferenceCloud::~ReferenceCloud()
 void ReferenceCloud::clear(bool releaseMemory)
 {
 	m_theIndexes->clear(releaseMemory);
-	m_validBB = false;
+	invalidateBoundingBox();
 }
 
 void ReferenceCloud::updateBBWithPoint(const CCVector3& P)
@@ -106,13 +107,13 @@ void ReferenceCloud::computeBB()
 	m_validBB = true;
 }
 
-void ReferenceCloud::getBoundingBox(PointCoordinateType bbMin[], PointCoordinateType bbMax[])
+void ReferenceCloud::getBoundingBox(CCVector3& bbMin, CCVector3& bbMax)
 {
 	if (!m_validBB)
 		computeBB();
 
-	memcpy(bbMin, m_bbMin.u, sizeof(PointCoordinateType)*3);
-	memcpy(bbMax, m_bbMax.u, sizeof(PointCoordinateType)*3);
+	bbMin = m_bbMin;
+	bbMax = m_bbMax;
 }
 
 bool ReferenceCloud::reserve(unsigned n)
@@ -139,7 +140,7 @@ bool ReferenceCloud::addPointIndex(unsigned globalIndex)
 			return false;
 
 	m_theIndexes->addElement(globalIndex);
-	m_validBB = false;
+	invalidateBoundingBox();
 
 	return true;
 }
@@ -161,7 +162,7 @@ bool ReferenceCloud::addPointIndex(unsigned firstIndex, unsigned lastIndex)
 	for (unsigned i=0; i<range; ++i,++firstIndex)
 		m_theIndexes->setValue(pos++,firstIndex);
 
-	m_validBB = false;
+	invalidateBoundingBox();
 
 	return true;
 }
@@ -170,10 +171,10 @@ void ReferenceCloud::setPointIndex(unsigned localIndex, unsigned globalIndex)
 {
 	assert(localIndex < size());
 	m_theIndexes->setValue(localIndex,globalIndex);
-	m_validBB = false;
+	invalidateBoundingBox();
 }
 
-void ReferenceCloud::forEach(genericPointAction& anAction)
+void ReferenceCloud::forEach(genericPointAction& action)
 {
 	assert(m_theAssociatedCloud);
 
@@ -183,7 +184,7 @@ void ReferenceCloud::forEach(genericPointAction& anAction)
 		const unsigned& index = m_theIndexes->getValue(i);
 		ScalarType d = m_theAssociatedCloud->getPointScalarValue(index);
 		ScalarType d2 = d;
-		anAction(*m_theAssociatedCloud->getPointPersistentPtr(index),d2);
+		action(*m_theAssociatedCloud->getPointPersistentPtr(index),d2);
 		if (d!=d2)
 			m_theAssociatedCloud->setPointScalarValue(index,d2);
 	}
@@ -202,7 +203,7 @@ void ReferenceCloud::removePointGlobalIndex(unsigned localIndex)
 void ReferenceCloud::setAssociatedCloud(GenericIndexedCloudPersist* cloud)
 {
 	m_theAssociatedCloud = cloud;
-	m_validBB = false;
+	invalidateBoundingBox();
 }
 
 bool ReferenceCloud::add(const ReferenceCloud& cloud)
@@ -223,6 +224,6 @@ bool ReferenceCloud::add(const ReferenceCloud& cloud)
 	for (unsigned i=0; i<newCount; ++i)
 		(*m_theIndexes)[count+i] = (*cloud.m_theIndexes)[i];
 
-	m_validBB = false;
+	invalidateBoundingBox();
 	return true;
 }

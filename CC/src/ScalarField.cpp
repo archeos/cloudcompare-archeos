@@ -29,6 +29,12 @@ ScalarField::ScalarField(const char* name/*=0*/)
 	setName(name);
 }
 
+ScalarField::ScalarField(const ScalarField& sf)
+	: GenericChunkedArray<1,ScalarType>(sf)
+{
+	setName(sf.m_name);
+}
+
 void ScalarField::setName(const char* name)
 {
 	if (name)
@@ -42,7 +48,7 @@ void ScalarField::computeMeanAndVariance(ScalarType &mean, ScalarType* variance)
 	double _mean = 0.0, _std2 = 0.0;
 	unsigned count = 0;
 
-	for (unsigned i=0; i<m_maxCount; ++i)
+	for (unsigned i=0; i<currentSize(); ++i)
 	{
 		const ScalarType& val = getValue(i);
 		if (ValidValue(val))
@@ -74,10 +80,10 @@ void ScalarField::computeMeanAndVariance(ScalarType &mean, ScalarType* variance)
 
 void ScalarField::computeMinAndMax()
 {
-	if (m_maxCount != 0)
+	if (currentSize() != 0)
 	{
 		bool minMaxInitialized = false;
-		for (unsigned i=0; i<m_maxCount; ++i)
+		for (unsigned i=0; i<currentSize(); ++i)
 		{
 			const ScalarType& val = getValue(i);
 			if (ValidValue(val))

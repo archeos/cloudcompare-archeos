@@ -15,7 +15,8 @@
 //#                                                                        #
 //##########################################################################
 
-#include <ccIncludeGL.h>
+//Always on top!
+#include "ccIncludeGL.h"
 
 #include "ccPlane.h"
 
@@ -74,6 +75,14 @@ ccGenericPrimitive* ccPlane::clone() const
 	return finishCloneJob(new ccPlane(m_xWidth,m_yWidth,&m_transformation,getName()));
 }
 
+void ccPlane::getEquation(CCVector3& N, PointCoordinateType& constVal) const
+{
+	N = CCVector3(0, 0, 1);
+	m_transformation.applyRotation(N);
+
+	constVal = m_transformation.getTranslationAsVec3D().dot(N);
+}
+
 ccPlane* ccPlane::Fit(CCLib::GenericIndexedCloudPersist *cloud, double* rms/*=0*/)
 {
 	//number of points
@@ -87,8 +96,8 @@ ccPlane* ccPlane::Fit(CCLib::GenericIndexedCloudPersist *cloud, double* rms/*=0*
 	CCLib::Neighbourhood Yk(cloud);
 
 	//plane equation
-	const PointCoordinateType* theLSQPlane = Yk.getLSQPlane();
-	if (!theLSQPlane)
+	const PointCoordinateType* theLSPlane = Yk.getLSPlane();
+	if (!theLSPlane)
 	{
 		ccLog::Warning("[ccPlane::Fit] Not enough points to fit a plane!");
 		return 0;
@@ -99,8 +108,8 @@ ccPlane* ccPlane::Fit(CCLib::GenericIndexedCloudPersist *cloud, double* rms/*=0*
 	assert(G);
 
 	//and a local base
-	CCVector3 N(theLSQPlane);
-	const CCVector3* X = Yk.getLSQPlaneX(); //main direction
+	CCVector3 N(theLSPlane);
+	const CCVector3* X = Yk.getLSPlaneX(); //main direction
 	assert(X);
 	CCVector3 Y = N * (*X);
 
@@ -142,7 +151,7 @@ ccPlane* ccPlane::Fit(CCLib::GenericIndexedCloudPersist *cloud, double* rms/*=0*
 	//compute least-square fitting RMS if requested
 	if (rms)
 	{
-		*rms = CCLib::DistanceComputationTools::computeCloud2PlaneDistanceRMS(cloud, theLSQPlane);
+		*rms = CCLib::DistanceComputationTools::computeCloud2PlaneDistanceRMS(cloud, theLSPlane);
 		plane->setMetaData(QString("RMS"),QVariant(*rms));
 	}
 
@@ -257,13 +266,9 @@ bool ccPlane::setAsTexture(QImage image)
 	materialSet->clear();
 	//add new material
 	{
-		ccMaterial material("texture");
-		material.setTexture(image,QString(),false);
+		ccMaterial::Shared material(new ccMaterial("texture"));
+		material->setTexture(image,QString(),false);
 		materialSet->addMaterial(material);
-		//dirty trick: reset material association so that texture will be refreshed!
-		materialSet->associateTo(0);
-		if (m_currentDisplay)
-			materialSet->associateTo(m_currentDisplay);
 	}
 
 	showMaterials(true);

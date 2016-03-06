@@ -25,24 +25,30 @@
 //qCC_db
 #include <ccLog.h>
 #include <ccPointCloud.h>
-#include <cc2DLabel.h>
 
 bool ccPointPickingGenericInterface::linkWith(ccGLWindow* win)
 {
+	if (win == m_associatedWin)
+	{
+		//nothing to do
+		return false;
+	}
 	ccGLWindow* oldWin = m_associatedWin;
 
 	if (!ccOverlayDialog::linkWith(win))
+	{
 		return false;
+	}
 
 	//if the dialog is already linked to a window, we must disconnect the 'point picked' signal
-	if (oldWin && win != oldWin)
+	if (oldWin)
 	{
-		disconnect(oldWin, SIGNAL(pointPicked(int, unsigned, int, int)), this, SLOT(handlePickedPoint(int, unsigned, int, int)));
+		oldWin->disconnect(this);
 	}
 	//then we can connect the new window 'point picked' signal
 	if (m_associatedWin)
 	{
-		connect(m_associatedWin, SIGNAL(pointPicked(int, unsigned, int, int)), this, SLOT(handlePickedPoint(int, unsigned, int, int)));
+		connect(m_associatedWin, SIGNAL(itemPicked(ccHObject*, unsigned, int, int)), this, SLOT(handlePickedItem(ccHObject*, unsigned, int, int)));
 	}
 
 	return true;
@@ -60,7 +66,7 @@ bool ccPointPickingGenericInterface::start()
 	m_associatedWin->setPickingMode(ccGLWindow::POINT_PICKING);
 	//the user must not close this window!
 	m_associatedWin->setUnclosable(true);
-	m_associatedWin->redraw();
+	m_associatedWin->redraw(true, false);
 
 	ccOverlayDialog::start();
 
@@ -74,36 +80,47 @@ void ccPointPickingGenericInterface::stop(bool state)
 		//deactivate "point picking mode" in all GL windows
 		m_associatedWin->setPickingMode(ccGLWindow::DEFAULT_PICKING);
 		m_associatedWin->setUnclosable(false);
-		m_associatedWin->redraw();
+		m_associatedWin->redraw(true, false);
 	}
 
 	ccOverlayDialog::stop(state);
 }
 
-void ccPointPickingGenericInterface::handlePickedPoint(int cloudID, unsigned pointIndex, int x, int y)
+void ccPointPickingGenericInterface::handlePickedItem(ccHObject* entity, unsigned itemIdx, int x, int y)
 {
-	if (!m_processing)
+	if (!m_processing || !entity)
 		return;
 
 	ccPointCloud* cloud = 0;
 
-	ccHObject* obj = MainWindow::TheInstance()->db()->find(cloudID);
-	if (obj->isKindOf(CC_TYPES::POINT_CLOUD))
-		cloud = static_cast<ccPointCloud*>(obj);
-
-	if (!cloud)
+	if (entity->isKindOf(CC_TYPES::POINT_CLOUD))
 	{
-		ccLog::Warning("[Point picking] Picked point is not in pickable entities DB?!");
-		return;
+		cloud = static_cast<ccPointCloud*>(entity);
+		if (!cloud)
+		{
+			assert(false);
+			ccLog::Warning("[Item picking] Picked point is not in pickable entities DB?!");
+			return;
+		}
+
+		const CCVector3* P = cloud->getPoint(itemIdx);
+		if (P)
+		{
+			processPickedPoint(cloud, itemIdx, x, y);
+		}
+		else
+		{
+			ccLog::Warning("[Item picking] Invalid point index!");
+		}
 	}
-
-	const CCVector3* P = cloud->getPoint(pointIndex);
-	if (P)
+	else if (entity->isKindOf(CC_TYPES::MESH))
 	{
-		processPickedPoint(cloud, pointIndex, x, y);
+		//NOT HANDLED: 'POINT_PICKING' mode only for now
+		assert(false);
 	}
 	else
 	{
-		ccLog::Warning("[Point picking] Invalid point index!");
+		//unhandled entity
+		assert(false);
 	}
 }

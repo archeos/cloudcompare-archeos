@@ -18,10 +18,14 @@
 #ifndef CC_GENERIC_GL_DISPLAY
 #define CC_GENERIC_GL_DISPLAY
 
+//Always first
+#include "ccIncludeGL.h"
+
 //Local
 #include "qCC_db.h"
 #include "ccSerializableObject.h"
 #include "ccGLMatrix.h"
+#include "ccMaterial.h"
 
 //Qt
 #include <QImage>
@@ -30,6 +34,8 @@
 
 //CCLib
 #include <CCGeom.h>
+
+class QWidget;
 
 //! Standard parameters for GL displays/viewports
 class QCC_DB_LIB_API ccViewportParameters : public ccSerializableObject
@@ -96,13 +102,51 @@ public:
 
 };
 
+//! OpenGL camera parameters
+struct ccGLCameraParameters
+{
+	ccGLCameraParameters()
+		: perspective(false)
+		, fov_deg(0)
+		, pixelSize(0)
+	{
+	   memset(viewport, 0, 4 * sizeof( int ));
+	}
+
+	//! Projects a 3D point in 2D (+ normalized 'z' coordinate)
+	inline bool project(const CCVector3d& input3D, CCVector3d& output2D) const { return ccGL::Project<double, double>(input3D, modelViewMat.data(), projectionMat.data(), viewport, output2D); }
+	//! Projects a 3D point in 2D (+ normalized 'z' coordinate)
+	inline bool project(const CCVector3& input3D, CCVector3d& output2D) const { return ccGL::Project<PointCoordinateType, double>(input3D, modelViewMat.data(), projectionMat.data(), viewport, output2D); }
+
+	//! Unprojects a 2D point (+ normalized 'z' coordinate) in 3D
+	inline bool unproject(const CCVector3d& input2D, CCVector3d& output3D) const { return ccGL::Unproject<double, double>(input2D, modelViewMat.data(), projectionMat.data(), viewport, output3D); }
+	//! Unprojects a 2D point (+ normalized 'z' coordinate) in 3D
+	inline bool unproject(const CCVector3& input2D, CCVector3d& output3D) const { return ccGL::Unproject<PointCoordinateType, double>(input2D, modelViewMat.data(), projectionMat.data(), viewport, output3D); }
+
+	//! Model view matrix (GL_MODELVIEW)
+	ccGLMatrixd modelViewMat;
+	//! Projection matrix (GL_PROJECTION)
+	ccGLMatrixd projectionMat;
+	//! Viewport (GL_VIEWPORT)
+	int viewport[4];
+	//! Perspective mode
+	bool perspective;
+	//! F.O.V. (in degrees) - perspective mode only
+	float fov_deg;
+	//! Pixel size (i.e. zoom) - non perspective mode only
+	float pixelSize;
+};
+
 //! Generic interface for GL displays
 class ccGenericGLDisplay
 {
 public:
 
+	//! Returns the screen size
+	virtual QSize getScreenSize() const = 0;
+
 	//! Redraws display immediately
-	virtual void redraw() = 0;
+	virtual void redraw(bool only2D = false, bool resetLOD = true) = 0;
 
 	//! Flags display as 'to be refreshed'
 	/** See ccGenericGLDisplay::refresh.
@@ -112,24 +156,33 @@ public:
 	//! Redraws display only if flagged as 'to be refreshed'
 	/** See ccGenericGLDisplay::toBeRefreshed. Flag is turned
 		to false after a call to this method.
+		\param only2D whether to redraw everything (false) or only the 2D layer (true)
 	**/
-	virtual void refresh() = 0;
+	virtual void refresh(bool only2D = false) = 0;
 
 	//! Invalidates current viewport setup
 	/** On next redraw, viewport information will be recomputed.
 	**/
 	virtual void invalidateViewport() = 0;
 
-	//! Get texture ID from image
-	virtual unsigned getTexture(const QImage& image) = 0;
+	//! Returns the texture ID corresponding to an image
+	virtual unsigned getTextureID(const QImage& image) = 0;
+	
+	//! Returns the texture ID corresponding to a material
+	virtual unsigned getTextureID( ccMaterial::CShared mtl) = 0;
 
 	//! Release texture from context
 	virtual void releaseTexture(unsigned texID) = 0;
 
-	//! Returns font
+	//! Returns defaul text display font
 	/** Warning: already takes rendering zoom into account!
 	**/
 	virtual QFont getTextDisplayFont() const = 0;
+
+	//! Returns defaul label display font
+	/** Warning: already takes rendering zoom into account!
+	**/
+	virtual QFont getLabelDisplayFont() const = 0;
 
 	//! Text alignment
 	enum TextAlign { ALIGN_HLEFT	= 1,
@@ -176,20 +229,11 @@ public:
 	**/
 	virtual bool supportOpenGLVersion(unsigned openGLVersionFlag) = 0;
 
-	//! Returns current model view matrix (GL_MODELVIEW)
-	virtual const double* getModelViewMatd() = 0;
-
-	//! Returns current projection matrix (GL_PROJECTION)
-	virtual const double* getProjectionMatd() = 0;
-
-	//! Returns current viewport (GL_VIEWPORT)
-	virtual void getViewportArray(int vp[/*4*/]) = 0;
+	//! Returns the current OpenGL camera parameters
+	virtual void getGLCameraParameters(ccGLCameraParameters& params) = 0;
 
 	//! Returns viewport parameters (zoom, etc.)
 	virtual const ccViewportParameters& getViewportParameters() const = 0;
-
-	//! Makes the associated OpenGL context active
-	virtual void makeContextCurrent() = 0;
 
 	//! Setups a (projective) camera
 	/** \param cameraMatrix orientation/position matrix of the camera
@@ -203,6 +247,9 @@ public:
 											float ar = 1.0f,
 											bool viewerBasedPerspective = true,
 											bool bubbleViewMode = false) = 0;
+
+	//! Returns this window as a proper Qt widget
+	virtual QWidget* asWidget() { return 0; }
 
 };
 

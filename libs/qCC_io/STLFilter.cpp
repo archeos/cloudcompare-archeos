@@ -26,7 +26,6 @@
 #include <QString>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QProgressDialog>
 
 //qCC_db
 #include <ccLog.h>
@@ -55,7 +54,7 @@ bool STLFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) con
 	return false;
 }
 
-CC_FILE_ERROR STLFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR STLFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity)
 		return CC_FERR_BAD_ARGUMENT;
@@ -96,17 +95,17 @@ CC_FILE_ERROR STLFilter::saveToFile(ccHObject* entity, QString filename)
 	return result;
 }
 
-CC_FILE_ERROR STLFilter::saveToBINFile(ccGenericMesh* mesh, FILE *theFile)
+CC_FILE_ERROR STLFilter::saveToBINFile(ccGenericMesh* mesh, FILE *theFile, QWidget* parentWidget/*=0*/)
 {
 	assert(theFile && mesh && mesh->size()!=0);
 	unsigned faceCount = mesh->size();
 	
 	//progress
-	ccProgressDialog progressDlg(true);
-	CCLib::NormalizedProgress nprogress(&progressDlg,faceCount);
-	progressDlg.setMethodTitle(qPrintable(QString("Saving mesh [%1]").arg(mesh->getName())));
-	progressDlg.setInfo(qPrintable(QString("Number of facets: %1").arg(faceCount)));
-	progressDlg.start();
+	ccProgressDialog pDlg(true, parentWidget);
+	CCLib::NormalizedProgress nprogress(&pDlg,faceCount);
+	pDlg.setMethodTitle(qPrintable(QString("Saving mesh [%1]").arg(mesh->getName())));
+	pDlg.setInfo(qPrintable(QString("Number of facets: %1").arg(faceCount)));
+	pDlg.start();
 	QApplication::processEvents();
 
 	//header
@@ -137,7 +136,7 @@ CC_FILE_ERROR STLFilter::saveToBINFile(ccGenericMesh* mesh, FILE *theFile)
 	mesh->placeIteratorAtBegining();
 	for (unsigned i=0; i<faceCount; ++i)
 	{
-		CCLib::TriangleSummitsIndexes*tsi = mesh->getNextTriangleIndexes();
+		CCLib::VerticesIndexes*tsi = mesh->getNextTriangleVertIndexes();
 
 		const CCVector3* A = vertices->getPointPersistentPtr(tsi->i1);
 		const CCVector3* B = vertices->getPointPersistentPtr(tsi->i2);
@@ -174,22 +173,22 @@ CC_FILE_ERROR STLFilter::saveToBINFile(ccGenericMesh* mesh, FILE *theFile)
 			return CC_FERR_CANCELED_BY_USER;
 	}
 
-	progressDlg.stop();
+	pDlg.stop();
 
 	return CC_FERR_NO_ERROR;
 }
 
-CC_FILE_ERROR STLFilter::saveToASCIIFile(ccGenericMesh* mesh, FILE *theFile)
+CC_FILE_ERROR STLFilter::saveToASCIIFile(ccGenericMesh* mesh, FILE *theFile, QWidget* parentWidget/*=0*/)
 {
 	assert(theFile && mesh && mesh->size()!=0);
 	unsigned faceCount = mesh->size();
 	
 	//progress
-	ccProgressDialog progressDlg(true);
-	CCLib::NormalizedProgress nprogress(&progressDlg,faceCount);
-	progressDlg.setMethodTitle(qPrintable(QString("Saving mesh [%1]").arg(mesh->getName())));
-	progressDlg.setInfo(qPrintable(QString("Number of facets: %1").arg(faceCount)));
-	progressDlg.start();
+	ccProgressDialog pDlg(true, parentWidget);
+	CCLib::NormalizedProgress nprogress(&pDlg,faceCount);
+	pDlg.setMethodTitle(qPrintable(QString("Saving mesh [%1]").arg(mesh->getName())));
+	pDlg.setInfo(qPrintable(QString("Number of facets: %1").arg(faceCount)));
+	pDlg.start();
 	QApplication::processEvents();
 
 	if (fprintf(theFile,"solid %s\n",qPrintable(mesh->getName())) < 0) //empty names are acceptable!
@@ -201,7 +200,7 @@ CC_FILE_ERROR STLFilter::saveToASCIIFile(ccGenericMesh* mesh, FILE *theFile)
 	mesh->placeIteratorAtBegining();
 	for (unsigned i=0; i<faceCount; ++i)
 	{
-		CCLib::TriangleSummitsIndexes*tsi = mesh->getNextTriangleIndexes();
+		CCLib::VerticesIndexes*tsi = mesh->getNextTriangleVertIndexes();
 
 		const CCVector3* A = vertices->getPointPersistentPtr(tsi->i1);
 		const CCVector3* B = vertices->getPointPersistentPtr(tsi->i2);
@@ -352,9 +351,9 @@ CC_FILE_ERROR STLFilter::loadFile(QString filename, ccHObject& container, LoadPa
 			
 			QTextStream stream(&fp);
 			//skip first line
-			QString line = stream.readLine();
+			stream.readLine();
 			//we look if the second line (if any) starts by 'facet'
-			line = stream.readLine();
+			QString line = stream.readLine();
 			ascii = true;
 			if (	line.isEmpty()
 				||	fp.error() != QFile::NoError
@@ -393,13 +392,11 @@ CC_FILE_ERROR STLFilter::loadFile(QString filename, ccHObject& container, LoadPa
 
 	//do some cleaning
 	{
-		if (vertCount < vertices->capacity())
-			vertices->resize(vertCount);
-		if (faceCount < mesh->maxSize())
-			mesh->resize(faceCount);
+		vertices->shrinkToFit();
+		mesh->shrinkToFit();
 		NormsIndexesTableType* normals = mesh->getTriNormsTable();
-		if (normals && normals->currentSize() < normals->capacity())
-			normals->resize(normals->capacity());
+		if (normals)
+			normals->shrinkToFit();
 	}
 
 	//remove duplicated vertices
@@ -409,15 +406,16 @@ CC_FILE_ERROR STLFilter::loadFile(QString filename, ccHObject& container, LoadPa
 		const int razValue = -1;
 		if (equivalentIndexes && equivalentIndexes->resize(vertCount,true,razValue))
 		{
-			ccProgressDialog progressDlg(true);
-			ccOctree* octree = vertices->computeOctree(&progressDlg);
+			ccProgressDialog pDlg(true, parameters.parentWidget);
+			ccOctree* octree = vertices->computeOctree(&pDlg);
 			if (octree)
 			{
 				void* additionalParameters[] = { static_cast<void*>(equivalentIndexes) };
-				unsigned result = octree->executeFunctionForAllCellsAtLevel(ccOctree::MAX_OCTREE_LEVEL,
+				unsigned result = octree->executeFunctionForAllCellsAtLevel(10,
 																			TagDuplicatedVertices,
 																			additionalParameters,
-																			&progressDlg,
+																			false,
+																			&pDlg,
 																			"Tag duplicated vertices");
 				vertices->deleteOctree();
 				octree = 0;
@@ -457,7 +455,7 @@ CC_FILE_ERROR STLFilter::loadFile(QString filename, ccHObject& container, LoadPa
 							unsigned newFaceCount = 0;
 							for (unsigned i=0; i<faceCount; ++i)
 							{
-								CCLib::TriangleSummitsIndexes* tri = mesh->getTriangleIndexes(i);
+								CCLib::VerticesIndexes* tri = mesh->getTriangleVertIndexes(i);
 								tri->i1 = static_cast<unsigned>(equivalentIndexes->getValue(tri->i1))-vertCount;
 								tri->i2 = static_cast<unsigned>(equivalentIndexes->getValue(tri->i2))-vertCount;
 								tri->i3 = static_cast<unsigned>(equivalentIndexes->getValue(tri->i3))-vertCount;
@@ -521,8 +519,8 @@ CC_FILE_ERROR STLFilter::loadFile(QString filename, ccHObject& container, LoadPa
 	NormsIndexesTableType* normals = mesh->getTriNormsTable();
 	if (normals)
 	{
-		normals->link();
-		mesh->addChild(normals);
+		//normals->link();
+		//mesh->addChild(normals); //automatically done by setTriNormsTable
 		mesh->showNormals(true);
 	}
 	else
@@ -578,9 +576,11 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(	QFile& fp,
 	mesh->setName(name);
 
 	//progress dialog
-	QProgressDialog progressDlg("Loading in progress...","Cancel",0,0);
-	progressDlg.setWindowTitle("Loading ASCII STL file");
-	progressDlg.show();
+	ccProgressDialog pDlg(true, parameters.parentWidget);
+	pDlg.setMethodTitle("(ASCII) STL file");
+	pDlg.setInfo("Loading in progress...");
+	pDlg.setRange(0,0);
+	pDlg.show();
 	QApplication::processEvents();
 
 	//current vertex shift
@@ -673,7 +673,7 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(	QFile& fp,
 
 		//3rd to 5th lines: 'vertex vix viy viz'
 		unsigned vertIndexes[3];
-//		unsigned pointCountBefore = pointCount;
+		//unsigned pointCountBefore = pointCount;
 		for (unsigned i=0; i<3; ++i)
 		{
 			QString currentLine = stream.readLine();
@@ -767,9 +767,9 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(	QFile& fp,
 		//let's add a new triangle
 		{
 			//mesh is full?
-			if (mesh->maxSize() == faceCount)
+			if (mesh->capacity() == faceCount)
 			{
-				if(!mesh->reserve(faceCount+1000))
+				if (!mesh->reserve(faceCount+1000))
 				{
 					result = CC_FERR_NOT_ENOUGH_MEMORY;
 					break;
@@ -777,7 +777,7 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(	QFile& fp,
 
 				if (normals)
 				{
-					bool success = normals->reserve(mesh->maxSize());
+					bool success = normals->reserve(mesh->capacity());
 					if (success && faceCount == 0) //specific case: allocate per triangle normal indexes the first time!
 						success = mesh->reservePerTriangleNormalIndexes();
 
@@ -802,8 +802,8 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(	QFile& fp,
 			if (normalIsOk)
 			{
 				//compress normal
-				index = (int)normals->currentSize();
-				normsType nIndex = ccNormalVectors::GetNormIndex(N.u);
+				index = static_cast<int>(normals->currentSize());
+				CompressedNormType nIndex = ccNormalVectors::GetNormIndex(N.u);
 				normals->addElement(nIndex);
 			}
 			mesh->addTriangleNormalIndexes(index,index,index);
@@ -840,9 +840,9 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(	QFile& fp,
 		//progress
 		if ((faceCount % 1024) == 0)
 		{
-			if (progressDlg.wasCanceled())
+			if (pDlg.wasCanceled())
 				break;
-			progressDlg.setValue(static_cast<int>(faceCount>>10));
+			pDlg.setValue(static_cast<int>(faceCount>>10));
 		}
 	}
 
@@ -851,7 +851,7 @@ CC_FILE_ERROR STLFilter::loadASCIIFile(	QFile& fp,
 		ccLog::Warning("[STL] Failed to read some 'normal' values!");
 	}
 
-	progressDlg.close();
+	pDlg.close();
 
 	return result;
 }
@@ -889,11 +889,11 @@ CC_FILE_ERROR STLFilter::loadBinaryFile(QFile& fp,
 	}
 
 	//progress dialog
-	ccProgressDialog progressDlg(true);
-	CCLib::NormalizedProgress nProgress(&progressDlg,faceCount);
-	progressDlg.setMethodTitle("Loading binary STL file");
-	progressDlg.setInfo(qPrintable(QString("Loading %1 faces").arg(faceCount)));
-	progressDlg.start();
+	ccProgressDialog pDlg(true, parameters.parentWidget);
+	CCLib::NormalizedProgress nProgress(&pDlg,faceCount);
+	pDlg.setMethodTitle("Loading binary STL file");
+	pDlg.setInfo(qPrintable(QString("Loading %1 faces").arg(faceCount)));
+	pDlg.start();
 	QApplication::processEvents();
 
 	//current vertex shift
@@ -985,7 +985,7 @@ CC_FILE_ERROR STLFilter::loadBinaryFile(QFile& fp,
 		{
 			//compress normal
 			int index = static_cast<int>(normals->currentSize());
-			normsType nIndex = ccNormalVectors::GetNormIndex(N.u);
+			CompressedNormType nIndex = ccNormalVectors::GetNormIndex(N.u);
 			normals->addElement(nIndex);
 			mesh->addTriangleNormalIndexes(index,index,index);
 		}
@@ -995,7 +995,7 @@ CC_FILE_ERROR STLFilter::loadBinaryFile(QFile& fp,
 			break;
 	}
 
-	progressDlg.stop();
+	pDlg.stop();
 
 	return CC_FERR_NO_ERROR;
 }

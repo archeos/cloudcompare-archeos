@@ -24,6 +24,7 @@
 #include <QMessageBox>
 #include <QLocale>
 #include <QTime>
+#include <QTranslator>
 
 #ifdef Q_OS_MAC
 #include <QFileOpenEvent>
@@ -85,7 +86,6 @@ protected:
 #endif
 };
 
-
 int main(int argc, char **argv)
 {
 	//QT initialiation
@@ -93,6 +93,15 @@ int main(int argc, char **argv)
 
 	//Force 'english' local so as to get a consistent behavior everywhere
 	QLocale::setDefault(QLocale::English);
+
+#ifdef Q_OS_LINUX
+    // we reset the numeric locale. As suggested in documetation
+    // see http://qt-project.org/doc/qt-5/qcoreapplication.html#locale-settings
+    // Basically - from doc: - "On Unix/Linux Qt is configured to use the system locale settings by default.
+    // This can cause a conflict when using POSIX functions, for instance,
+    // when converting between data types such as floats and strings"
+    setlocale(LC_NUMERIC,"C");
+#endif
 
 #ifdef USE_VLD
 	VLDEnable();
@@ -103,7 +112,29 @@ int main(int argc, char **argv)
 	QTime splashStartTime;
 
 	//Command line mode?
-	bool commandLine = (argc>1 && argv[1][0]=='-');
+	bool commandLine = (argc > 1 && argv[1][0] == '-');
+	
+	//specific case: translation file selection
+	int lastArgumentIndex = 1;
+	QTranslator translator;
+	if (commandLine && QString(argv[1]).toUpper() == "-LANG")
+	{
+		QString langFilename = QString(argv[2]);
+		
+		//Load translation file
+		if (translator.load(langFilename, QCoreApplication::applicationDirPath()))
+		{
+			qApp->installTranslator(&translator);
+		}
+		else
+		{
+			QMessageBox::warning(0, QObject::tr("Translation"), QObject::tr("Failed to load language file '%1'").arg(langFilename));
+		}
+		commandLine = false;
+		lastArgumentIndex = 3;
+	}
+
+	//command line mode
 	if (!commandLine)
 	{
 		//OpenGL?
@@ -146,14 +177,14 @@ int main(int argc, char **argv)
 		mainWindow->show();
 		QApplication::processEvents();
 
-		if (argc > 1)
+		if (argc > lastArgumentIndex)
 		{
 			if (splash)
 				splash->close();
 
 			//any additional argument is assumed to be a filename --> we try to load it/them
 			QStringList filenames;
-			for (int i=1; i<argc; ++i)
+			for (int i = lastArgumentIndex; i<argc; ++i)
 				filenames << QString(argv[i]);
 
 			mainWindow->addToDB(filenames);
@@ -188,6 +219,7 @@ int main(int argc, char **argv)
 
 	//release global structures
 	MainWindow::DestroyInstance();
+	FileIOFilter::UnregisterAll();
 
 #ifdef CC_TRACK_ALIVE_SHARED_OBJECTS
 	//for debug purposes

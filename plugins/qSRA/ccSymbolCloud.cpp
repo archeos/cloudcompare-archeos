@@ -41,7 +41,7 @@ bool ccSymbolCloud::reserveLabelArray(unsigned count)
 	{
 		m_labels.reserve(count);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return false;
@@ -55,7 +55,7 @@ void ccSymbolCloud::addLabel(QString label)
 	{
 		m_labels.push_back(label);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		//TODO?
@@ -68,7 +68,7 @@ bool ccSymbolCloud::resizeLabelArray(unsigned count)
 	{
 		m_labels.resize(count);
 	}
-	catch(std::bad_alloc)
+	catch (const std::bad_alloc&)
 	{
 		//not enough memory
 		return false;
@@ -156,10 +156,10 @@ void ccSymbolCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 		//glOrtho(-halfW,halfW,-halfH,halfH,-maxS,maxS);
 
 		//default color
-		const unsigned char* color = context.pointsDefaultCol;
+		const unsigned char* color = context.pointsDefaultCol.rgb;
 		if (isColorOverriden())
 		{
-			color = m_tempColor;
+			color = m_tempColor.rgb;
 			glParams.showColors = false;
 		}
 		
@@ -169,10 +169,8 @@ void ccSymbolCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 		unsigned numberOfPoints = size();
 
 		//viewport parameters (will be used to project 3D positions to 2D)
-		int VP[4];
-		context._win->getViewportArray(VP);
-		const double* MM = context._win->getModelViewMatd(); //viewMat
-		const double* MP = context._win->getProjectionMatd(); //projMat
+		ccGLCameraParameters camera;
+		context._win->getGLCameraParameters(camera);
 
 		//only usefull when displaying labels!
 		QFont font(context._win->getTextDisplayFont()); //takes rendering zoom into account!
@@ -203,8 +201,8 @@ void ccSymbolCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 				const CCVector3* P = getPoint(i);
 
 				//project it in 2D screen coordinates
-				GLdouble xp,yp,zp;
-				gluProject(P->x,P->y,P->z,MM,MP,VP,&xp,&yp,&zp);
+				CCVector3d Q2D;
+				camera.project(*P, Q2D);
 
 				//apply point color (if any)
 				if (glParams.showColors)
@@ -216,14 +214,20 @@ void ccSymbolCloud::drawMeOnly(CC_DRAW_CONTEXT& context)
 				//draw associated symbol
 				if (m_showSymbols && m_symbolSize > 0.0)
 				{
-					drawSymbolAt(xp-static_cast<double>(context.glW/2),yp-static_cast<double>(context.glH/2));
+					drawSymbolAt(Q2D.x- context.glW/2, Q2D.y - context.glH/2);
 				}
 
 				//draw associated label?
 				if (m_showLabels && hasLabels && m_labels.size() > i && !m_labels[i].isNull())
 				{
 					//draw label
-					context._win->displayText(m_labels[i],static_cast<int>(xp+xpShift),static_cast<int>(yp+ypShift),m_labelAlignFlags,0,color,&font);
+					context._win->displayText(	m_labels[i],
+												static_cast<int>(Q2D.x + xpShift),
+												static_cast<int>(Q2D.y + ypShift),
+												m_labelAlignFlags,
+												0,
+												color,
+												&font);
 				}
 
 			}

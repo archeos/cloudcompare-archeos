@@ -44,7 +44,7 @@ bool PVFilter::canSave(CC_CLASS_ENUM type, bool& multiple, bool& exclusive) cons
 	return false;
 }
 
-CC_FILE_ERROR PVFilter::saveToFile(ccHObject* entity, QString filename)
+CC_FILE_ERROR PVFilter::saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters)
 {
 	if (!entity || filename.isEmpty())
 		return CC_FERR_BAD_ARGUMENT;
@@ -86,7 +86,7 @@ CC_FILE_ERROR PVFilter::saveToFile(ccHObject* entity, QString filename)
 	float val = std::numeric_limits<float>::quiet_NaN();
 
 	//progress dialog
-	ccProgressDialog pdlg(true); //cancel available
+	ccProgressDialog pdlg(true, parameters.parentWidget); //cancel available
 	CCLib::NormalizedProgress nprogress(&pdlg,numberOfPoints);
 	pdlg.setMethodTitle("Save PV file");
 	pdlg.setInfo(qPrintable(QString("Points: %1").arg(numberOfPoints)));
@@ -148,7 +148,7 @@ CC_FILE_ERROR PVFilter::loadFile(QString filename, ccHObject& container, LoadPar
 	unsigned numberOfPoints = static_cast<unsigned>(fileSize  / singlePointSize);
 
 	//progress dialog
-	ccProgressDialog pdlg(true); //cancel available
+	ccProgressDialog pdlg(true, parameters.parentWidget); //cancel available
 	CCLib::NormalizedProgress nprogress(&pdlg,numberOfPoints);
 	pdlg.setMethodTitle("Open PV file");
 	pdlg.setInfo(qPrintable(QString("Points: %1").arg(numberOfPoints)));
@@ -235,10 +235,9 @@ CC_FILE_ERROR PVFilter::loadFile(QString filename, ccHObject& container, LoadPar
 
 	if (loadedCloud)
 	{
-		if (loadedCloud->size() < loadedCloud->capacity())
-			loadedCloud->resize(loadedCloud->size());
+		loadedCloud->shrinkToFit();
 		int sfIdx = loadedCloud->getCurrentInScalarFieldIndex();
-		if (sfIdx>=0)
+		if (sfIdx >= 0)
 		{
 			CCLib::ScalarField* sf = loadedCloud->getScalarField(sfIdx);
 			sf->computeMinAndMax();

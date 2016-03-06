@@ -58,6 +58,73 @@
        </property>
       </spacer>
      </item>
+     <item>
+      <widget class="QToolButton" name="useSphereToolButton">
+       <property name="toolTip">
+        <string>Pick spheres instead of single points (for clouds only)</string>
+       </property>
+       <property name="icon">
+        <iconset resource="../icones.qrc">
+         <normaloff>:/CC/images/smallSphere.png</normaloff>:/CC/images/smallSphere.png</iconset>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QDoubleSpinBox" name="radiusDoubleSpinBox">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>search radius (or the spheres radius if you know it)</string>
+       </property>
+       <property name="prefix">
+        <string>r = </string>
+       </property>
+       <property name="decimals">
+        <number>3</number>
+       </property>
+       <property name="minimum">
+        <double>0.001000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>1000.000000000000000</double>
+       </property>
+       <property name="value">
+        <double>20.000000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSpinBox" name="maxRmsSpinBox">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>Max RMS (as a percentage of the radius)</string>
+       </property>
+       <property name="suffix">
+        <string>%</string>
+       </property>
+       <property name="prefix">
+        <string>RMS &lt; </string>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>100</number>
+       </property>
+       <property name="singleStep">
+        <number>1</number>
+       </property>
+       <property name="value">
+        <number>10</number>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>
@@ -507,6 +574,38 @@
     </hint>
     <hint type="destinationlabel">
      <x>140</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>useSphereToolButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>radiusDoubleSpinBox</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>322</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>useSphereToolButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>maxRmsSpinBox</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>186</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>337</x>
      <y>20</y>
     </hint>
    </hints>

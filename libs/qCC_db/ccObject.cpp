@@ -51,8 +51,13 @@
 	v3.6 - 05/30/2014 - ccGLWindow and associated structures (viewport, etc.) now use double precision
 	v3.7 - 08/24/2014 - Textures are stored and saved as a single DB with only references to them in each material (key = absolute filename)
 	v3.8 - 09/14/2014 - GBL and camera sensors structures have evolved
+	v3.9 - 01/30/2015 - Shift & scale information are now saved for polylines (+ separate interface)
+	v4.0 - 08/06/2015 - Custom labels added to color scales
+	v4.1 - 09/01/2015 - Scan grids added to point clouds
+	v4.2 - 10/07/2015 - Global shift added to the ccScalarField structure
+	v4.3 - 01/07/2016 - Additional intrinsic parameters of a camera sensor (optical center)
 **/
-const unsigned c_currentDBVersion = 38; //3.8
+const unsigned c_currentDBVersion = 43; //4.3
 
 //! Default unique ID generator (using the system persistent settings as we did previously proved to be not reliable)
 static ccUniqueIDGenerator::Shared s_uniqueIDGenerator(new ccUniqueIDGenerator);
@@ -208,9 +213,20 @@ void ccObject::setMetaData(QString key, QVariant data)
 	m_metaData.insert(key,data);
 }
 
-bool ccObject::hasMetaData(QString key)
+void ccObject::setMetaData(const QVariantMap& dataset, bool overwrite/*=false*/)
 {
-	return ( m_metaData.find(key) != m_metaData.end());
+	for (QVariantMap::const_iterator it = dataset.begin(); it != dataset.end(); ++it)
+	{
+		if (overwrite || !m_metaData.contains(it.key()))
+		{
+			m_metaData[it.key()] = it.value();
+		}
+	}
+}
+
+bool ccObject::hasMetaData(QString key) const
+{
+	return m_metaData.contains(key);
 }
 
 bool ccObject::fromFile(QFile& in, short dataVersion, int flags)

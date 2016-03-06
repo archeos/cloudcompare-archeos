@@ -17,11 +17,11 @@
 
 #include "ccCurvatureDlg.h"
 
-ccCurvatureDlg::ccCurvatureDlg(QWidget* parent/*=0*/) : QDialog(parent), Ui::CurvatureDialog()
+ccCurvatureDlg::ccCurvatureDlg(QWidget* parent/*=0*/)
+	: QDialog(parent, Qt::Tool)
+	, Ui::CurvatureDialog()
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 }
 
 double ccCurvatureDlg::getKernelSize() const
@@ -42,6 +42,8 @@ CCLib::Neighbourhood::CC_CURVATURE_TYPE ccCurvatureDlg::getCurvatureType() const
 		return CCLib::Neighbourhood::GAUSSIAN_CURV;
 	case 1:
 		return CCLib::Neighbourhood::MEAN_CURV;
+	case 2:
+		return CCLib::Neighbourhood::NORMAL_CHANGE_RATE;
 	default:
 		assert(false);
 	}

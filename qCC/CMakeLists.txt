@@ -1,18 +1,9 @@
 cmake_minimum_required(VERSION 2.8)
 
-# Eliminate a warning when building in Windows that relates
-# to static linking of Qt executables to qtmain.lib.
-# This policy was introduced in CMake version 2.8.11.
-# CMake version 2.8.11.2 warns when the policy is not set
-# and uses OLD behavior.
-if(POLICY CMP0020)
-  cmake_policy(SET CMP0020 OLD)
-endif()
-
 project( CloudCompare )
 
 set( VERSION_MAJOR 2 )
-set( VERSION_MINOR 6 )
+set( VERSION_MINOR 7 )
 set( VERSION_PATCH 0 )
 
 include_directories( ${GLEW_LIB_SOURCE_DIR}/include )
@@ -24,7 +15,6 @@ if( MSVC )
 endif()
 include_directories( ${QCC_IO_LIB_SOURCE_DIR} )
 include_directories( ${QCC_GL_LIB_SOURCE_DIR} )
-include_directories( ${EXTERNAL_LIBS_INCLUDE_DIR} )
 include_directories( ${CloudComparePlugins_SOURCE_DIR} )
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/db_tree )
@@ -33,12 +23,8 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/../libs/qxt )
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/../libs/qcustomplot )
 include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
 
-# QCustomPlot
-set( QCUSTOMPLOT_HEADERS ../libs/qcustomplot/qcustomplot.h )
-set( QCUSTOMPLOT_SOURCES ../libs/qcustomplot/qcustomplot.cpp )
-
-file( GLOB header_list *.h db_tree/*.h ${QXT_HEADERS} ${QCUSTOMPLOT_HEADERS} )
-file( GLOB source_list *.cpp db_tree/*.cpp ${QXT_SOURCES} ${QCUSTOMPLOT_SOURCES} )
+file( GLOB header_list *.h db_tree/*.h ${QXT_HEADERS} )
+file( GLOB source_list *.cpp db_tree/*.cpp ${QXT_SOURCES} )
 
 # 3DX support (3dConnexion devices)
 if ( ${OPTION_SUPPORT_3DCONNEXION_DEVICES} )
@@ -50,19 +36,11 @@ endif()
 
 file( GLOB ui_list ui_templates/*.ui )
 file( GLOB qrc_list *.qrc )
-#file( GLOB rc_list *.rc )
+
 file( GLOB txt_list TODO.txt bin_other/history.txt )
 
-if ( USE_QT5 )
-	qt5_wrap_ui( generated_ui_list ${ui_list} )
-	qt5_add_resources( generated_qrc_list ${qrc_list} )
-else()
-	# find Qt mocable files
-	find_mocable_files( mocable_list ${header_list} )
-	qt4_wrap_cpp( moc_list ${mocable_list} )
-	qt4_wrap_ui( generated_ui_list ${ui_list} )
-	qt4_add_resources( generated_qrc_list ${qrc_list} )
-endif()
+qt_wrap_ui( generated_ui_list ${ui_list} )
+qt_add_resources( generated_qrc_list ${qrc_list} )
 
 # App icon with MSVC
 if( MSVC )
@@ -84,13 +62,18 @@ target_link_libraries( ${PROJECT_NAME} CC_CORE_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_DB_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_IO_LIB )
 target_link_libraries( ${PROJECT_NAME} QCC_GL_LIB )
-target_link_libraries( ${PROJECT_NAME} ${EXTERNAL_LIBS_LIBRARIES} )
+target_link_libraries( ${PROJECT_NAME} qcustomplot )
+
 
 if ( USE_QT5 )
 	if (WIN32)
+        qt5_use_modules(${PROJECT_NAME} Core Gui Widgets OpenGL PrintSupport)
 		target_link_libraries( ${PROJECT_NAME} Qt5::WinMain )
+    else()
+		qt5_use_modules(${PROJECT_NAME} Core Gui Widgets OpenGL PrintSupport)
 	endif()
-	qt5_use_modules(${PROJECT_NAME} Core Gui Widgets OpenGL PrintSupport)
+else()
+    target_link_libraries( ${PROJECT_NAME} ${QT_LIBRARIES})
 endif()
 
 # contrib. libraries support
@@ -99,14 +82,13 @@ target_link_contrib( ${PROJECT_NAME} ${CLOUDCOMPARE_DEST_FOLDER} )
 # 3dConnexion devices support
 target_link_3DXWARE( ${PROJECT_NAME} )
 
-# Default preprocessors
-set_default_cc_preproc( ${PROJECT_NAME} )
-
 # Add custom preprocessor definitions
 set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS USE_GLEW GLEW_STATIC )
 if( WIN32 )
 	set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS CC_USE_AS_DLL QCC_DB_USE_AS_DLL QCC_IO_USE_AS_DLL )
-	SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO")
+	if (MSVC)
+		SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO")
+	endif()
 endif()
 
 #set_property( TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE XXX) #nothing right now
@@ -132,7 +114,8 @@ if( WIN32 )
 	install_Qt5_plugins( ${CLOUDCOMPARE_DEST_FOLDER} )
 
 	# Additional auxiliary file(s)
-	list( APPEND auxFiles bin_other/start.bat )
+	file( GLOB batch_list bin_other/*.bat )
+	list( APPEND auxFiles ${batch_list} )
 endif()
 
 # Install auxiliary files

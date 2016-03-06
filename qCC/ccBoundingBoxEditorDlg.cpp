@@ -22,14 +22,12 @@
 static ccBBox s_lastBBox;
 
 ccBoundingBoxEditorDlg::ccBoundingBoxEditorDlg(QWidget* parent/*=0*/)
-	: QDialog(parent)
+	: QDialog(parent, Qt::Tool)
 	, Ui::BoundingBoxEditorDialog()
 	, m_baseBoxIsMinimal(false)
 	, m_showInclusionWarning(true)
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool);
 
 	xDoubleSpinBox->setMinimum(-1.0e9);
 	yDoubleSpinBox->setMinimum(-1.0e9);
@@ -78,25 +76,25 @@ void MakeSquare(ccBBox& box, int pivotType, int defaultDim = -1)
 		{
 			//we take the largest one!
 			defaultDim = 0;
-			if (W.u[1]>W.u[defaultDim])
+			if (W.u[1] > W.u[defaultDim])
 				defaultDim = 1;
-			if (W.u[2]>W.u[defaultDim])
+			if (W.u[2] > W.u[defaultDim])
 				defaultDim = 2;
 		}
 
-		CCVector3 newW(W.u[defaultDim],W.u[defaultDim],W.u[defaultDim]);
+		CCVector3 newW(W.u[defaultDim], W.u[defaultDim], W.u[defaultDim]);
 		switch(pivotType)
 		{
 		case 0: //min corner
 			{
 				CCVector3 A = box.minCorner();
-				box = ccBBox(A,A+newW);
+				box = ccBBox(A, A + newW);
 			}
 			break;
 		case 1: //center
 			{
 				CCVector3 C = box.getCenter();
-				box = ccBBox(C-newW/2.0,C+newW/2.0);
+				box = ccBBox(C - newW / 2.0, C + newW / 2.0);
 			}
 			break;
 		case 2: //max corner
@@ -341,7 +339,7 @@ void ccBoundingBoxEditorDlg::reflectChanges(int dummy)
 
 		CCVector3 W = m_currentBBox.getDiagVec();
 		//if 'square mode' is on, all width values should be the same!
-		assert(!keepSquare() || fabs(W.x-W.y) < 1.0e-6 && fabs(W.x-W.z) < 1.0e-6);
+		assert(!keepSquare() || fabs(W.x-W.y)*1.0e-6 < 1.0 && fabs(W.x-W.z)*1.0e-6 < 1.0);
 		dxDoubleSpinBox->setValue(W.x);
 		dyDoubleSpinBox->setValue(W.y);
 		dzDoubleSpinBox->setValue(W.z);

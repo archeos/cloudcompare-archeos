@@ -21,6 +21,7 @@
 //Local
 #include "qCC_db.h"
 #include "ccHObject.h"
+#include "ccGenericGLDisplay.h"
 
 //CCLib
 #include <DgmOctree.h>
@@ -54,7 +55,7 @@ class QCC_DB_LIB_API ccOctreeSpinBox : public QSpinBox
 public:
 
 	//! Default constructor
-	ccOctreeSpinBox(QWidget* parent = 0);
+	explicit ccOctreeSpinBox(QWidget* parent = 0);
 
 	//! Sets associated cloud on which the octree will be computed
 	/** Alternative to ccOctreeSpinBox::setOctree
@@ -83,12 +84,12 @@ protected:
 **/
 class QCC_DB_LIB_API ccOctree : public CCLib::DgmOctree, public ccHObject
 {
-public:
+public: //GENERAL METHODS
 
 	//! Default constructor
 	/** \param aCloud a point cloud
 	**/
-	ccOctree(ccGenericPointCloud* aCloud);
+	explicit ccOctree(ccGenericPointCloud* aCloud);
 
 	//! Destructor
 	virtual ~ccOctree();
@@ -121,10 +122,9 @@ public:
 	virtual void clear();
 
 	//Inherited from ccHObject
-	virtual ccBBox getMyOwnBB();
-	virtual ccBBox getDisplayBB();
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
 
-	/*** RENDERING METHODS ***/
+public: //RENDERING METHODS
 
 	static void RenderOctreeAs(	CC_OCTREE_DISPLAY_TYPE octreeDisplayType,
 								ccOctree* theOctree,
@@ -135,7 +135,7 @@ public:
 
 	static void ComputeAverageColor(CCLib::ReferenceCloud* subset,
 									ccGenericPointCloud* sourceCloud,
-									colorType meanCol[]);
+									ColorCompType meanCol[]);
 
 	static CCVector3 ComputeAverageNorm(CCLib::ReferenceCloud* subset,
 										ccGenericPointCloud* sourceCloud);
@@ -143,6 +143,12 @@ public:
 	//! Intersects octree with a camera sensor
 	bool intersectWithFrustrum(	ccCameraSensor* sensor,
 								std::vector<unsigned>& inCameraFrustrum);
+
+	//! Octree-driven point picking algorithm
+	bool pointPicking(	const CCVector2d& clickPos,
+						const ccGLCameraParameters& camera,
+						PointDescriptor& output,
+						double pickWidth_pix = 3.0) const;
 
 protected:
 
@@ -163,14 +169,13 @@ protected:
 										void** additionalParameters,
 										CCLib::NormalizedProgress* nProgress = 0);
 
-	ccGenericPointCloud* m_associatedCloud;
+	ccGenericPointCloud* m_theAssociatedCloudAsGPC;
 	CC_OCTREE_DISPLAY_TYPE m_displayType;
 	int m_displayedLevel;
 	int m_glListID;
 	bool m_shouldBeRefreshed;
 
 	ccOctreeFrustrumIntersector* m_frustrumIntersector;
-
 };
 
 #endif //CC_OCTREE_HEADER

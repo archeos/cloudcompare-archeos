@@ -31,7 +31,7 @@
 #include <ccColorScalesManager.h>
 #include <ccColorScaleEditorDlg.h>
 #include <ccCommon.h>
-#include <ccDisplayOptionsDlg.h>
+#include <ccQtHelpers.h>
 #include <ccRenderToFileDlg.h>
 
 //qCC_db
@@ -143,24 +143,27 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 			m_colorScaleSelector->setSelectedScale(scale->getUuid());
 	}
 
-	int revolDim = -1;
+	//profile meta-data
+	DistanceMapGenerationTool::ProfileMetaData profileDesc;
+	bool validProfile = false;
+
 	//set default dialog values with polyline & cloud information
 	if (m_profile)
 	{
-		//we try to get the revolution axis from the polyline meta-data
-		revolDim = DistanceMapGenerationTool::GetPoylineAxis(m_profile);
-		if (revolDim < 0)
-			revolDim = 2; //we assume the surface axis is Z by default
-		axisDimComboBox->setCurrentIndex(revolDim);
-
-		//trick: we get the polyline referential from its 'original shift' field
-		ccPointCloud* pcVertices = dynamic_cast<ccPointCloud*>(m_profile->getAssociatedCloud());
-		if (pcVertices)
+		validProfile = DistanceMapGenerationTool::GetPoylineMetaData(m_profile, profileDesc);
+		if (validProfile)
 		{
-			const CCVector3d& profileOrigin = pcVertices->getGlobalShift();
-			xOriginDoubleSpinBox->setValue(profileOrigin.x);
-			yOriginDoubleSpinBox->setValue(profileOrigin.y);
-			zOriginDoubleSpinBox->setValue(profileOrigin.z);
+			//update the 'Generatrix' tab
+			{
+				axisDimComboBox->setCurrentIndex(profileDesc.revolDim);
+
+				xOriginDoubleSpinBox->setValue(profileDesc.origin.x);
+				yOriginDoubleSpinBox->setValue(profileDesc.origin.y);
+				zOriginDoubleSpinBox->setValue(profileDesc.origin.z);
+			}
+
+			//compute transformation from cloud to the surface (of revolution)
+			ccGLMatrix cloudToSurface = profileDesc.computeProfileToSurfaceTrans();
 
 			//compute mean 'radius'
 			//as well as min and max 'height'
@@ -170,8 +173,8 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 			for (unsigned i=0; i<m_profile->size(); ++i)
 			{
 				const CCVector3* P = m_profile->getPoint(i);
-				const double& radius = P->x;
-				const double& height = P->y;
+				double radius = P->x;
+				double height = P->y + profileDesc.heightShift;
 				baseRadius += radius;
 
 				if (i != 0)
@@ -189,7 +192,7 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 			
 			//set default 'base radius'
 			if (m_profile->size() != 0)
-				baseRadius /= (double)m_profile->size();
+				baseRadius /= m_profile->size();
 			if (baseRadius == 0.0)
 				baseRadius = 1.0;
 			baseRadiusDoubleSpinBox->setValue(baseRadius);
@@ -200,35 +203,41 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 
 			//do the same thing for conical projection
 			double minLat_rad = 0.0, maxLat_rad = 0.0;
-			if (m_cloud
-				&& DistanceMapGenerationTool::ComputeMinAndMaxLatitude_rad(cloud,
-																minLat_rad,
-																maxLat_rad,
-																CCVector3d(profileOrigin),
-																static_cast<uchar>(revolDim)))
+
+			if (   m_cloud
+				&& DistanceMapGenerationTool::ComputeMinAndMaxLatitude_rad(	m_cloud,
+																			minLat_rad,
+																			maxLat_rad,
+																			cloudToSurface,
+																			static_cast<unsigned char>(profileDesc.revolDim)))
 			{
 				latMinDoubleSpinBox->setValue(ConvertAngleFromRad(minLat_rad,m_angularUnits)); 
 				latMaxDoubleSpinBox->setValue(ConvertAngleFromRad(maxLat_rad,m_angularUnits));
 			}
 		}
+		else
+		{
+			if (m_app)
+				m_app->dispToConsole(QString("Invalid profile: can't generate a proper map!"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		}
 	}
 
 	//compute min and max height of the points
 	//we will 'lock" the max height value with that information
-	if (cloud)
+	if (m_cloud)
 	{
-		ccBBox bbox = cloud->getBB();
+		ccBBox bbox = m_cloud->getOwnBB();
 		PointCoordinateType hMin = 0, hMax = 0;
 		if (bbox.isValid())
 		{
-			hMin = bbox.minCorner().u[revolDim];
-			hMax = bbox.maxCorner().u[revolDim];
+			hMin = bbox.minCorner().u[profileDesc.revolDim];
+			hMax = bbox.maxCorner().u[profileDesc.revolDim];
 		}
 
 		if (hMax - hMin <= 0)
 		{
 			if (m_app)
-				m_app->dispToConsole(QString("Cloud is flat?! Can't generate a proper map!"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+				m_app->dispToConsole(QString("Cloud is flat: can't generate a proper map!"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
 		}
 		else
 		{
@@ -240,8 +249,8 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 	{
 		m_window = new ccMapWindow(this);
 		ccGui::ParamStruct params = m_window->getDisplayParameters();
-		memcpy(params.backgroundCol,ccColor::white,3*sizeof(unsigned char));
-		memcpy(params.textDefaultCol,ccColor::black,3*sizeof(unsigned char));
+		params.backgroundCol = ccColor::white;
+		params.textDefaultCol = ccColor::black;
 		params.drawBackgroundGradient = false;
 		params.colorScaleShowHistogram = false;
 		params.colorScaleRampWidth = 30;
@@ -250,12 +259,13 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 		params.colorScaleUseShader = false;
 		m_window->setDisplayParameters(params,true);
 		m_window->setPerspectiveState(false,true);
-		m_window->setInteractionMode(ccGLWindow::PAN_ONLY);
+		m_window->setInteractionMode(ccGLWindow::INTERACT_PAN | ccGLWindow::INTERACT_CLICKABLE_ITEMS | ccGLWindow::INTERACT_ZOOM_CAMERA);
 		m_window->displayOverlayEntities(false);
 		m_window->showSF(displayColorScaleCheckBox->isChecked());
 		//add window to the right side layout
 		mapFrame->setLayout(new QHBoxLayout());
-		mapFrame->layout()->addWidget(m_window);		
+		mapFrame->layout()->addWidget(m_window);
+		precisionSpinBox->setValue(params.displayedNumPrecision);
 	}
 
 	//create labels "clouds" (empty)
@@ -283,6 +293,10 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 	connect(hMaxDoubleSpinBox,				SIGNAL(valueChanged(double)),		this,	SLOT(updateGridSteps()));
 	connect(latMinDoubleSpinBox,			SIGNAL(valueChanged(double)),		this,	SLOT(updateGridSteps()));
 	connect(latMaxDoubleSpinBox,			SIGNAL(valueChanged(double)),		this,	SLOT(updateGridSteps()));
+	connect(axisDimComboBox,				SIGNAL(currentIndexChanged(int)),	this,	SLOT(updateProfileRevolDim(int)));
+	connect(xOriginDoubleSpinBox,			SIGNAL(valueChanged(double)),		this,	SLOT(updateProfileOrigin()));
+	connect(yOriginDoubleSpinBox,			SIGNAL(valueChanged(double)),		this,	SLOT(updateProfileOrigin()));
+	connect(zOriginDoubleSpinBox,			SIGNAL(valueChanged(double)),		this,	SLOT(updateProfileOrigin()));
 	connect(baseRadiusDoubleSpinBox,		SIGNAL(valueChanged(double)),		this,	SLOT(baseRadiusChanged(double)));
 	connect(heightUnitLineEdit,				SIGNAL(editingFinished()),			this,	SLOT(updateHeightUnits()));
 	connect(exportCloudPushButton,			SIGNAL(clicked()),					this,	SLOT(exportMapAsCloud()));
@@ -293,6 +307,8 @@ DistanceMapGenerationDlg::DistanceMapGenerationDlg(ccPointCloud* cloud, ccScalar
 	connect(clearLabelsPushButton,			SIGNAL(clicked()),					this,	SLOT(clearOverlaySymbols()));
 	connect(symbolSizeSpinBox,				SIGNAL(valueChanged(int)),			this,	SLOT(overlaySymbolsSizeChanged(int)));
 	connect(fontSizeSpinBox,				SIGNAL(valueChanged(int)),			this,	SLOT(labelFontSizeChanged(int)));
+	connect(precisionSpinBox,				SIGNAL(valueChanged(int)),			this,	SLOT(labelPrecisionChanged(int)));
+	
 	connect(colorScaleStepsSpinBox,			SIGNAL(valueChanged(int)),			this,	SLOT(colorRampStepsChanged(int)));
 	connect(overlayGridGroupBox,			SIGNAL(toggled(bool)),				this,	SLOT(toggleOverlayGrid(bool)));
 	connect(scaleXStepDoubleSpinBox,		SIGNAL(editingFinished()),			this,	SLOT(updateOverlayGrid()));
@@ -561,7 +577,7 @@ void DistanceMapGenerationDlg::update()
 		//Otherwise the symbols will be misplaced...
 		double yMin, yMax, yStep;
 		getGridYValues(yMin, yMax, yStep, ANG_RAD);
-		if (m_map->yMin != yMin || m_map->yMax != yMax)
+		if (m_map->yMin != yMin || m_map->yMax != yMax || m_map->conicalSpanRatio != conicSpanRatioDoubleSpinBox->value())
 		{
 			clearOverlaySymbols();
 		}
@@ -605,8 +621,8 @@ void DistanceMapGenerationDlg::update()
 		{
 			//no choice, we create a mesh
 			bool ccw = ccwCheckBox->isChecked();
-			double conicalSpanRatio = conicSpanRatioDoubleSpinBox->value();
-			mapMesh = DistanceMapGenerationTool::ConvertConicalMapToMesh(m_map,ccw,conicalSpanRatio);
+			m_map->conicalSpanRatio = conicSpanRatioDoubleSpinBox->value();
+			mapMesh = DistanceMapGenerationTool::ConvertConicalMapToMesh(m_map,ccw);
 		}
 
 		if (mapMesh)
@@ -646,7 +662,7 @@ void DistanceMapGenerationDlg::update()
 	//force grid update if necessary
 	//updateOverlayGrid();
 	//update zoom
-	ccBBox box = m_window ? m_window->getOwnDB()->getBB(true, true, m_window) : ccBBox();
+	ccBBox box = m_window ? m_window->getOwnDB()->getDisplayBB_recursive(false, m_window) : ccBBox();
 	updateZoom(box);
 
 	saveToPersistentSettings();
@@ -694,6 +710,12 @@ void DistanceMapGenerationDlg::updateMapTexture()
 
 	//current color scale
 	ccColorScale::Shared colorScale = m_colorScaleSelector->getSelectedScale();
+	if (!colorScale)
+	{
+		if (m_app)
+			m_app->dispToConsole(QString("No color scale chosen!"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		return;
+	}
 
 	//create new texture QImage
 	QImage mapImage = DistanceMapGenerationTool::ConvertMapToImage(m_map, colorScale, colorScaleStepsSpinBox->value());
@@ -730,12 +752,9 @@ void DistanceMapGenerationDlg::updateMapTexture()
 			materialSet->clear();
 			//add new material
 			{
-				ccMaterial material("texture");
-				material.setTexture(mapImage,QString(),false);
+				ccMaterial::Shared material(new ccMaterial("texture"));
+				material->setTexture(mapImage,QString(),false);
 				materialSet->addMaterial(material);
-				//dirty trick: reset material association so that texture will be refreshed!
-				materialSet->associateTo(0);
-				materialSet->associateTo(m_window);
 			}
 		}
 	}
@@ -770,7 +789,7 @@ void DistanceMapGenerationDlg::spawnColorScaleEditor()
 		return;
 
 	ccColorScale::Shared colorScale = (m_colorScaleSelector ? m_colorScaleSelector->getSelectedScale() : m_app->getColorScalesManager()->getDefaultScale(ccColorScalesManager::BGYR));
-	ccColorScaleEditorDialog cseDlg(m_app->getColorScalesManager(),colorScale,m_app->getMainWindow());
+	ccColorScaleEditorDialog cseDlg(m_app->getColorScalesManager(),m_app,colorScale,m_app->getMainWindow());
 	if (cseDlg.exec())
 	{
 		colorScale = cseDlg.getActiveScale();
@@ -827,10 +846,10 @@ void DistanceMapGenerationDlg::angularUnitChanged(int index)
 		SetSpinBoxValues(xMinDoubleSpinBox,			2,  0.0, 360.0, 5.0, xMin_rad			* CC_RAD_TO_DEG);
 		SetSpinBoxValues(xMaxDoubleSpinBox,			2,  0.0, 360.0, 5.0, xMax_rad			* CC_RAD_TO_DEG);
 
-		SetSpinBoxValues(latStepDoubleSpinBox,		2, 0.01, 89.99, 1.0, latStep_rad		* CC_RAD_TO_DEG);
-		SetSpinBoxValues(scaleLatStepDoubleSpinBox,	2, 0.01, 89.99, 1.0, scaleLatStep_rad	* CC_RAD_TO_DEG);
-		SetSpinBoxValues(latMinDoubleSpinBox,		2,  0.0, 89.99, 1.0, latMin_rad			* CC_RAD_TO_DEG);
-		SetSpinBoxValues(latMaxDoubleSpinBox,		2,  0.0, 89.99, 1.0, latMax_rad			* CC_RAD_TO_DEG);
+		SetSpinBoxValues(latStepDoubleSpinBox,		2,   0.01, 89.99, 1.0, latStep_rad		* CC_RAD_TO_DEG);
+		SetSpinBoxValues(scaleLatStepDoubleSpinBox,	2,   0.01, 89.99, 1.0, scaleLatStep_rad	* CC_RAD_TO_DEG);
+		SetSpinBoxValues(latMinDoubleSpinBox,		2, -89.99, 89.99, 1.0, latMin_rad			* CC_RAD_TO_DEG);
+		SetSpinBoxValues(latMaxDoubleSpinBox,		2, -89.99, 89.99, 1.0, latMax_rad			* CC_RAD_TO_DEG);
 
 		xMaxDoubleSpinBox->setMaximum(360.0);
 		xMaxDoubleSpinBox->setValue(360.0);
@@ -848,10 +867,10 @@ void DistanceMapGenerationDlg::angularUnitChanged(int index)
 		SetSpinBoxValues(xMaxDoubleSpinBox,			4,    0.0, PIx2,	0.5, xMax_rad);
 
 		double PIdiv2 = M_PI/2.0-0.0001;
-		SetSpinBoxValues(scaleLatStepDoubleSpinBox,	4, 0.0001, PIdiv2, 0.3, scaleLatStep_rad);
-		SetSpinBoxValues(latStepDoubleSpinBox,		4, 0.0001, PIdiv2, 0.3, latStep_rad);
-		SetSpinBoxValues(latMinDoubleSpinBox,		4,    0.0, PIdiv2, 0.3, latMin_rad);
-		SetSpinBoxValues(latMaxDoubleSpinBox,		4,    0.0, PIdiv2, 0.3, latMax_rad);
+		SetSpinBoxValues(scaleLatStepDoubleSpinBox,	4,  0.0001, PIdiv2, 0.3, scaleLatStep_rad);
+		SetSpinBoxValues(latStepDoubleSpinBox,		4,  0.0001, PIdiv2, 0.3, latStep_rad);
+		SetSpinBoxValues(latMinDoubleSpinBox,		4, -PIdiv2, PIdiv2, 0.3, latMin_rad);
+		SetSpinBoxValues(latMaxDoubleSpinBox,		4, -PIdiv2, PIdiv2, 0.3, latMax_rad);
 
 		xMaxDoubleSpinBox->setMaximum(PIx2);
 		xMaxDoubleSpinBox->setValue(PIx2);
@@ -867,10 +886,10 @@ void DistanceMapGenerationDlg::angularUnitChanged(int index)
 		SetSpinBoxValues(xMinDoubleSpinBox,			2,  0.0, 400.0, 5.0, xMin_rad			* 200.0 / M_PI);
 		SetSpinBoxValues(xMaxDoubleSpinBox,			2,  0.0, 400.0, 5.0, xMax_rad			* 200.0 / M_PI);
 
-		SetSpinBoxValues(scaleLatStepDoubleSpinBox,	2, 0.01, 99.99, 1.0, scaleLatStep_rad	* 200.0 / M_PI);
-		SetSpinBoxValues(latStepDoubleSpinBox,		2, 0.01, 99.99, 1.0, latStep_rad		* 200.0 / M_PI);
-		SetSpinBoxValues(latMinDoubleSpinBox,		2,  0.0, 99.99, 1.0, latMin_rad			* 200.0 / M_PI);
-		SetSpinBoxValues(latMaxDoubleSpinBox,		2,  0.0, 99.99, 1.0, latMax_rad			* 200.0 / M_PI);
+		SetSpinBoxValues(scaleLatStepDoubleSpinBox,	2,   0.01, 99.99, 1.0, scaleLatStep_rad	* 200.0 / M_PI);
+		SetSpinBoxValues(latStepDoubleSpinBox,		2,   0.01, 99.99, 1.0, latStep_rad		* 200.0 / M_PI);
+		SetSpinBoxValues(latMinDoubleSpinBox,		2, -99.99, 99.99, 1.0, latMin_rad		* 200.0 / M_PI);
+		SetSpinBoxValues(latMaxDoubleSpinBox,		2, -99.99, 99.99, 1.0, latMax_rad		* 200.0 / M_PI);
 
 		xMaxDoubleSpinBox->setMaximum(400.0);
 		xMaxDoubleSpinBox->setValue(400.0);
@@ -926,6 +945,35 @@ double DistanceMapGenerationDlg::getScaleYStep(ANGULAR_UNIT unit/*=ANG_RAD*/) co
 		return scaleHStepDoubleSpinBox->value();
 	else
 		return getSpinboxAngularValue(scaleLatStepDoubleSpinBox, unit);
+}
+
+void DistanceMapGenerationDlg::updateProfileRevolDim(int dim)
+{
+	if (!m_profile)
+	{
+		assert(false);
+		return;
+	}
+
+	//update projection dimension
+	assert(dim >= 0 && dim < 3);
+	DistanceMapGenerationTool::SetPoylineRevolDim(m_profile, dim);
+}
+
+void DistanceMapGenerationDlg::updateProfileOrigin()
+{
+	if (!m_profile)
+	{
+		assert(false);
+		return;
+	}
+
+	//update origin
+	CCVector3 origin(	static_cast<PointCoordinateType>(xOriginDoubleSpinBox->value()),
+						static_cast<PointCoordinateType>(yOriginDoubleSpinBox->value()),
+						static_cast<PointCoordinateType>(zOriginDoubleSpinBox->value()) );
+	
+	DistanceMapGenerationTool::SetPoylineOrigin(m_profile, origin);
 }
 
 void DistanceMapGenerationDlg::updateGridSteps()
@@ -1004,16 +1052,22 @@ DistanceMapGenerationTool::EmptyCellFillOption DistanceMapGenerationDlg::getEmpt
 
 QSharedPointer<DistanceMapGenerationTool::Map> DistanceMapGenerationDlg::updateMap()
 {
-	if (!m_cloud || !m_sf)
+	if (!m_cloud || !m_sf || !m_profile)
+	{
+		assert(false);
 		return QSharedPointer<DistanceMapGenerationTool::Map>(0);
+	}
 
-	//revolution origin
-	CCVector3d C(xOriginDoubleSpinBox->value(),
-				 yOriginDoubleSpinBox->value(),
-				 zOriginDoubleSpinBox->value());
-	//revolution axis
-	assert(axisDimComboBox->currentIndex() < 3);
-	const unsigned char Z = static_cast<uchar>(axisDimComboBox->currentIndex());
+	//profile parameters
+	DistanceMapGenerationTool::ProfileMetaData profileDesc;
+	if (!DistanceMapGenerationTool::GetPoylineMetaData(m_profile, profileDesc))
+	{
+		assert(false);
+		return QSharedPointer<DistanceMapGenerationTool::Map>(0);
+	}
+	//compute transformation from cloud to the surface (of revolution)
+	ccGLMatrix cloudToSurface = profileDesc.computeProfileToSurfaceTrans();
+
 	//steps
 	double angStep_rad = getSpinboxAngularValue(xStepDoubleSpinBox,ANG_RAD);
 	//CW (clockwise) or CCW (counterclockwise)
@@ -1026,8 +1080,8 @@ QSharedPointer<DistanceMapGenerationTool::Map> DistanceMapGenerationDlg::updateM
 	//generate map
 	return DistanceMapGenerationTool::CreateMap(m_cloud,
 		m_sf,
-		C,
-		Z,
+		cloudToSurface,
+		profileDesc.revolDim,
 		angStep_rad,
 		yStep,
 		yMin,
@@ -1067,13 +1121,24 @@ void DistanceMapGenerationDlg::exportMapAsCloud()
 
 void DistanceMapGenerationDlg::exportMapAsMesh()
 {
-	if (!m_profile ||!m_colorScaleSelector)
+	if (!m_profile || !m_colorScaleSelector)
+	{
+		assert(false);
 		return;
+	}
 	
 	if (!m_map)
 	{
 		if (m_app)
 			m_app->dispToConsole(QString("Invalid map! Try to refresh it?"),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
+		return;
+	}
+
+	//profile parameters
+	DistanceMapGenerationTool::ProfileMetaData profileDesc;
+	if (!DistanceMapGenerationTool::GetPoylineMetaData(m_profile, profileDesc))
+	{
+		assert(false);
 		return;
 	}
 
@@ -1088,7 +1153,9 @@ void DistanceMapGenerationDlg::exportMapAsMesh()
 		return;
 	}
 
-	ccMesh* mesh = DistanceMapGenerationTool::ConvertProfileToMesh(m_profile,m_map->counterclockwise,m_map->xSteps,mapImage);
+	//compute transformation from cloud to the surface (of revolution)
+	ccGLMatrix cloudToSurface = profileDesc.computeProfileToSurfaceTrans();
+	ccMesh* mesh = DistanceMapGenerationTool::ConvertProfileToMesh(m_profile,cloudToSurface,m_map->counterclockwise,m_map->xSteps,mapImage);
 	if (mesh)
 	{
 		mesh->setDisplay_recursive(m_cloud->getDisplay());
@@ -1153,7 +1220,7 @@ void DistanceMapGenerationDlg::exportMapAsImage()
 	if (rtfDlg.exec())
 	{
 		QApplication::processEvents();
-		m_window->renderToFile(qPrintable(rtfDlg.getFilename()),rtfDlg.getZoom(),rtfDlg.dontScalePoints(),rtfDlg.renderOverlayItems());
+		m_window->renderToFile(rtfDlg.getFilename(),rtfDlg.getZoom(),rtfDlg.dontScalePoints(),rtfDlg.renderOverlayItems());
 	}
 }
 
@@ -1166,6 +1233,10 @@ void DistanceMapGenerationDlg::exportProfilesAsDXF()
 
 	if (!dpeDlg.exec())
 		return;
+
+	//profile meta-data (we only need the height shift)
+	PointCoordinateType heightShift = 0;
+	DistanceMapGenerationTool::GetPolylineHeightShift(m_profile, heightShift);
 
 	DxfProfilesExporter::Parameters params;
 	params.legendTheoProfileTitle = dpeDlg.theoNameLineEdit->text();
@@ -1194,7 +1265,14 @@ void DistanceMapGenerationDlg::exportProfilesAsDXF()
 		}
 
 		double heightStep = getScaleYStep();
-		if (!DxfProfilesExporter::SaveVerticalProfiles(m_map,m_profile,vertFilename,angularStepCount,heightStep,params,m_app))
+		if (!DxfProfilesExporter::SaveVerticalProfiles(	m_map,
+														m_profile,
+														vertFilename,
+														angularStepCount,
+														heightStep,
+														heightShift,
+														params,
+														m_app))
 		{
 			if (m_app)
 				m_app->dispToConsole(QString("Failed to save file '%1'!").arg(vertFilename),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
@@ -1221,7 +1299,16 @@ void DistanceMapGenerationDlg::exportProfilesAsDXF()
 		params.profileTitles << QString("%1 - %2 ").arg(horizProfileBaseTitle).arg("%1") + getHeightUnitString();
 
 		double angleStep_rad = getSpinboxAngularValue(scaleXStepDoubleSpinBox,ANG_RAD);
-		if (!DxfProfilesExporter::SaveHorizontalProfiles(m_map,m_profile,horizFilename,heightStepCount,angleStep_rad,ConvertAngleFromRad(1.0,m_angularUnits),getCondensedAngularUnitString(),params,m_app))
+		if (!DxfProfilesExporter::SaveHorizontalProfiles(	m_map,
+															m_profile,
+															horizFilename,
+															heightStepCount,
+															heightShift,
+															angleStep_rad,
+															ConvertAngleFromRad(1.0,m_angularUnits),
+															getCondensedAngularUnitString(),
+															params,
+															m_app))
 		{
 			if (m_app)
 				m_app->dispToConsole(QString("Failed to save file '%1'!").arg(horizFilename),ccMainAppInterface::ERR_CONSOLE_MESSAGE);
@@ -1326,9 +1413,9 @@ void DistanceMapGenerationDlg::loadOverlaySymbols()
 			delete symbolCloud;
 			symbolCloud = 0;
 		}
-		else if (symbolCloud->size() < symbolCloud->capacity())
+		else
 		{
-			symbolCloud->resize(symbolCloud->size());
+			symbolCloud->shrinkToFit();
 		}
 
 		if (error)
@@ -1344,33 +1431,45 @@ void DistanceMapGenerationDlg::loadOverlaySymbols()
 		//unroll the symbol cloud the same way as the input cloud
 		if (m_window)
 		{
-			//revolution center
-			CCVector3d C(	xOriginDoubleSpinBox->value(),
-							yOriginDoubleSpinBox->value(),
-							zOriginDoubleSpinBox->value() );
-			//revolution axis
-			assert(axisDimComboBox->currentIndex() < 3);
-			const unsigned char Z = static_cast<uchar>(axisDimComboBox->currentIndex());
+			//profile parameters
+			DistanceMapGenerationTool::ProfileMetaData profileDesc;
+			if (!DistanceMapGenerationTool::GetPoylineMetaData(m_profile, profileDesc))
+			{
+				assert(false);
+				return;
+			}
+			//compute transformation from cloud to the surface (of revolution)
+			ccGLMatrix cloudToSurface = profileDesc.computeProfileToSurfaceTrans();
 			//CW (clockwise) or CCW (counterclockwise)
 			bool ccw = ccwCheckBox->isChecked();
 
 			if (getProjectionMode() == PROJ_CYLINDRICAL)
 			{
-				DistanceMapGenerationTool::ConvertCloudToCylindrical(symbolCloud,C,Z,ccw);
+				DistanceMapGenerationTool::ConvertCloudToCylindrical(	symbolCloud,
+																		cloudToSurface,
+																		profileDesc.heightShift,
+																		profileDesc.revolDim,
+																		ccw);
 			}
 			else /*if (getProjectionMode() == PROJ_CONICAL)*/
 			{
 				double conicalSpanRatio = conicSpanRatioDoubleSpinBox->value();
-				DistanceMapGenerationTool::ConvertCloudToConical(symbolCloud,C,Z,m_map->yMin,m_map->yMax,conicalSpanRatio,ccw);
+				DistanceMapGenerationTool::ConvertCloudToConical(	symbolCloud,
+																	cloudToSurface,
+																	profileDesc.heightShift,
+																	profileDesc.revolDim,
+																	m_map->yMin,
+																	m_map->yMax,
+																	conicalSpanRatio,ccw);
 			}
 		}
-		symbolCloud->setSymbolSize((double)symbolSizeSpinBox->value());
+		symbolCloud->setSymbolSize(static_cast<double>(symbolSizeSpinBox->value()));
 		symbolCloud->setFontSize(fontSizeSpinBox->value());
 		symbolCloud->setVisible(true);
 		symbolCloud->setDisplay(m_window);
-		unsigned char rgb[3] = {static_cast<colorType>(m_symbolColor.red()),
-								static_cast<colorType>(m_symbolColor.green()),
-								static_cast<colorType>(m_symbolColor.blue()) };
+		ccColor::Rgb rgb(	static_cast<ColorCompType>(m_symbolColor.red()),
+							static_cast<ColorCompType>(m_symbolColor.green()),
+							static_cast<ColorCompType>(m_symbolColor.blue()) );
 		symbolCloud->setTempColor(rgb,true);
 		m_window->addToOwnDB(symbolCloud,false);
 		m_window->redraw();
@@ -1425,14 +1524,14 @@ void DistanceMapGenerationDlg::overlaySymbolsSizeChanged(int size)
 
 void DistanceMapGenerationDlg::overlaySymbolsColorChanged()
 {
-	ccDisplayOptionsDlg::SetButtonColor(symbolColorButton,m_symbolColor);
+	ccQtHelpers::SetButtonColor(symbolColorButton,m_symbolColor);
 
 	if (!m_window)
 		return;
 
-	unsigned char rgb[3] = {static_cast<colorType>(m_symbolColor.red()),
-							static_cast<colorType>(m_symbolColor.green()),
-							static_cast<colorType>(m_symbolColor.blue()) };
+	ccColor::Rgb rgb(	static_cast<ColorCompType>(m_symbolColor.red()),
+						static_cast<ColorCompType>(m_symbolColor.green()),
+						static_cast<ColorCompType>(m_symbolColor.blue()) );
 
 	ccHObject* db = m_window->getOwnDB();
 	for (unsigned i=0; i<db->getChildrenNumber(); ++i)
@@ -1450,14 +1549,14 @@ void DistanceMapGenerationDlg::overlaySymbolsColorChanged()
 
 void DistanceMapGenerationDlg::overlayGridColorChanged()
 {
-	ccDisplayOptionsDlg::SetButtonColor(gridColorButton,m_gridColor);
+	ccQtHelpers::SetButtonColor(gridColorButton,m_gridColor);
 
 	if (!m_window)
 		return;
 
-	unsigned char rgb[3] = {static_cast<colorType>(m_gridColor.red()),
-							static_cast<colorType>(m_gridColor.green()),
-							static_cast<colorType>(m_gridColor.blue()) };
+	ccColor::Rgb rgb(	static_cast<ColorCompType>(m_gridColor.red()),
+						static_cast<ColorCompType>(m_gridColor.green()),
+						static_cast<ColorCompType>(m_gridColor.blue()) );
 
 	ccHObject* db = m_window->getOwnDB();
 	for (unsigned i=0; i<db->getChildrenNumber(); ++i)
@@ -1500,6 +1599,19 @@ void DistanceMapGenerationDlg::labelFontSizeChanged(int)
 	m_window->redraw();
 }
 
+void DistanceMapGenerationDlg::labelPrecisionChanged(int prec)
+{
+	if (!m_window)
+		return;
+
+	//update numerical precision
+	ccGui::ParamStruct params = m_window->getDisplayParameters();
+	params.displayedNumPrecision = prec;
+	m_window->setDisplayParameters(params,true);
+
+	m_window->redraw();
+}
+
 void DistanceMapGenerationDlg::colorRampStepsChanged(int)
 {
 	colorScaleChanged(-1); //dummy index, not used
@@ -1534,9 +1646,9 @@ void DistanceMapGenerationDlg::toggleOverlayGrid(bool state)
 
 	if (state && m_map) //on
 	{
-		unsigned char rgb[3] = {static_cast<colorType>(m_gridColor.red()),
-								static_cast<colorType>(m_gridColor.green()),
-								static_cast<colorType>(m_gridColor.blue()) };
+		ccColor::Rgb rgb(	static_cast<ColorCompType>(m_gridColor.red()),
+							static_cast<ColorCompType>(m_gridColor.green()),
+							static_cast<ColorCompType>(m_gridColor.blue()) );
 
 		//we reconstruct the grid and the corresponding labels
 		double xMin_rad, xMax_rad, xStep_rad;
@@ -1867,7 +1979,8 @@ void DistanceMapGenerationDlg::saveToPersistentSettings()
 	if (m_colorScaleSelector)
 	{
 		ccColorScale::Shared colorScale = m_colorScaleSelector->getSelectedScale();
-		settings.setValue("colorScale",			colorScale->getUuid());
+		if (colorScale)
+			settings.setValue("colorScale",			colorScale->getUuid());
 	}
 	settings.setValue("colorScaleSteps",	colorScaleStepsSpinBox->value());
 	settings.setValue("symbolSize",			symbolSizeSpinBox->value());

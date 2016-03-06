@@ -42,7 +42,7 @@ public:
 	virtual bool importSupported() const { return true; }
 	virtual bool exportSupported() const { return true; }
 	virtual CC_FILE_ERROR loadFile(QString filename, ccHObject& container, LoadParameters& parameters);
-	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename);
+	virtual CC_FILE_ERROR saveToFile(ccHObject* entity, QString filename, SaveParameters& parameters);
 	virtual QStringList getFileFilters(bool onImport) const { return QStringList(GetFileFilter()); }
 	virtual QString getDefaultExtension() const { return GetDefaultExtension(); }
 	virtual bool canLoadExtension(QString upperCaseExt) const;
@@ -51,8 +51,8 @@ public:
 protected:
 
 	//! Custom save method
-	CC_FILE_ERROR saveToASCIIFile(ccGenericMesh* mesh, FILE *theFile);
-	CC_FILE_ERROR saveToBINFile(ccGenericMesh* mesh, FILE *theFile);
+	CC_FILE_ERROR saveToASCIIFile(ccGenericMesh* mesh, FILE *theFile, QWidget* parentWidget = 0);
+	CC_FILE_ERROR saveToBINFile(ccGenericMesh* mesh, FILE *theFile, QWidget* parentWidget = 0);
 
 	//! Custom load method for ASCII files
 	CC_FILE_ERROR loadASCIIFile(QFile& fp,

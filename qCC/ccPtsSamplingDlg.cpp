@@ -18,16 +18,20 @@
 #include "ccPtsSamplingDlg.h"
 
 ccPtsSamplingDlg::ccPtsSamplingDlg(QWidget* parent/*=0*/)
-	: QDialog(parent), Ui::PointsSamplingDialog()
+	: QDialog(parent, Qt::Tool)
+	, Ui::PointsSamplingDialog()
 {
 	setupUi(this);
-
-	setWindowFlags(Qt::Tool/*Qt::Dialog | Qt::WindowStaysOnTopHint*/);
 }
 
 bool ccPtsSamplingDlg::generateNormals() const
 {
 	return normalsCheckBox->isChecked();
+}
+
+void ccPtsSamplingDlg::setGenerateNormals(bool state)
+{
+	normalsCheckBox->setChecked(state);
 }
 
 bool ccPtsSamplingDlg::interpolateRGB() const
@@ -43,6 +47,11 @@ bool ccPtsSamplingDlg::interpolateTexture() const
 bool ccPtsSamplingDlg::useDensity() const
 {
 	return dRadioButton->isChecked();
+}
+
+void ccPtsSamplingDlg::setUseDensity(bool state)
+{
+	dRadioButton->setChecked(state);
 }
 
 double ccPtsSamplingDlg::getDensityValue() const

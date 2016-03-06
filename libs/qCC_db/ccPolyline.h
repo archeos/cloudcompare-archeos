@@ -23,7 +23,7 @@
 
 //Local
 #include "qCC_db.h"
-#include "ccHObject.h"
+#include "ccShiftedObject.h"
 
 //system
 #include <vector>
@@ -31,17 +31,16 @@
 class ccPointCloud;
 
 //! Colored polyline
-/** Extends the Polyline class of CCLib.
-Check CCLib documentation for more information about it.
+/** Extends the CCLib::Polyline class
 **/
-class QCC_DB_LIB_API ccPolyline : public CCLib::Polyline, public ccHObject
+class QCC_DB_LIB_API ccPolyline : public CCLib::Polyline, public ccShiftedObject
 {
 public:
 
 	//! Default constructor
-	/** \param associatedCloud the associated point cloud (e.g. the summits)
+	/** \param associatedCloud the associated point cloud (i.e. the vertices)
 	**/
-	ccPolyline(GenericIndexedCloudPersist* associatedCloud);
+	explicit ccPolyline(GenericIndexedCloudPersist* associatedCloud);
 
 	//! Copy constructor
 	/** \param poly polyline to clone
@@ -76,7 +75,7 @@ public:
 	//! Sets the polyline color
 	/** \param col RGB color
 	**/
-	void setColor(const colorType col[]);
+	inline void setColor(const ccColor::Rgb& col) { m_rgbColor = col; }
 
 	//! Sets the width of the line
 	/**  \param width the desired width
@@ -86,51 +85,26 @@ public:
 	//! Returns the width of the line
 	/** \return the width of the line in pixels
 	**/
-	PointCoordinateType getWidth() const { return m_width; }
+	inline PointCoordinateType getWidth() const { return m_width; }
 
 	//! Returns the polyline color
 	/** \return a pointer to the polyline RGB color
 	**/
-	const colorType* getColor() const;
+	inline const ccColor::Rgb& getColor() const { return m_rgbColor; }
 
 	//inherited methods (ccHObject)
-	virtual ccBBox getMyOwnBB();
+	virtual ccBBox getOwnBB(bool withGLFeatures = false);
+	inline virtual void drawBB(const ccColor::Rgb& col) { if (!is2DMode()) ccShiftedObject::drawBB(col); } //DGM: only for 3D polylines!
+
 
 	//! Splits the polyline into several parts based on a maximum edge length
 	/** \warning output polylines set (parts) may be empty if all the vertices are too far from each other!
-		\param maxEdgelLength maximum edge length
+		\param maxEdgeLength maximum edge length
 		\param[out] parts output polyline parts
 		\return success
 	**/
-	bool split(	PointCoordinateType maxEdgelLength,
+	bool split(	PointCoordinateType maxEdgeLength,
 				std::vector<ccPolyline*>& parts );
-
-	//! Extracts a unique closed (2D) contour polyline of a point cloud
-	/** Projects the cloud on its best fitting LS plane first.
-		\param points point cloud
-		\param maxEdgelLength max edge length (ignored if 0, in which case the contour is the convex hull)
-		\param preferredDim to specifiy a preferred (normal) direction for the polyline extraction
-		\return contour polyline (or 0 if an error occurred)
-	**/
-	static ccPolyline* ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* points,
-											PointCoordinateType maxEdgelLength = 0,
-											const PointCoordinateType* preferredDim = 0);
-
-	//! Extracts one or several parts of the (2D) contour polyline of a point cloud
-	/** Projects the cloud on its best fitting LS plane first.
-		\warning output polylines set (parts) may be empty if all the vertices are too far from each other!
-		\param points point cloud
-		\param maxEdgelLength max edge length (ignored if 0, in which case the contour is the convex hull)
-		\param[out] parts output polyline parts
-		\param allowSplitting whether the polyline can be split or not
-		\param preferredDim to specifiy a preferred (normal) direction for the polyline extraction
-		\return success
-	**/
-	static bool ExtractFlatContour(	CCLib::GenericIndexedCloudPersist* points,
-									PointCoordinateType maxEdgelLength,
-									std::vector<ccPolyline*>& parts,
-									bool allowSplitting = true,
-									const PointCoordinateType* preferredDim = 0);
 
 	//! Computes the polyline length
 	PointCoordinateType computeLength() const;
@@ -145,6 +119,42 @@ public:
 	//! Returns the width of vertex markers
 	int getVertexMarkerWidth() const { return m_vertMarkWidth; }
 
+	//! Initializes the polyline with a given set of vertices and the parameters of another polyline
+	/** \warning Even the 'closed' state is copied as is!
+		\param vertices set of vertices (can be null, in which case the polyline vertices will be cloned)
+		\param poly polyline
+		\return success
+	**/
+	bool initWith(ccPointCloud*& vertices, const ccPolyline& poly);
+
+	//! Copy the parameters from another polyline
+	void importParametersFrom(const ccPolyline& poly);
+
+	//! Shows an arrow in place of a given vertex
+	void showArrow(bool state, unsigned vertIndex, PointCoordinateType length);
+
+public: //meta-data keys
+	
+	//! Meta data key: vertical direction (for 2D polylines, contour plots, etc.)
+	/** Expected value: 0(=X), 1(=Y) or 2(=Z) as int
+	**/
+	static QString MetaKeyUpDir()			{ return "up.dir"; }
+	//! Meta data key: contour plot constant altitude (for contour plots, etc.)
+	/** Expected value: altitude as double
+	**/
+	static QString MetaKeyConstAltitude()	{ return "contour.altitude"; }
+	//! Meta data key: profile abscissa along generatrix
+	static QString MetaKeyAbscissa()		{ return "profile.abscissa"; }
+	//! Meta data key (prefix): intersection point between profile and its generatrix
+	/** Expected value: 3D vector
+		\warning: must be followed by '.x', '.y' or '.z'
+	**/
+	static QString MetaKeyPrefixCenter()	{ return "profile.center"; }
+	//! Meta data key (prefix): generatrix orientation at the point of intersection with the profile
+	/** Expected value: 3D vector
+		\warning: must be followed by '.x', '.y' or '.z'
+	**/
+	static QString MetaKeyPrefixDirection()	{ return "profile.direction"; }
 
 protected:
 
@@ -155,13 +165,8 @@ protected:
 	//inherited methods (ccHObject)
 	virtual void drawMeOnly(CC_DRAW_CONTEXT& context);
 
-	//! Initializes the polyline with a given set of vertices and the parameters of another polyline
-	/** \warning Even the 'closed' state is copied as is!
-	**/
-	void initWith(ccPointCloud* vertices, const ccPolyline& poly);
-
 	//! Unique RGB color
-	colorType m_rgbColor[3];
+	ccColor::Rgb m_rgbColor;
 
 	//! Width of the line
 	PointCoordinateType m_width;
@@ -177,6 +182,13 @@ protected:
 
 	//! Vertex marker width
 	int m_vertMarkWidth;
+
+	//! Whether to show an arrow or not
+	bool m_showArrow;
+	//! Arrow length
+	PointCoordinateType m_arrowLength;
+	//! Arrow index
+	unsigned m_arrowIndex;
 };
 
 #endif //CC_GL_POLYLINE_HEADER

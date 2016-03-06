@@ -37,20 +37,19 @@
 //Boost
 #include <boost/make_shared.hpp>
 
-int	removeOutliersStatistical(const PCLCloud::ConstPtr incloud, const int &k, const float &nStds, PCLCloud::Ptr outcloud)
+void removeOutliersStatistical(const PCLCloud::ConstPtr incloud, int knn, double nSigma, PCLCloud::Ptr outcloud)
 {
 	pcl::StatisticalOutlierRemoval<PCLCloud> remover;
 	remover.setInputCloud(incloud);
-	remover.setMeanK(k);
-	remover.setStddevMulThresh(nStds);
+	remover.setMeanK(knn);
+	remover.setStddevMulThresh(nSigma);
 	remover.filter(*outcloud);
-	return 1;
 }
 
 StatisticalOutliersRemover::StatisticalOutliersRemover()
-	: BaseFilter(FilterDescription("Statistical Outliers Remover",
-									"Remove Outliers Using statistical Approach",
-									"Remove Outliers out of a given distance from the point, expressed as sigma of mean distances",
+	: BaseFilter(FilterDescription("Statistical Outlier Removal",
+									"Filter outlier data based on point neighborhood statistics",
+									"Filter the points that are farther of their neighbors than the average (plus a number of times the standard deviation)",
 									":/toolbar/PclUtils/icons/sor_outlier_remover.png"))
 	, m_dialog(0)
 	, m_k(0)
@@ -78,9 +77,7 @@ int StatisticalOutliersRemover::compute()
 		return -1;
 
 	PCLCloud::Ptr outcloud ( new PCLCloud);
-	int result = removeOutliersStatistical(tmp_cloud, m_k, m_std, outcloud);
-	if (result < 0)
-		return -1;
+	removeOutliersStatistical(tmp_cloud, m_k, m_std, outcloud);
 
 	//get back outcloud as a ccPointCloud
 	ccPointCloud* final_cloud = sm2ccConverter(outcloud).getCloud();
@@ -90,6 +87,9 @@ int StatisticalOutliersRemover::compute()
 	//create a suitable name for the entity
 	final_cloud->setName(QString("%1_k%2_std%3").arg(cloud->getName()).arg(m_k).arg(m_std));
 	final_cloud->setDisplay(cloud->getDisplay());
+	//copy global shift & scale
+	final_cloud->setGlobalScale(cloud->getGlobalScale());
+	final_cloud->setGlobalShift(cloud->getGlobalShift());
 
 	//disable original cloud
 	cloud->setEnabled(false);

@@ -149,7 +149,7 @@ int X3DXIOTNodeHandler::startCoordinate(const X3DAttributes &attr)
 	if (m_currentLeaf->isKindOf(CC_TYPES::MESH))
 	{
 		ccMesh* mesh = ccHObjectCaster::ToMesh(m_currentLeaf);
-		if (mesh && mesh->getAssociatedCloud()==0)
+		if (mesh && mesh->getAssociatedCloud() == 0) //FIXME DGM: weird
 		{
 			cloud->setVisible(false);
 		}
@@ -252,9 +252,9 @@ int X3DXIOTNodeHandler::startIndexedFaceSet(const X3DAttributes &attr)
 				if (it+1 == streamIndexes.end() || *(it+1)==-1)
 				{
 					//we must reserve some more space for storage!
-					if (mesh->size() == mesh->maxSize())
+					if (mesh->size() == mesh->capacity())
 					{
-						if (!mesh->reserve(mesh->maxSize() + 100))
+						if (!mesh->reserve(mesh->capacity() + 100))
 						{
 							delete mesh;
 							return ABORT; //not enough memory!
@@ -269,15 +269,15 @@ int X3DXIOTNodeHandler::startIndexedFaceSet(const X3DAttributes &attr)
 			}
 		}
 
-		if (mesh->size() < mesh->maxSize())
+		//unhandled type of mesh
+		if (mesh->size() == 0)
 		{
-			//unhandled type of mesh
-			if (mesh->size()==0)
-			{
-				delete mesh;
-				return SKIP_CHILDREN;
-			}
-			mesh->resize(mesh->size());
+			delete mesh;
+			return SKIP_CHILDREN;
+		}
+		else
+		{
+			mesh->shrinkToFit();
 		}
 	}
 

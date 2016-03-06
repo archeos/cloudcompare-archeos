@@ -40,14 +40,14 @@ class Mouse3DInput : public QObject
 public:
 
 	//! Default constructor
-	Mouse3DInput(QWidget* widget);
+	explicit Mouse3DInput(QWidget* widget);
 	//! Destructor
 	virtual ~Mouse3DInput();
 
 	//! Attempts to connect with the 3DxWare driver
 	bool connect(QWidget* mainWidget, QString appName);
 	//! Disconnects from the 3DxWare driver
-	void disconnect();
+	void disconnectDriver();
 
 	//! Default key codes
 	enum VirtualKey

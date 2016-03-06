@@ -1,5 +1,17 @@
 <RCC>
   <qresource prefix="/CC">
+    <file>images/oculus.png</file>
+    <file>images/nvidia.png</file>
+    <file>images/ccSwapUpDown.png</file>
+    <file>images/unfoldSmall.png</file>
+    <file>images/ccStereo.png</file>
+    <file>images/ccSORFilter.png</file>
+    <file>images/smallCSVFile.png</file>
+    <file>images/smallSphere.png</file>
+    <file>images/ccLevel.png</file>
+    <file>images/ccGrid.png</file>
+    <file>images/sectionExtraction.png</file>
+    <file>images/orthoSections.png</file>
     <file>images/ccExit.png</file>
     <file>images/ccFullScreen.png</file>
     <file>images/ccSunLight.png</file>
@@ -115,6 +127,7 @@
     <file>images/typeXCoordinate.png</file>
     <file>images/typeYCoordinate.png</file>
     <file>images/typeZCoordinate.png</file>
+    <file>images/ccTracePolyline.png</file>
   </qresource>
   <qresource prefix="/CC/Icons">
     <file>images/icon/cc_viewer_icon_16.png</file>

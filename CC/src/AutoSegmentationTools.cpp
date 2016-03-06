@@ -32,7 +32,11 @@
 
 using namespace CCLib;
 
-int AutoSegmentationTools::labelConnectedComponents(GenericIndexedCloudPersist* theCloud, uchar level, bool sixConnexity, GenericProgressCallback* progressCb, DgmOctree* inputOctree)
+int AutoSegmentationTools::labelConnectedComponents(GenericIndexedCloudPersist* theCloud,
+													unsigned char level,
+													bool sixConnexity/*=false*/,
+													GenericProgressCallback* progressCb/*=0*/,
+													DgmOctree* inputOctree/*=0*/)
 {
 	if (!theCloud)
 		return -1;
@@ -42,7 +46,7 @@ int AutoSegmentationTools::labelConnectedComponents(GenericIndexedCloudPersist* 
 	if (!theOctree)
 	{
 		theOctree = new DgmOctree(theCloud);
-		if (theOctree->build(progressCb)<1)
+		if (theOctree->build(progressCb) < 1)
 		{
 			delete theOctree;
 			return -1;
@@ -92,7 +96,7 @@ bool AutoSegmentationTools::extractConnectedComponents(GenericIndexedCloudPersis
 				while (static_cast<size_t>(ccLabel) >= cc.size())
 					cc.push_back(new ReferenceCloud(theCloud));
 			}
-			catch(std::bad_alloc)
+			catch (const std::bad_alloc&)
 			{
 				//not enough memory
 				cc.clear();
@@ -116,9 +120,10 @@ bool AutoSegmentationTools::extractConnectedComponents(GenericIndexedCloudPersis
 	return true;
 }
 
-bool AutoSegmentationTools::frontPropagationBasedSegmentation(GenericIndexedCloudPersist* theCloud,
+bool AutoSegmentationTools::frontPropagationBasedSegmentation(	GenericIndexedCloudPersist* theCloud,
+																PointCoordinateType radius,
                                                                 ScalarType minSeedDist,
-                                                                uchar octreeLevel,
+                                                                unsigned char octreeLevel,
                                                                 ReferenceCloudContainer& theSegmentedLists,
                                                                 GenericProgressCallback* progressCb,
                                                                 DgmOctree* inputOctree,
@@ -134,7 +139,7 @@ bool AutoSegmentationTools::frontPropagationBasedSegmentation(GenericIndexedClou
 	if (!theOctree)
 	{
 		theOctree = new DgmOctree(theCloud);
-		if (theOctree->build(progressCb)<1)
+		if (theOctree->build(progressCb) < 1)
 		{
 			delete theOctree;
 			return false;
@@ -142,7 +147,7 @@ bool AutoSegmentationTools::frontPropagationBasedSegmentation(GenericIndexedClou
 	}
 
 	//on calcule le gradient (va ecraser le champ des distances)
-	if (ScalarFieldTools::computeScalarFieldGradient(theCloud,true,true,progressCb,theOctree) < 0)
+	if (ScalarFieldTools::computeScalarFieldGradient(theCloud,radius,true,true,progressCb,theOctree) < 0)
 	{
 		if (!inputOctree)
 			delete theOctree;
@@ -152,9 +157,7 @@ bool AutoSegmentationTools::frontPropagationBasedSegmentation(GenericIndexedClou
 	//et on lisse le resultat
 	if (applyGaussianFilter)
 	{
-		uchar level = theOctree->findBestLevelForAGivenPopulationPerCell(NUMBER_OF_POINTS_FOR_GRADIENT_COMPUTATION);
-		PointCoordinateType cellSize = theOctree->getCellSize(level);
-        ScalarFieldTools::applyScalarFieldGaussianFilter(static_cast<float>(cellSize/3),theCloud,-1,progressCb,theOctree);
+        ScalarFieldTools::applyScalarFieldGaussianFilter(radius/3,theCloud,-1,progressCb,theOctree);
 	}
 
 	unsigned seedPoints = 0;
@@ -241,14 +244,17 @@ bool AutoSegmentationTools::frontPropagationBasedSegmentation(GenericIndexedClou
 			}
 		}
 
-		int pos[3];
-		theOctree->getTheCellPosWhichIncludesThePoint(&startPoint,pos,octreeLevel);
-		//clipping (important!)
-		pos[0] = std::min(octreeLength,pos[0]);
-		pos[1] = std::min(octreeLength,pos[1]);
-		pos[2] = std::min(octreeLength,pos[2]);
-		fm->setSeedCell(pos);
-		++seedPoints;
+		//set seed point
+		{
+			Tuple3i cellPos;
+			theOctree->getTheCellPosWhichIncludesThePoint(&startPoint,cellPos,octreeLevel);
+			//clipping (important!)
+			cellPos.x = std::min(octreeLength,cellPos.x);
+			cellPos.y = std::min(octreeLength,cellPos.y);
+			cellPos.z = std::min(octreeLength,cellPos.z);
+			fm->setSeedCell(cellPos);
+			++seedPoints;
+		}
 
 		int result = fm->propagate();
 

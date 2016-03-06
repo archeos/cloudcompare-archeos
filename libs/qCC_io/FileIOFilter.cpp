@@ -45,8 +45,11 @@
 #include "DepthMapFileFilter.h"
 #include "RasterGridFilter.h"
 #include "ImageFileFilter.h"
-//#include "PovFilter.h"
 #include "DxfFilter.h"
+#include "ShpFilter.h"
+#include "MascaretFilter.h"
+#include "SinusxFilter.h"
+#include "SalomeHydroFilter.h"
 
 //Qt
 #include <QFileInfo>
@@ -89,6 +92,9 @@ void FileIOFilter::InitInternalFilters()
 #ifdef CC_DXF_SUPPORT
 	Register(Shared(new DxfFilter()));
 #endif
+#ifdef CC_SHP_SUPPORT
+	Register(Shared(new ShpFilter()));
+#endif
 #ifdef CC_X3D_SUPPORT
 	Register(Shared(new X3DFilter()));
 #endif
@@ -108,6 +114,9 @@ void FileIOFilter::InitInternalFilters()
 	Register(Shared(new PovFilter()));
 	Register(Shared(new IcmFilter()));
 	Register(Shared(new DepthMapFileFilter()));
+	Register(Shared(new MascaretFilter()));
+	Register(Shared(new SinusxFilter()));
+	Register(Shared(new SalomeHydroFilter()));
 }
 
 void FileIOFilter::Register(Shared filter)
@@ -151,6 +160,15 @@ void FileIOFilter::Register(Shared filter)
 
 	//insert filter
 	s_ioFilters.push_back(filter);
+}
+
+void FileIOFilter::UnregisterAll()
+{
+	for (FilterContainer::iterator it=s_ioFilters.begin(); it!=s_ioFilters.end(); ++it)
+	{
+		(*it)->unregister();
+	}
+	s_ioFilters.clear();
 }
 
 FileIOFilter::Shared FileIOFilter::GetFilter(QString fileFilter, bool onImport)
@@ -221,19 +239,23 @@ ccHObject* FileIOFilter::LoadFromFile(	const QString& filename,
 		result = CC_FERR_CONSOLE_ERROR;
 	}
 
-	if (result != CC_FERR_NO_ERROR)
-		DisplayErrorMessage(result,"loading",fi.baseName());
-	else
+	if (result == CC_FERR_NO_ERROR)
+	{
 		ccLog::Print(QString("[I/O] File '%1' loaded successfully").arg(filename));
+	}
+	else
+	{
+		DisplayErrorMessage(result,"loading",fi.baseName());
+	}
 
-	unsigned childrenCount = container->getChildrenNumber();
-	if (childrenCount != 0)
+	unsigned childCount = container->getChildrenNumber();
+	if (childCount != 0)
 	{
 		//all transformation that could have happened before this point are of no interest for the user ;)
 		container->resetGLTransformationHistory_recursive();
 		//we set the main container name as the full filename (with path)
 		container->setName(QString("%1 (%2)").arg(fi.fileName()).arg(fi.absolutePath()));
-		for (unsigned i=0; i<childrenCount; ++i)
+		for (unsigned i=0; i<childCount; ++i)
 		{
 			ccHObject* child = container->getChild(i);
 			QString newName = child->getName();
@@ -296,6 +318,7 @@ ccHObject* FileIOFilter::LoadFromFile(	const QString& filename,
 
 CC_FILE_ERROR FileIOFilter::SaveToFile(	ccHObject* entities,
 										const QString& filename,
+										SaveParameters& parameters,
 										Shared filter)
 {
 	if (!entities || filename.isEmpty() || !filter)
@@ -309,7 +332,7 @@ CC_FILE_ERROR FileIOFilter::SaveToFile(	ccHObject* entities,
 	CC_FILE_ERROR result = CC_FERR_NO_ERROR;
 	try
 	{
-		result = filter->saveToFile(entities, completeFileName);
+		result = filter->saveToFile(entities, completeFileName, parameters);
 	}
 	catch(...)
 	{
@@ -323,9 +346,7 @@ CC_FILE_ERROR FileIOFilter::SaveToFile(	ccHObject* entities,
 	}
 	else
 	{
-	{
 		DisplayErrorMessage(result,"saving",filename);
-	}
 	}
 
 	return result;
@@ -333,6 +354,7 @@ CC_FILE_ERROR FileIOFilter::SaveToFile(	ccHObject* entities,
 
 CC_FILE_ERROR FileIOFilter::SaveToFile(	ccHObject* entities,
 										const QString& filename,
+										SaveParameters& parameters,
 										QString fileFilter)
 {
 	if (fileFilter.isEmpty())
@@ -345,7 +367,7 @@ CC_FILE_ERROR FileIOFilter::SaveToFile(	ccHObject* entities,
 		return CC_FERR_UNKNOWN_FILE;
 	}
 
-	return SaveToFile(entities, filename, filter);
+	return SaveToFile(entities, filename, parameters, filter);
 }
 
 void FileIOFilter::DisplayErrorMessage(CC_FILE_ERROR err, const QString& action, const QString& filename)
@@ -420,14 +442,23 @@ void FileIOFilter::DisplayErrorMessage(CC_FILE_ERROR err, const QString& action,
 		ccLog::Error(outputString);
 }
 
-bool FileIOFilter::HandleGlobalShift(const CCVector3d& P, CCVector3d& Pshift, LoadParameters& loadParameters)
+bool FileIOFilter::HandleGlobalShift(const CCVector3d& P, CCVector3d& Pshift, LoadParameters& loadParameters, bool useInputCoordinatesShiftIfPossible/*=false*/)
 {
 	bool shiftAlreadyEnabled = (loadParameters.coordinatesShiftEnabled && *loadParameters.coordinatesShiftEnabled && loadParameters.coordinatesShift);
 	if (shiftAlreadyEnabled)
+	{
 		Pshift = *loadParameters.coordinatesShift;
+	}
+	
 	bool applyAll = false;
 	if (	sizeof(PointCoordinateType) < 8
-		&&	ccGlobalShiftManager::Handle(P,0,loadParameters.shiftHandlingMode,shiftAlreadyEnabled,Pshift,0,&applyAll) )
+		&&	ccGlobalShiftManager::Handle(	P,
+											0,
+											loadParameters.shiftHandlingMode,
+											shiftAlreadyEnabled || useInputCoordinatesShiftIfPossible,
+											Pshift,
+											0,
+											&applyAll) )
 	{
 		//we save coordinates shift information
 		if (applyAll && loadParameters.coordinatesShiftEnabled && loadParameters.coordinatesShift)

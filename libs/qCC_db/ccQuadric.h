@@ -33,6 +33,8 @@ class QCC_DB_LIB_API ccQuadric : public ccGenericPrimitive
 public:
 
 	//! Default drawing precision
+	/** \warning Never pass a 'constant initializer' by reference
+	**/
 	static const unsigned DEFAULT_DRAWING_PRECISION = 24;
 
 	//! Default constructor
@@ -40,7 +42,7 @@ public:
 		\param minCorner min corner of the 'representation' base area
 		\param maxCorner max corner of the 'representation' base area
 		\param eq equation coefficients ( Z = a + b.X + c.Y + d.X^2 + e.X.Y + f.Y^2)
-		\param hfDims optional dimension indexes
+		\param dims optional dimension indexes
 		\param transMat optional 3D transformation (can be set afterwards with ccDrawableObject::setGLTransformation)
 		\param name name
 		\param precision drawing precision
@@ -48,9 +50,9 @@ public:
 	ccQuadric(	CCVector2 minCorner,
 				CCVector2 maxCorner,
 				const PointCoordinateType eq[6],
-				const unsigned char* hfDims = 0,
+				const Tuple3ub* dims = 0,
 				const ccGLMatrix* transMat = 0,
-				QString name = QString("Plane"),
+				QString name = QString("Quadric"),
 				unsigned precision = DEFAULT_DRAWING_PRECISION);
 
 	//! Simplified constructor
@@ -75,7 +77,17 @@ public:
 	const CCVector2& getMaxCorner() const { return m_maxCorner; }
 
 	//! Returns the equation coefficients
-	const PointCoordinateType* getEquationCoefs() const { return m_eq; }
+	inline const PointCoordinateType* getEquationCoefs() const { return m_eq; }
+
+	//! Returns the equation 'coordinate system' (X,Y,Z dimensions indexes)
+	inline const Tuple3ub& getEquationDims() const { return m_dims; }
+
+	//! Projects a 3D point in the quadric coordinate system
+	/** \param P input 3D point
+		\param[out] Q position of the input point in the quadric coordinate sytem
+		\return elevation of the input point (in the coordinate system quadric)
+	**/
+	PointCoordinateType projectOnQuadric(const CCVector3& P, CCVector3& Q) const;
 
 	//! Returns the equation coefficients as a string
 	QString getEquationString() const;
@@ -104,7 +116,7 @@ protected:
 	PointCoordinateType m_eq[6];
 
 	//! Dimension indexes
-	unsigned char m_hfDims[3];
+	Tuple3ub m_dims;
 
 	//! Min height
 	PointCoordinateType m_minZ;

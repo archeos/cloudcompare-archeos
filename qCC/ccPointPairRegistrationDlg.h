@@ -45,7 +45,7 @@ class ccPointPairRegistrationDlg : public ccOverlayDialog, Ui::pointPairRegistra
 public:
 
 	//! Default constructor
-	ccPointPairRegistrationDlg(QWidget* parent = 0);
+	explicit ccPointPairRegistrationDlg(QWidget* parent = 0);
 
 	//inherited from ccOverlayDialog
 	virtual bool linkWith(ccGLWindow* win);
@@ -54,8 +54,8 @@ public:
 
 	//! Inits dialog
 	bool init(	ccGLWindow* win,
-				ccGenericPointCloud* aligned,
-				ccGenericPointCloud* reference = 0);
+				ccHObject* aligned,
+				ccHObject* reference = 0);
 
 	//! Clears dialog
 	void clear();
@@ -64,9 +64,9 @@ public:
 	void pause(bool state);
 
 	//! Adds a point to the 'align' set
-	bool addAlignedPoint(CCVector3d& P, ccGenericPointCloud* cloud = 0, bool shifted = true);
+	bool addAlignedPoint(CCVector3d& P, ccHObject* entity = 0, bool shifted = true);
 	//! Adds a point to the 'reference' set
-	bool addReferencePoint(CCVector3d& P, ccGenericPointCloud* cloud = 0, bool shifted = true);
+	bool addReferencePoint(CCVector3d& P, ccHObject* entity = 0, bool shifted = true);
 
 	//! Removes a point from the 'align' set
 	void removeAlignedPoint(int index, bool autoRemoveDualPoint = true);
@@ -93,7 +93,11 @@ protected slots:
 	//! Slot called when a "delete" button is pushed
 	void onDelButtonPushed();
 
-	void processPickedPoint(int, unsigned, int, int);
+	void processPickedItem(ccHObject*, unsigned, int, int);
+
+	//! Updates the registration info and buttons states
+	void updateAlignInfo();
+
 	void apply();
 	void align();
 	void reset();
@@ -105,7 +109,7 @@ protected:
 	void onPointCountChanged();
 
 	//! Calls Horn registration (CCLib::HornRegistrationTools)
-	bool callHornRegistration(CCLib::PointProjectionTools::Transformation& trans, double& rms);
+	bool callHornRegistration(CCLib::PointProjectionTools::Transformation& trans, double& rms, bool autoUpdateTab);
 
 	//! Clears the RMS rows
 	void clearRMSColumns();
@@ -113,16 +117,27 @@ protected:
 	//! Adds a point to one of the table (ref./aligned)
 	void addPointToTable(QTableWidget* tableWidget, int rowIndex, const CCVector3d& P, QString pointLabel);
 
+	//! Converts a picked point to a sphere center (if necessary)
+	/** \param P input point (may be converted to a sphere center)
+		\param associated entity
+		\param sphereRadius the detected spherer radius (or -1 if no sphere)
+		\return whether the point can be used or not
+	**/
+	bool convertToSphereCenter(CCVector3d& P, ccHObject* entity, PointCoordinateType& sphereRadius);
+
+	//! Resets the displayed title (3D view)
+	void resetTitle();
+
 	//! Original cloud context
-	struct cloudContext
+	struct EntityContext
 	{
 		//! Default constructor
-		cloudContext(ccGenericPointCloud* entity);
+		explicit EntityContext(ccHObject* ent);
 
 		//! Restores cloud original state
 		void restore();
 
-		ccGenericPointCloud* cloud;
+		ccHObject* entity;
 		ccGenericGLDisplay* originalDisplay;
 		bool wasVisible;
 		bool wasEnabled;
@@ -130,13 +145,13 @@ protected:
 	};
 
 	//! Aligned entity
-	cloudContext m_aligned;
+	EntityContext m_aligned;
 
 	//! Aligned points set
 	ccPointCloud m_alignedPoints;
 	
 	//! Reference entity (if any)
-	cloudContext m_reference;
+	EntityContext m_reference;
 
 	//! Reference points set
 	ccPointCloud m_refPoints;
