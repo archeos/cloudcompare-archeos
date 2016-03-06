@@ -1,7 +1,7 @@
 Source: cloudcompare
 Section: graphics
 Priority: extra
-Maintainer: Romain Janvier <romain.janvier@hotmail.fr>
+Maintainer: Romain Janvier <romain.janvier@univ-orleans.fr>
 Build-Depends: debhelper (>= 9.0.0), cmake, libqt4-dev (>= 4.7), libqt4-opengl-dev (>= 4.7), 
  libglew-dev, libfreenect-dev, libdxflib-dev, liblas-dev (>= 1.7.0), liblas-c-dev (>= 1.7.0), 
  libboost-thread-dev, libboost-program-options-dev
