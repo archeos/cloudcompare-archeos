@@ -9,8 +9,7 @@ for d in trusty willy xenial
 do
     git branch $d
     git checkout $d
-    sed -i -e 's/archeos/'${d}'/g' -e 's/'distrib'/'${d}'/g' debian/changelog
-    
+    sed -i -e 's/archeos/'${d}'/g' -e 's/'${distribi}'/'${d}'/g' debian/changelog
     git commit -am "Release"
     git-buildpackage -S --git-debian-branch=$d
     dput ppa:romain-janvier/cloudcompare  "../release/cloudcompare_"${upstream}"-"${debian}${d}$derivative"_source.changes"
