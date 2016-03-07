@@ -13,7 +13,7 @@ do
     
     git commit -am "Release"
     git-buildpackage -S --git-debian-branch=$d
-    dput cloudcompare-$d "../release/cloudcompare_"${upstream}"-"${debian}${d}$derivative"_source.changes"
+    dput ppa:romain-janvier/cloudcompare  "../release/cloudcompare_"${upstream}"-"${debian}${d}$derivative"_source.changes"
     git checkout master
     git branch -D $d;
 done
