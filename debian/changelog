@@ -1,4 +1,4 @@
-cloudcompare (2.6.3-0archeos1) UNRELEASED; urgency=medium
+cloudcompare (2.6.3-0trusty1) trusty; urgency=medium
 
   * Imported Upstream version 2.6.3
   * Usual refresh of debian files
