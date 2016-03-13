@@ -30,10 +30,7 @@ override_dh_auto_configure:
 		-DOPTION_USE_SHAPE_LIB=ON \
 		-DINSTALL_QPCV_PLUGIN=ON \
 		-DLIBLAS_INCLUDE_DIR="/usr/include" \
-		-DLIBLAS_RELEASE_LIBRARY_FILE="/usr/lib/liblas.so" \
-		-DWITH_FFMPEG_SUPPORT=1 \
-		-DFFMPEG_INCLUDE_DIR="/usr/include" \
-		-DFFMPEG_LIBRARY_DIR="/usr/lib"
+		-DLIBLAS_RELEASE_LIBRARY_FILE="/usr/lib/liblas.so"
 
 override_dh_shlibdeps:
 	dh_shlibdeps -l/usr/lib/cloudcompare
