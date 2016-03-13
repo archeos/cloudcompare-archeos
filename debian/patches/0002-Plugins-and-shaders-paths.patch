@@ -42,7 +42,7 @@ Subject: Plugins and shaders paths
  	ccLog::Print(QString("Plugins lookup dir.: %1").arg(pluginsPath));
 --- a/libs/qCC_glWindow/ccGLWindow.cpp
 +++ b/libs/qCC_glWindow/ccGLWindow.cpp
-@@ -5969,7 +5969,7 @@ QString ccGLWindow::getShadersPath()
+@@ -5984,7 +5984,7 @@ QString ccGLWindow::getShadersPath()
  	path.remove( "MacOS" );
  	return path + "Shaders";
  #else
