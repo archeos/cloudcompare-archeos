@@ -961,7 +961,7 @@ void MainWindow::connectActions()
 
 	//"Tools > Sand box (research)" menu
 	connect(actionComputeKdTree,				SIGNAL(triggered()),	this,		SLOT(doActionComputeKdTree()));
-	connect(actionDistanceMapToMesh,			SIGNAL(triggered()),	this,		SLOT(doActionComputeDistanceMap()));
+	connect(actionDistanceMap,					SIGNAL(triggered()),	this,		SLOT(doActionComputeDistanceMap()));
 	connect(actionDistanceToBestFitQuadric3D,	SIGNAL(triggered()),	this,		SLOT(doActionComputeDistToBestFitQuadric3D()));
 	connect(actionComputeBestFitBB,				SIGNAL(triggered()),	this,		SLOT(doComputeBestFitBB()));
 	connect(actionAlign,						SIGNAL(triggered()),	this,		SLOT(doAction4pcsRegister())); //Aurelien BEY le 13/11/2008
@@ -6253,83 +6253,104 @@ void MainWindow::doActionComputeDistanceMap()
 	if (!ok)
 		return;
 
+	ok = true;
+	double margin = QInputDialog::getDouble(this, "Distance map", "Margin", 0.0, 0.0, 1000000.0, 3, &ok);
+	if (!ok)
+		return;
+
 	size_t selNum = selectedEntities.size();
 	for (size_t i = 0; i < selNum; ++i)
 	{
 		ccHObject* ent = selectedEntities[i];
+		if (!ent->isKindOf(CC_TYPES::MESH) && !ent->isKindOf(CC_TYPES::POINT_CLOUD))
+		{
+			//non handled entity type
+			continue;
+		}
+
+		//CCLib::ChamferDistanceTransform cdt;
+		CCLib::SaitoSquaredDistanceTransform cdt;
+		if (!cdt.initGrid(Tuple3ui(steps, steps, steps)))
+		{
+			//not enough memory
+			ccLog::Error("Not enough memory!");
+			return;
+		}
+
+
+		ccBBox box = ent->getOwnBB();
+		PointCoordinateType largestDim = box.getMaxBoxDim() + static_cast<PointCoordinateType>(margin);
+		PointCoordinateType cellDim = largestDim / steps;
+		CCVector3 minCorner = box.getCenter() - CCVector3(1, 1, 1) * (largestDim / 2);
+
+		ccProgressDialog pDlg(true, this);
+
+		bool result = false;
 		if (ent->isKindOf(CC_TYPES::MESH))
 		{
-			//CCLib::ChamferDistanceTransform cdt;
+			ccMesh* mesh = static_cast<ccMesh*>(ent);
+			result = cdt.initDT(mesh, cellDim, minCorner, &pDlg);
+		}
+		else
+		{
+			ccGenericPointCloud* cloud = static_cast<ccGenericPointCloud*>(ent);
+			result = cdt.initDT(cloud, cellDim, minCorner, &pDlg);
+		}
 
-			CCLib::SaitoSquaredDistanceTransform cdt;
-			if (!cdt.initGrid(Tuple3ui(steps, steps, steps)))
+		if (!result)
+		{
+			ccLog::Error("Not enough memory!");
+			return;
+		}
+
+		//cdt.propagateDistance(CHAMFER_345, &pDlg);
+		cdt.propagateDistance(&pDlg);
+
+		//convert the grid to a cloud
+		ccPointCloud* gridCloud = new ccPointCloud(ent->getName() + QString(".distance_grid(%1)").arg(steps));
+		{
+			unsigned pointCount = steps*steps*steps;
+			if (!gridCloud->reserve(pointCount))
 			{
-				//not enough memory
 				ccLog::Error("Not enough memory!");
+				delete gridCloud;
 				return;
 			}
 
-			ccMesh* mesh = static_cast<ccMesh*>(ent);
-			ccBBox box = mesh->getOwnBB();
-			PointCoordinateType largestDim = box.getMaxBoxDim();
-			PointCoordinateType cellDim = largestDim / steps;
-			CCVector3 minCorner = box.getCenter() - CCVector3(1, 1, 1) * (largestDim / 2);
-
-			ccProgressDialog pDlg(true, this);
-			if (cdt.initDT(mesh, cellDim, minCorner, &pDlg))
+			ccScalarField* sf = new ccScalarField("DT values");
+			if (!sf->reserve(pointCount))
 			{
-				//cdt.propagateDistance(CHAMFER_345, &pDlg);
-				cdt.propagateDistance(&pDlg);
+				ccLog::Error("Not enough memory!");
+				delete gridCloud;
+				sf->release();
+				return;
+			}
 
-				//convert the grid to a cloud
-				ccPointCloud* gridCloud = new ccPointCloud(mesh->getName() + QString(".distance_grid(%1)").arg(steps));
+			for (unsigned i = 0; i < steps; ++i)
+			{
+				for (unsigned j = 0; j < steps; ++j)
 				{
-					unsigned pointCount = steps*steps*steps;
-					if (!gridCloud->reserve(pointCount))
+					for (unsigned k = 0; k < steps; ++k)
 					{
-						ccLog::Error("Not enough memory!");
-						delete gridCloud;
-						return;
+						gridCloud->addPoint(minCorner + CCVector3(i + 0.5, j + 0.5, k + 0.5) * cellDim);
+						ScalarType s = static_cast<ScalarType>(cdt.getValue(i, j, k));
+						//sf->addElement(s < maxDist ? s : NAN_VALUE);
+						sf->addElement(sqrt(s));
 					}
-
-					ccScalarField* sf = new ccScalarField("DT values");
-					if (!sf->reserve(pointCount))
-					{
-						ccLog::Error("Not enough memory!");
-						delete gridCloud;
-						sf->release();
-						return;
-					}
-
-					for (unsigned i = 0; i < steps; ++i)
-					{
-						for (unsigned j = 0; j < steps; ++j)
-						{
-							for (unsigned k = 0; k < steps; ++k)
-							{
-								gridCloud->addPoint(minCorner + CCVector3(i + 0.5, j + 0.5, k + 0.5) * cellDim);
-								ScalarType s = static_cast<ScalarType>(cdt.getValue(i, j, k));
-								//sf->addElement(s < maxDist ? s : NAN_VALUE);
-								sf->addElement(sqrt(s));
-							}
-						}
-					}
-
-					sf->computeMinAndMax();
-					int sfIdx = gridCloud->addScalarField(sf);
-					gridCloud->setCurrentDisplayedScalarField(sfIdx);
-					gridCloud->showSF(true);
-					gridCloud->setDisplay(mesh->getDisplay());
-					addToDB(gridCloud);
 				}
 			}
-			else
-			{
-				ccLog::Error("Not enough memory!");
-				return;
-			}
+
+			sf->computeMinAndMax();
+			int sfIdx = gridCloud->addScalarField(sf);
+			gridCloud->setCurrentDisplayedScalarField(sfIdx);
+			gridCloud->showSF(true);
+			gridCloud->setDisplay(ent->getDisplay());
+			ent->prepareDisplayForRefresh();
+			addToDB(gridCloud);
 		}
 	}
+
+	refreshAll();
 }
 
 void MainWindow::doActionComputeDistToBestFitQuadric3D()
@@ -8915,7 +8936,7 @@ void MainWindow::enablePickingOperation(ccGLWindow* win, QString message)
 	if (m_pprDlg)
 		m_pprDlg->pause(true);
 
-	connect(win, SIGNAL(itemPicked(ccHObject*, unsigned, int, int)), this, SLOT(processPickedPoint(ccHObject*, unsigned, int, int)));
+	connect(win, SIGNAL(itemPicked(ccHObject*, unsigned, int, int, const CCVector3&)), this, SLOT(processPickedPoint(ccHObject*, unsigned, int, int, const CCVector3&)));
 	s_pickingWindow = win;
 	s_previousPickingMode = win->getPickingMode();
 	win->setPickingMode(ccGLWindow::POINT_OR_TRIANGLE_PICKING); //points or triangles
@@ -8961,51 +8982,22 @@ void MainWindow::cancelPreviousPickingOperation(bool aborted)
 
 	freezeUI(false);
 
-	disconnect(s_pickingWindow, SIGNAL(itemPicked(ccHObject*, unsigned, int, int)), this, SLOT(processPickedPoint(ccHObject*, unsigned, int, int)));
+	disconnect(s_pickingWindow, SIGNAL(itemPicked(ccHObject*, unsigned, int, int, const CCVector3&)), this, SLOT(processPickedPoint(ccHObject*, unsigned, int, int, const CCVector3&)));
 	//restore previous picking mode
 	s_pickingWindow->setPickingMode(s_previousPickingMode);
 	s_pickingWindow = 0;
 	s_previousPickingOperation = NO_PICKING_OPERATION;
 }
 
-void MainWindow::processPickedPoint(ccHObject* entity, unsigned itemIndex, int x, int y)
+void MainWindow::processPickedPoint(ccHObject* entity, unsigned itemIndex, int x, int y, const CCVector3& P)
 {
 	if (!s_pickingWindow)
 		return;
 
 	if (!entity)
 		return;
-
-	CCVector3 pickedPoint;
-	if (entity->isKindOf(CC_TYPES::POINT_CLOUD))
-	{
-		ccGenericPointCloud* cloud = ccHObjectCaster::ToGenericPointCloud(entity);
-		if (!cloud)
-		{
-			assert(false);
-			return;
-		}
-		pickedPoint = *cloud->getPoint(itemIndex);
-	}
-	else if (entity->isKindOf(CC_TYPES::MESH))
-	{
-		ccGenericMesh* mesh = ccHObjectCaster::ToGenericMesh(entity);
-		if (!mesh)
-		{
-			assert(false);
-			return;
-		}
-		CCLib::GenericTriangle* tri = mesh->_getTriangle(itemIndex);
-		pickedPoint = s_pickingWindow->backprojectPointOnTriangle(CCVector2i(x,y), *tri->_getA(), *tri->_getB(), *tri->_getC());
-	}
-	else
-	{
-		//unhandled entity
-		ccLog::Warning(QString("[Picking] Can't use points picked on this entity ('%1')!").arg(entity->getName()));
-		assert(false);
-		return;
-	}
 	
+	CCVector3 pickedPoint = P;
 	switch(s_previousPickingOperation)
 	{
 	case PICKING_LEVEL_POINTS:
@@ -9037,7 +9029,7 @@ void MainWindow::processPickedPoint(ccHObject* entity, unsigned itemIndex, int x
 			s_levelMarkersCloud->addPoint(pickedPoint);
 			unsigned markerCount = s_levelMarkersCloud->size();
 			cc2DLabel* label = new cc2DLabel();
-			label->addPoint(s_levelMarkersCloud,markerCount-1);
+			label->addPoint(s_levelMarkersCloud, markerCount-1);
 			label->setName(QString("P#%1").arg(markerCount));
 			label->setDisplayedIn2D(false);
 			label->setDisplay(s_pickingWindow);
@@ -12180,7 +12172,7 @@ void MainWindow::enableUIItems(dbTreeSelectionInfo& selInfo)
 	actionConvertTextureToColor->setEnabled(atLeastOneMesh);
 	actionSubdivideMesh->setEnabled(atLeastOneMesh);
 	actionDistanceToBestFitQuadric3D->setEnabled(atLeastOneCloud);
-	actionDistanceMapToMesh->setEnabled(atLeastOneMesh);
+	actionDistanceMap->setEnabled(atLeastOneMesh || atLeastOneCloud);
 
 	menuMeshScalarField->setEnabled(atLeastOneSF && atLeastOneMesh);
 	//actionSmoothMeshSF->setEnabled(atLeastOneSF && atLeastOneMesh);
