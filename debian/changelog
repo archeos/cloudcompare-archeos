@@ -1,6 +1,8 @@
-cloudcompare (2.6.3+git20160313-0archeos1) UNRELEASED; urgency=medium
+cloudcompare (2.6.3-0archeos1) UNRELEASED; urgency=medium
 
-  * Imported Upstream version 2.6.3+git20160313
+  * Imported Upstream version 2.6.3
+  * Usual refresh of debian files
+  * Add new plugins
 
  -- Romain Janvier <romain.janvier@univ-orleans.fr>  Sun, 13 Mar 2016 13:18:54 +0100
 
