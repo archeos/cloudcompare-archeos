@@ -4,7 +4,8 @@ Priority: extra
 Maintainer: Romain Janvier <romain.janvier@univ-orleans.fr>
 Build-Depends: debhelper (>= 9.0.0), cmake, libqt4-dev (>= 4.7), libqt4-opengl-dev (>= 4.7), 
  libglew-dev, libfreenect-dev, libdxflib-dev, liblas-dev (>= 1.7.0), liblas-c-dev (>= 1.7.0), 
- libboost-thread-dev, libboost-program-options-dev, libvxl1-dev 
+ libboost-thread-dev, libboost-program-options-dev, libvxl1-dev, libavcodec-ffmpeg-dev, 
+ libavformat-ffmpeg-dev, libavutil-ffmpeg-dev, libswscale-ffmpeg-dev
 Standards-Version: 3.9.4
 Homepage:http://www.danielgm.net/cc/
 Vcs-Git: git://github.com/archeos/cloudcompare-archeos.git
