@@ -2080,7 +2080,12 @@ CC_FILE_ERROR E57Filter::loadFile(QString filename, ccHObject& container, LoadPa
 	try
 	{
 		//for normals handling
-		imf.extensionsAdd("nor","http://www.libe57.org/E57_NOR_surface_normals.txt");
+		static const e57::ustring normalsExtension("http://www.libe57.org/E57_NOR_surface_normals.txt");
+		e57::ustring _normalsExtension;
+		if (!imf.extensionsLookupPrefix("nor", _normalsExtension)) //the extension may already be registered
+		{
+			imf.extensionsAdd("nor", normalsExtension);
+		}
 
 		//get root
 		e57::StructureNode root = imf.root();
