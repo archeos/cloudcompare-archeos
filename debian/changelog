@@ -1,10 +1,8 @@
-cloudcompare (2.6.3-0archeos1) UNRELEASED; urgency=medium
+cloudcompare (2.6.3.1-0archeos1) hypatia; urgency=medium
 
-  * Imported Upstream version 2.6.3
-  * Usual refresh of debian files
-  * Add new plugins
+  * Imported Upstream version 2.6.3.1
 
- -- Romain Janvier <romain.janvier@univ-orleans.fr>  Sun, 13 Mar 2016 13:18:54 +0100
+ -- Romain Janvier <romain.janvier@univ-orleans.fr>  Thu, 17 Mar 2016 22:22:10 +0100
 
 cloudcompare (2.6.3+git20160304-0archeos1) hypatia; urgency=medium
 
