@@ -1,9 +1,10 @@
-cloudcompare (2.6.3-0xenial2) UNRELEASED; urgency=medium
+cloudcompare (2.6.3.1-0xenial1) xenial; urgency=medium
 
+  * Imported Upstream version 2.6.3.1
   * Added qPCL plugin
-  * Added FFMPEG to qAnimation
+  * Added FFMPEG to qAnimation 
 
- -- Romain Janvier <romain.janvier@univ-orleans.fr>  Thu, 17 Mar 2016 20:49:34 +0100
+ -- Romain Janvier <romain.janvier@univ-orleans.fr>  Thu, 17 Mar 2016 22:31:02 +0100
 
 cloudcompare (2.6.3-0xenial1) xenial; urgency=medium
 
