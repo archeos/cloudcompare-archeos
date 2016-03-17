@@ -1,0 +1,18 @@
+--- a/plugins/qAnimation/QTFFmpegWrapper/ffmpegSupport.cmake
++++ b/plugins/qAnimation/QTFFmpegWrapper/ffmpegSupport.cmake
+@@ -28,7 +28,7 @@ function( target_link_ffmpeg ) # 1 argum
+ 			if (WIN32)
+ 				LIST(APPEND FFMPEG_LIBRARIES ${FFMPEG_LIBRARY_DIR}/${libfile}.lib )
+ 			else()
+-				LIST(APPEND FFMPEG_LIBRARIES ${FFMPEG_LIBRARY_DIR}/lib${libfile}.a )
++				LIST(APPEND FFMPEG_LIBRARIES ${FFMPEG_LIBRARY_DIR}/lib${libfile}.so )
+ 			endif()
+ 		endforeach()
+ 
+@@ -76,4 +76,4 @@ if (WIN32)
+ 	endif()
+ endif()
+ 
+-endfunction()
+\ No newline at end of file
++endfunction()
