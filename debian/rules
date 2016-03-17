@@ -30,7 +30,8 @@ override_dh_auto_configure:
 		-DOPTION_USE_SHAPE_LIB=ON \
 		-DINSTALL_QPCV_PLUGIN=ON \
 		-DLIBLAS_INCLUDE_DIR="/usr/include" \
-		-DLIBLAS_RELEASE_LIBRARY_FILE="/usr/lib/liblas.so"
+		-DLIBLAS_RELEASE_LIBRARY_FILE="/usr/lib/liblas.so" \
+		-DINSTALL_QPCL_PLUGIN=ON
 
 override_dh_shlibdeps:
 	dh_shlibdeps -l/usr/lib/cloudcompare
