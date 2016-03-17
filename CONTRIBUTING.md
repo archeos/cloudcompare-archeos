@@ -12,22 +12,27 @@ Example: `numberOfPoints`, `ptsCount` (or even `ptsNum` for the laziest ;-)
 - static variables: should always begin with prefix `s_` (in lower case – like `s_defaultFilename`
 - static methods: should always begin with a upper case letter (like `InitGLEW`)
 - classes: should always begin with prefix `cc` (in lower case – like `ccConsole`)  
-- enumerators: all letters in upper case + should always begin with prefix `CC_` + words are separated by underscore (like `CC_OBJECT_FLAG`)
+- enumerators:
+  - all letters in upper case
+  - should always begin with prefix `CC_`
+  - words are separated by underscore (like `CC_OBJECT_FLAG`)
 - macros: begin with prefix `MACRO_` followed by a standard method name (like `MACRO_SkipUnselected`)
-- const (apart for `const char*`) : all letters in upper case and words are separated by underscore (like `NORMALS_QUANTIZE_LEVEL`)
-- `macro const` (`#define`): same as const
+- const variables:
+  - all letters in upper case
+  - words are separated by underscore (like `NORMALS_QUANTIZE_LEVEL`)
+- `macro const` (`#define`): should be avoided; same syntax as const
 
 ### Files
 
-- File naming follow the same rule as most CloudCompare elements (first letter in lower case, etc.)
+- File naming follows the same rule as most CloudCompare elements (first letter in lower case, etc.)
 - Each class should be saved alone in a header + source file couple. Exceptionally, very small classes that are used by a single class may be saved along with this class. The header + source filename should be the same as the main class. 
 
 Example: `ccConsole` saved in `ccConsole.h` and `ccConsole.cpp`
 
 - Filenames shouldn’t contain any space character. Use underscore instead.
 - All data-related classes (data models, database, etc) should be saved in `db` directory.
-- Images (icons) should all be saved in the `images` directory (or one of its subdirectory).
-- GUI templates (mainly `.ui` Qt files) should be saved in `ui_templates` directory 
+- Images (icons) should all be saved in the `images` directory (or one of its subdirectories).
+- GUI templates (mainly `.ui` Qt files) should be saved in the `ui_templates` directory 
 
 ### Summary
 Element | Example
@@ -41,7 +46,7 @@ Static method | `GetMethod()`
 Structure | `myStruct`
 Enumerator | `CC_MY_ENUMERATOR`
 Macro | `MACRO_myMethod`
-Const | `MY_CONSTANT`
+Const variables | `MY_CONSTANT`
 Const (`#define`) | `MY_CONSTANT`
 
 ## Unix compliance
@@ -71,7 +76,7 @@ Here is the official header for LGPL modules (CCLib, etc.):
 //#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
 //#  GNU General Public License for more details.                          #
 //#                                                                        #
-//#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
+//#                             COPYRIGHT: XXX                             #
 //#                                                                        #
 //##########################################################################
 
@@ -93,7 +98,7 @@ And for official header for GPL modules (qCC, etc.):
 //#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
 //#  GNU General Public License for more details.                          #
 //#                                                                        #
-//#          COPYRIGHT: EDF R&D / TELECOM ParisTech (ENST-TSI)             #
+//#                             COPYRIGHT: XXX                             #
 //#                                                                        #
 //##########################################################################
 ```
