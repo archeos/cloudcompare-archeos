@@ -1,3 +1,9 @@
+cloudcompare (2.6.3.1-0xenial2) xenial; urgency=medium
+
+  * Fix a build bug related to multi-arch
+
+ -- Romain Janvier <romain.janvier@univ-orleans.fr>  Thu, 24 Mar 2016 16:58:45 +0100
+
 cloudcompare (2.6.3.1-0xenial1) xenial; urgency=medium
 
   * Imported Upstream version 2.6.3.1
